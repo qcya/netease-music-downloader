@@ -1,0 +1,132 @@
+'use strict';
+// Mock Electron shell; execute actual Electron IPC handlers and Python CLI against a localhost API.
+const assert = require('node:assert/strict');
+const {test} = require('node:test');
+const os = require('node:os');
+const path = require('node:path');
+const fs = require('node:fs');
+const http = require('node:http');
+const Module = require('node:module');
+
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'netease-electron-test-'));
+process.env.MUSIC_PYTHON_EXE = process.env.MUSIC_PYTHON_EXE || '/opt/pyvenv/bin/python';
+const handlers = new Map();
+let mediaHandler = null;
+class Window {
+  constructor(o){this.opts=o;this.webContents={send(){},on(){},setWindowOpenHandler(){}};this.closed=false;}
+  loadFile(p){assert.ok(fs.existsSync(p),p)}
+  once(evt,cb){if(evt==='ready-to-show')cb()}
+  show(){}
+  isDestroyed(){return this.closed}
+  setAppDetails(){}
+  static getAllWindows(){return []}
+}
+const electron = {
+  app:{
+    isPackaged:false,
+    getPath(k){if(k==='userData')return path.join(temp,'userData');if(k==='music')return path.join(temp,'music');return temp;},
+    setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}
+  },
+  BrowserWindow:Window,
+  ipcMain:{handle(k,cb){handlers.set(k,cb)}},
+  dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
+  shell:{openPath:async()=>'',openExternal:async()=>true},
+  protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){assert.equal(scheme,'music-media');mediaHandler=cb;}}
+};
+const nativeLoad=Module._load;
+Module._load=function(request,parent,isMain){if(request==='electron')return electron;return nativeLoad.call(this,request,parent,isMain)};
+require('../main.js');
+Module._load=nativeLoad;
+
+function serverFixture() {
+  return http.createServer((req,res)=>{
+    const u=new URL(req.url,'http://localhost');
+    const songs=[{id:12345,name:'我的悲伤是水做的',ar:[{name:'洛天依'}],al:{name:'专辑'},dt:230000}];
+    if(u.pathname==='/search')return send({code:200,result:{songs,songCount:1}});
+    if(u.pathname==='/lyric/new' || u.pathname==='/lyric')return send({code:200,lrc:{lyric:'[00:00.50]我的悲伤\n[00:02.00]是水做的'},tlyric:{lyric:'[00:00.50]My sadness'}});
+    if(u.pathname==='/song/detail')return send({code:200,songs});
+    if(u.pathname==='/playlist/track/all')return send({total:1,songs:u.searchParams.get('offset')==='0'?songs:[]});
+    if(u.pathname==='/song/url/v1') {const preview=['standard','higher','exhigh'].includes(u.searchParams.get('level'));return send({code:200,data:[{url:`http://127.0.0.1:${server.address().port}/audio/track.${preview?'mp3':'flac'}`,level:preview?'standard':'lossless',freeTrialInfo:null,br:preview?128000:1400000}]});}
+    if(u.pathname==='/audio/track.mp3') {
+      res.writeHead(200,{'Content-Type':'audio/mpeg'});
+      res.end(Buffer.concat([Buffer.from('ID3'),Buffer.alloc(3001)]));return;
+    }
+    if(u.pathname==='/audio/track.flac') {
+      res.writeHead(200,{'Content-Type':'application/octet-stream'});
+      res.end(Buffer.concat([Buffer.from('fLaC'),Buffer.alloc(3000)]));return;
+    }
+    res.statusCode=404;res.end('no');
+    function send(payload){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(payload))}
+  });
+}
+const server=serverFixture();
+test('Electron IPC ↔ Python real CLI: search, playlist, download, local files and icon', async t=>{
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  t.after(()=>{server.close();fs.rmSync(temp,{recursive:true,force:true})});
+  for(let i=0;i<40 && !handlers.has('music:search');i++)await new Promise(r=>setTimeout(r,15));
+  assert.ok(handlers.has('music:search'));
+  const invoke=(name,...args)=>handlers.get(name)(null,...args);
+  const dl=path.join(temp,'download');
+  await invoke('settings:set',{downloadDir:dl,quality:'best',apiBases:[`http://127.0.0.1:${server.address().port}`]});
+  const s=await invoke('music:search','我的悲伤是水做的');
+  assert.equal(s.results.length,1);
+  assert.equal(s.results[0].artists,'洛天依');
+  const pl=await invoke('music:playlist','123');
+  assert.equal(pl.tracks.length,1);
+  const downloaded=await invoke('music:download',['12345']);
+  assert.equal(downloaded.success_count,1,JSON.stringify(downloaded));
+  assert.ok(fs.existsSync(downloaded.results[0].path));
+  assert.equal(path.extname(downloaded.results[0].path),'.flac');
+  const found=await invoke('local:list');
+  assert.equal(found.length,1);
+  assert.match(found[0].name,/洛天依/);
+  assert.ok(fs.readFileSync(path.join(__dirname,'..','assets','app.ico')).length > 10000);
+  const prepared=await invoke('music:prepare','12345');
+  assert.equal(prepared.fromCache,false);
+  assert.match(prepared.url,/^music-media:\/\/audio\//);
+  assert.equal(prepared.quality,'mp3');
+  const cached=await invoke('music:prepare','12345');
+  assert.equal(cached.fromCache,true);
+  fs.rmSync(downloaded.results[0].path,{force:true});
+  const fromCache=await invoke('music:download',['12345']);
+  assert.equal(fromCache.results[0].status,'downloaded'); // 试听 MP3 不得替代无损正式下载
+  assert.ok(fs.existsSync(fromCache.results[0].path));
+  assert.equal((await invoke('music:cache-stats')).count,1);
+  const part=await mediaHandler(new Request(cached.url,{headers:{Range:'bytes=0-3'}}));
+  assert.equal(part.status,206);
+  assert.equal(part.headers.get('content-range'),'bytes 0-3/3004');
+  assert.equal(Buffer.from(await part.arrayBuffer()).toString('utf8'),'ID3\u0000');
+  const missing=await mediaHandler(new Request('music-media://audio/unknown'));
+  assert.equal(missing.status,404);
+  // v4 版本曾缓存错误的无歌词状态；v5 必须重新请求。
+  const oldLyricDir=path.join(temp,'userData','lyric-cache');
+  fs.mkdirSync(oldLyricDir,{recursive:true});
+  fs.writeFileSync(path.join(oldLyricDir,'12345.json'),JSON.stringify({id:'12345',found:false,lrc:'',translated_lrc:'',checkedAt:Date.now()}));
+  const lyric=await invoke('music:lyric','12345');
+  assert.equal(lyric.found,true);
+  assert.match(lyric.lrc,/是水做的/);
+  const lyricCached=await invoke('music:lyric','12345');
+  assert.equal(lyricCached.fromCache,true);
+  const favorite=await invoke('favorites:add',s.results[0]);
+  assert.match(favorite.audioPath,/\.flac$/);
+  assert.equal(favorite.lyricExists,true);
+  assert.ok(fs.existsSync(favorite.lyricPath));
+  assert.equal((await invoke('favorites:list')).length,1);
+  const favoritePlay=await invoke('favorites:play','12345');
+  assert.match(favoritePlay.url,/^music-media:/);
+  const local=await invoke('local:play',found[0].name);
+  assert.match(local.url,/^music-media:/);
+  assert.throws(()=>invoke('local:play','../settings.json'),/无效本地文件名/);
+  await assert.rejects(invoke('music:download',['; rm -rf .']),/无效歌曲 ID/);
+  await invoke('music:cache-clear');
+  assert.equal((await invoke('music:cache-stats')).count,0);
+  assert.ok(fs.existsSync(downloaded.results[0].path),'清缓存不能删除正式下载目录的文件');
+  assert.ok(fs.existsSync(favorite.audioPath),'清缓存不能删除收藏音频');
+  assert.ok(fs.existsSync(favorite.lyricPath),'清缓存不能删除收藏歌词');
+  const lyricOffline=await invoke('music:lyric','12345');
+  assert.equal(lyricOffline.fromFavorite,true);
+  assert.ok(lyricOffline.lrc);
+  await invoke('favorites:remove','12345');
+  assert.equal((await invoke('favorites:list')).length,0);
+  assert.ok(fs.existsSync(favorite.audioPath),'移出收藏不应删除无损文件');
+});

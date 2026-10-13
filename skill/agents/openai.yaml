@@ -1,0 +1,4 @@
+interface:
+  display_name: "网易云音乐下载"
+  short_description: "搜索歌曲、选曲、歌单批量下载与高音质保存"
+  default_prompt: "使用 $netease-music-downloader Skill 帮我搜索网易云音乐；搜到多个候选先列出让我选择，只有一个就下载，并优先保存最高可用音质的原始音频。"

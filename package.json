@@ -1,0 +1,55 @@
+{
+  "name": "netease-music-desktop-electron",
+  "version": "1.3.0",
+  "private": true,
+  "description": "粉蓝网易云音乐桌面版：可调 1–6 首并行下载、MP3 试听、无损收藏与同步歌词",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win portable --x64",
+    "check": "node --check main.js && node --check preload.js && node --check app/lrc.js && node --check app/renderer.js"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "top.qcya.netease.music.desktop",
+    "productName": "网易云音乐下载器",
+    "artifactName": "MusicDownloader-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "download_queue.js",
+      "preload.js",
+      "app/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "skill",
+        "to": "skill"
+      },
+      {
+        "from": "assets/app.ico",
+        "to": "app.ico"
+      }
+    ],
+    "win": {
+      "icon": "assets/app.ico",
+      "executableName": "MusicDownloader",
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "MusicDownloader-${version}-portable.exe"
+    },
+    "electronDownload": {
+      "mirror": "https://npmmirror.com/mirrors/electron/"
+    }
+  }
+}
