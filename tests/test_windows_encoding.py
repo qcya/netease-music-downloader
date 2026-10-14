@@ -42,11 +42,17 @@ class WindowsEncoding(unittest.TestCase):
         self.assertIn(b'set "PYTHONUTF8=1"',raw)
         self.assertIn(b'call npm start',raw)
 
-    def test_build_workflow_manual_only(self):
+    def test_build_workflow_release_once_and_manual(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/windows-build.yml').read_text(encoding='utf-8')
-        self.assertIn('workflow_dispatch:',workflow)
-        self.assertNotIn('  push:',workflow)
+        self.assertIn('workflow_dispatch:', workflow)
+        self.assertIn('  push:', workflow)
+        self.assertIn("      - '.github/workflows/windows-build.yml'", workflow)
+        self.assertIn('  contents: write', workflow)
+        self.assertIn('Publish GitHub Release v2.4.0', workflow)
+        self.assertIn("if: github.event_name == 'push'", workflow)
+        self.assertIn('MusicDownloader-2.4.0-portable.exe.sha256', workflow)
+        self.assertIn('Run all regression tests', workflow)
 
 
 if __name__ == '__main__':

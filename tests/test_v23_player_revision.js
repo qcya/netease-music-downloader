@@ -51,6 +51,8 @@ test('downloaded songs get source album art asynchronously without delaying audi
 
 test('local dynamically supplied Lemon video is optional, never required by Git repository',()=>{
  const main=src('main.js'),ignore=src('.gitignore');
- assert.match(main,/assets','immersive-background.mp4'/);
+ assert.match(main,/path\.join\(__dirname,'assets','immersive-background-1080p\.mp4'\)/);
  assert.match(ignore,/assets\/immersive-background\.mp4/);
+ const embedded=path.join(root,'assets','immersive-background-1080p.mp4');
+ assert.ok(fs.statSync(embedded).size>100_000,'Bundled 1080p background must exist in repository');
 });
