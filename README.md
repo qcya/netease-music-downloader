@@ -76,6 +76,8 @@ Windows 桌面应用 / 单文件便携版
 
 ### `skill/`、`scripts/` — 后端与构建
 
+目录用途：`skill/scripts/` 保存音乐功能实现，`skill/references/` 保存调用参考，`skill/agents/` 保存 AI 工具接入配置，`scripts/` 保存独立构建脚本。
+
 | 文件名 | 中文说明 |
 |---|---|
 | `skill/SKILL.md` | 音乐功能的 AI 调用说明。 |
