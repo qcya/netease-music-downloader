@@ -12,7 +12,7 @@ process.env.MUSIC_PYTHON_EXE=process.env.MUSIC_PYTHON_EXE||'/opt/pyvenv/bin/pyth
 const handlers=new Map(); const updates=[];
 class Window {
   constructor(){this.webContents={send:(channel,obj)=>updates.push({channel,obj}),on(){},setWindowOpenHandler(){}};}
-  loadFile(){} once(evt,cb){if(evt==='ready-to-show')cb()} show(){} isDestroyed(){return false} setAppDetails(){}
+  loadFile(){} once(evt,cb){if(evt==='ready-to-show')cb()} show(){} isDestroyed(){return false} setAppDetails(){} setIcon(){}
   static getAllWindows(){return []}
 }
 const fake={
