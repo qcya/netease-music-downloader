@@ -14,10 +14,28 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from typing import Any
 
+
+def configure_cli_streams() -> None:
+    """Use UTF-8 for CLI pipes even on Windows with a GBK console code page.
+
+    Frozen PyInstaller applications can select a different stdout encoding
+    from the development Python interpreter. The JSON protocol below also
+    escapes non-ASCII text as a second, codec-independent safety measure.
+    """
+    for output in (sys.stdout, sys.stderr):
+        if output is not None and hasattr(output, "reconfigure"):
+            try:
+                output.reconfigure(encoding="utf-8", errors="backslashreplace")
+            except (OSError, ValueError, TypeError):
+                pass
+
+
+configure_cli_streams()
+
 try:
     import requests
 except ImportError:
-    print(json.dumps({"ok": False, "error": "缺少 requests；执行 python -m pip install -r requirements.txt"}, ensure_ascii=False))
+    print(json.dumps({"ok": False, "error": "缺少 requests；执行 python -m pip install -r requirements.txt"}, ensure_ascii=True))
     sys.exit(2)
 
 APP_NAME = "netease-music-downloader"
@@ -34,11 +52,17 @@ class MusicError(Exception):
 
 
 def emit(data: dict, pretty: bool = False) -> None:
-    print(json.dumps(data, ensure_ascii=False, indent=2 if pretty else None))
+    # Electron parses JSON, so escaping Unicode changes no user-visible text.
+    # ASCII-only output remains writable even if a frozen EXE resets stdout to GBK.
+    print(json.dumps(data, ensure_ascii=True, indent=2 if pretty else None))
 
 
 def warn(message: str) -> None:
-    print(message, file=sys.stderr)
+    try:
+        print(message, file=sys.stderr)
+    except UnicodeEncodeError:
+        # Diagnostic progress must never abort a download due to a song title.
+        print(str(message).encode("ascii", "backslashreplace").decode("ascii"), file=sys.stderr)
 
 
 def song_id_from(value: str, kind: str = "song") -> str:
@@ -545,7 +569,7 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
                     if now - reported >= 0.4:
                         elapsed = max(0.001, now - started)
                         pct = round(100 * size / expected, 1) if expected and expected > 0 else None
-                        print("PROGRESS_JSON:" + json.dumps({"bytes":size,"total":expected,"percent":pct,"speed":int(size/elapsed)},ensure_ascii=False), file=sys.stderr, flush=True)
+                        print("PROGRESS_JSON:" + json.dumps({"bytes":size,"total":expected,"percent":pct,"speed":int(size/elapsed)},ensure_ascii=True), file=sys.stderr, flush=True)
                         reported = now
         if expected is not None and size != expected:
             api.errors.append(f"文件不完整：收到 {size} 字节，应为 {expected} 字节")

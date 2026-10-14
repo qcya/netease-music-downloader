@@ -271,6 +271,9 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
   return new Promise((resolve, reject) => {
     if(signal?.aborted)return reject(new Error('任务已取消'));
     const child = spawn(executable, args, { windowsHide:true, env:environment, cwd: path.dirname(backendFile()) });
+    // setEncoding uses StringDecoder to preserve multibyte UTF-8 across chunks.
+    child.stdout?.setEncoding('utf8');
+    child.stderr?.setEncoding('utf8');
     const terminate=()=>{try{child.kill()}catch{}};
     if(signal)signal.addEventListener('abort',terminate,{once:true});
     let stdout = '', stderr = '', settled = false, pendingProgress = '';
@@ -289,11 +292,11 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
     }
     child.on('error', err => finalize(new Error(`无法启动 Python：${err.message}`)));
     child.stdout.on('data', chunk => {
-      stdout += chunk.toString('utf8');
+      stdout += chunk;
       if (stdout.length > 8_000_000) { child.kill(); finalize(new Error('接口结果过大')); }
     });
     child.stderr.on('data',chunk=>{
-      const line=chunk.toString('utf8');stderr+=line;
+      const line=chunk;stderr+=line;
       if(stderr.length>100_000)stderr=stderr.slice(-100_000);
       pendingProgress+=line;
       while(pendingProgress.includes('\n')){

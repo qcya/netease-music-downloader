@@ -1,5 +1,6 @@
 """在 localhost 模拟音乐 API，执行真实 CLI 子进程；不访问网易云服务器。"""
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -23,7 +24,7 @@ class MusicStub(BaseHTTPRequestHandler):
         host = f'http://127.0.0.1:{self.server.server_port}'
         songs = [
             {'id': 101, 'name': '流星', 'ar': [{'name': '歌手甲'}], 'al': {'name': '专辑A'}},
-            {'id': 102, 'name': '海风', 'ar': [{'name': '歌手乙'}], 'al': {'name': '专辑B'}},
+            {'id': 102, 'name': '海风·Björk', 'ar': [{'name': 'Björk'}], 'al': {'name': '专辑B'}},
         ]
         if u.path == '/search':
             hits = songs[:1] if q.get('keywords') == ['唯一'] else songs
@@ -90,6 +91,25 @@ class CliIntegration(unittest.TestCase):
         self.assertTrue(out.stdout, out.stderr)
         data = json.loads(out.stdout)
         return out.returncode, data
+
+    def test_search_with_foreign_artist_under_gbk_codepage(self):
+        """Reproduce Windows GBK error with a song name containing U+00F6."""
+        with tempfile.TemporaryDirectory() as folder:
+            cmd = [sys.executable, str(SCRIPT), '--api-base',
+                   f'http://127.0.0.1:{self.server.server_port}',
+                   '--state-dir', str(Path(folder) / 'state'),
+                   'search', '--query', '多个']
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'gbk:strict'
+            env.pop('PYTHONUTF8', None)
+            output = subprocess.run(cmd, env=env, cwd=str(ROOT), capture_output=True,
+                                    timeout=25)
+            self.assertEqual(output.returncode, 0, output.stderr.decode('utf-8', errors='replace'))
+            payload = json.loads(output.stdout.decode('utf-8'))
+            self.assertEqual(payload['results'][1]['name'], '海风·Björk')
+            self.assertEqual(payload['results'][1]['artists'], 'Björk')
+            self.assertTrue(all(ch < 128 for ch in output.stdout),
+                            'JSON protocol must be portable across Windows codepages')
 
     def test_search_multi_select_and_playlist(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -3,6 +3,10 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 if errorlevel 1 goto :failed
 chcp 65001 >nul
+rem Keep the Python Skill stdout/stderr protocol independent of Windows GBK.
+set "PYTHONIOENCODING=utf-8:backslashreplace"
+set "PYTHONUTF8=1"
+set "PYTHONUNBUFFERED=1"
 
 where npm >nul 2>nul
 if errorlevel 1 goto :missing_node
@@ -14,7 +18,7 @@ call "%~dp0安装依赖.bat"
 if errorlevel 1 goto :failed
 
 :run
-echo [INFO] Starting the Electron desktop app...
+echo [INFO] Starting the Electron app from source (development mode; no EXE build)...
 call npm start
 if errorlevel 1 goto :failed
 exit /b 0

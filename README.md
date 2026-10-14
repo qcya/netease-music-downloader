@@ -1,3 +1,21 @@
+# 开发阶段：直接运行源码，不要打包 EXE
+
+当前优先采用 **Windows 命令提示符 + Electron 源码启动**：双击 `启动桌面版.bat`。
+首次使用且没有 `node_modules` 时，启动脚本会自动调用 `安装依赖.bat`。
+也可在项目目录用 CMD 执行：
+
+```bat
+npm start
+```
+
+开发期间修改 `app/`、`main.js`、`skill/scripts/music_skill.py` 后，关闭正在运行的软件，再执行 `启动桌面版.bat` 即可看到新版。**不必重新构建 EXE**，也不需要每次重新安装 npm 依赖。
+
+**本轮修复：** Windows GBK 下遇到含有 `ö` 等字符的曲名/歌手名时，Python CLI 的 JSON 输出不再抛出 `UnicodeEncodeError`。独立 Electron 前端仍使用 UTF-8，并完整解码子进程的多字节字符。GitHub Actions 不再随每次 push 自动构建便携 EXE，只保留自动测试，等桌面版验收后再手动发版。
+
+**Android 版：** 等 Windows 开发版实际使用稳定后，再适配安卓。Android 不能直接运行 Electron/PyInstaller 的 Windows EXE；需要单独移动端 UI 与兼容的后端架构。
+
+---
+
 # 网易云音乐下载器 v2.1（Electron + Python AI Skill）
 
 > **v2.1 更新：** 桌面歌词可自定义粉蓝配色、白色描边、背景透明度、字号、行距、翻译及自适应长句； Windows portable EXE 包含编译后的 Python 后端，不要求普通用户安装 Python。AI Skill 源码保持独立。
@@ -6,7 +24,7 @@
 
 **制作单 EXE**：运行 `构建Windows_EXE.bat`。构建机须有 Node.js 20+ 和 Python 3.10+。脚本运行 PyInstaller 创建 `backend/music_backend.exe`，完成离线自检，再由 electron-builder 打包为 `dist/MusicDownloader-2.1.0-portable.exe`。编译后的 portable EXE 面向最终用户，不需要本机 Python/Node/npm。Electron portable 启动会在系统临时目录展开运行文件，这是单 EXE 发行模式的正常行为。
 
-**GitHub 构建**：Actions → Build Windows Portable → Run workflow；或者推送到 `main` 分支自动触发，构建产物可在对应工作流运行页的 Artifacts 中下载。
+**GitHub 构建**：Actions → Build Windows Portable → Run workflow；不再随 `main` 分支提交自动触发；只在开发完成后手动点击 Run workflow 构建。
 
 **桌面歌词**：软件设置页底部可以选择无背景、粉蓝玻璃或实色，原文/翻译/描边颜色、字号、窗宽、行距、阴影、透明度、对齐方式、置顶。默认无背景、粉色原文、白色描边和淡蓝翻译。长句自动换行；歌词窗随实际内容增加高度，在屏幕限制内显示，超高可滚动。右下角拖动把手支持移动，锁定后支持鼠标穿透，回主界面点「解锁」恢复操作。
 

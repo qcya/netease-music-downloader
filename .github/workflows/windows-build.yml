@@ -1,9 +1,7 @@
 name: Build Windows Portable
 on:
+  # No automatic EXE builds while the desktop source is under development.
   workflow_dispatch:
-  push:
-    branches: [main]
-    tags: ['v*']
 jobs:
   windows-portable:
     runs-on: windows-latest
