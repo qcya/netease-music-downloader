@@ -533,7 +533,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '网易云音乐下载器', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.0', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
