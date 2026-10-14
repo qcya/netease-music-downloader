@@ -7,6 +7,11 @@ on:
       - '.github/workflows/prune-releases.yml'
   release:
     types: [published]
+  # GitHub Actions GITHUB_TOKEN release uploads do not fire release events.
+  # Workflow completion fires independently, ensuring old builds are pruned.
+  workflow_run:
+    workflows: ["Build Windows Portable"]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +23,7 @@ concurrency:
 
 jobs:
   prune:
-    if: github.repository == 'qcya/netease-music-downloader'
+    if: github.repository == 'qcya/netease-music-downloader' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: Keep newest published release and remove older releases
