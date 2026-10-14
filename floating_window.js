@@ -15,7 +15,8 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   if(exists()){reconcileVisibility();return {open:true};}
   const s=safeSettings();
   floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
-    frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
+    frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:false, // Electron Windows transparent windows must not expose native resize chrome.
+    
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   // Chromium's ready-to-show is inconsistent for fully transparent windows.
   // Wait for the actual page to load and for real lyric text before showing.
