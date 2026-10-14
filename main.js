@@ -11,6 +11,7 @@ const { createFloatingLyricsController } = require('./floating_window.js');
 const { createPlaylistStore } = require('./local_playlist.js');
 const { importMusic } = require('./local_import.js');
 const {createMiniPlayerController}=require('./mini_player.js');
+const {wireMainWindow}=require('./app_lifecycle.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
@@ -20,6 +21,8 @@ const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
 const BACKGROUND_EXTS=new Set(['.mp4','.webm','.png','.jpg','.jpeg','.webp']);
 let win;
+let exiting=false;
+const activeBackendChildren=new Set();
 const downloadHistory=new Map();
 let historyFlushTimer=null;
 let activeCliProcesses = 0;
@@ -300,6 +303,7 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
   return new Promise((resolve, reject) => {
     if(signal?.aborted)return reject(new Error('任务已取消'));
     const child = spawn(executable, args, { windowsHide:true, env:environment, cwd: path.dirname(backendFile()) });
+    activeBackendChildren.add(child);
     // setEncoding uses StringDecoder to preserve multibyte UTF-8 across chunks.
     child.stdout?.setEncoding('utf8');
     child.stderr?.setEncoding('utf8');
@@ -313,6 +317,7 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
     function finalize(error, result) {
       if (settled) return;
       settled = true;
+      activeBackendChildren.delete(child);
       clearTimeout(timeout);
       if(signal)signal.removeEventListener('abort',terminate);
       if(signal?.aborted)return reject(new Error('任务已取消'));
@@ -520,7 +525,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.4', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.5', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -528,25 +533,62 @@ function createWindow() {
     }
   });
   if (process.platform === 'win32') {
-    // setAppDetails 提供任务栏标识；显式 setIcon 则更新当前运行窗口图标。
     win.setIcon(appIcon());
     win.setAppDetails({appId: APPLICATION_ID, appIconPath: appIcon(), appIconIndex:0});
   }
-  win.loadFile(path.join(__dirname, 'app', 'index.html'));
-  // Desktop lyrics must not cover/intercept our own controls while this window is active.
   win.on?.('focus',()=>floatingLyrics.setMainFocused(true));
   win.on?.('blur',()=>floatingLyrics.setMainFocused(false));
-  win.once('ready-to-show', () => {win.show();floatingLyrics.setMainFocused(true)});
-  win.webContents.on('will-navigate', (event) => event.preventDefault());
-  win.webContents.setWindowOpenHandler(() => ({action:'deny'}));
-  win.on?.('closed',()=>miniPlayer.close()); // Close mini strip when the main player exits.
+  win.webContents.on('will-navigate', event=>event.preventDefault());
+  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+  wireMainWindow({
+    window:win,app,
+    onShown:()=>{
+      floatingLyrics.setMainFocused(true);
+      try{createLogger(app.getPath('userData')).info('window_ready','主界面已显示')}catch{}
+    },
+    onFailure:(reason,error)=>reportStartupFailure(reason,error),
+    closeChildren:()=>{
+      floatingLyrics.close();
+      miniPlayer.close();
+    }
+  });
+  // Handle both ready-to-show AND did-finish-load, and surface load errors.
+  // A failed load must not silently leave a hidden background process.
+  win.loadFile(path.join(__dirname, 'app', 'index.html')).catch(e=>reportStartupFailure('主界面文件加载失败',e));
+}
+function stopBackendChildren(){
+  for(const child of activeBackendChildren){
+    try{child.kill()}catch{}
+  }
+  activeBackendChildren.clear();
+}
+function reportStartupFailure(stage,error){
+  if(exiting)return;
+  const details=String(error?.stack||error?.message||error||'未知启动错误').slice(0,2200);
+  try{createLogger(app.getPath('userData')).error('startup_failure',stage+' '+details)}catch{}
+  try{dialog.showErrorBox('音乐下载器启动失败',stage+'。\\n'+details+'\\n\\n请将程序日志中的 application.log 提供给开发者。')}catch{}
+  exiting=true;
+  try{floatingLyrics.close()}catch{}
+  try{miniPlayer.close()}catch{}
+  stopBackendChildren();
+  try{app.quit()}catch{}
 }
 
 app.setAppUserModelId(APPLICATION_ID);
+const ownsInstance=app.requestSingleInstanceLock?.()!==false;
+if(!ownsInstance){
+  app.quit();
+}else{
+app.on('second-instance',()=>{
+  if(win&&!win.isDestroyed?.()){
+    if(win.isMinimized?.())win.restore?.();
+    win.show();win.focus?.();
+  }
+});
 app.whenReady().then(() => {
   const logger=createLogger(app.getPath('userData'));logger.info('start',`version=${app.getVersion?.()||'dev'} packaged=${app.isPackaged}`);
-  process.on('uncaughtException',e=>logger.error('uncaught',e?.message||e));
-  process.on('unhandledRejection',e=>logger.error('promise',e?.message||e));
+  process.on('uncaughtException',e=>reportStartupFailure('主进程未捕获的异常',e));
+  process.on('unhandledRejection',e=>reportStartupFailure('主进程发生异常',e));
   downloadQueue.setLimit(config().parallelDownloads);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
   const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
@@ -745,5 +787,12 @@ app.whenReady().then(() => {
       .sort((a,b) => a.name.localeCompare(b.name,'zh-CN')).slice(0,1000);
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+}).catch(e=>reportStartupFailure('Electron 初始化失败',e));
+}
+app.on('before-quit',()=>{
+  exiting=true;
+  try{floatingLyrics.close()}catch{}
+  try{miniPlayer.close()}catch{}
+  stopBackendChildren();
 });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+app.on('window-all-closed',()=>{if(process.platform!=='darwin')app.quit();});
