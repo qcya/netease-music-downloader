@@ -575,6 +575,12 @@ function reportStartupFailure(stage,error){
   try{app.quit()}catch{}
 }
 
+// Only CI startup smoke tests use a temporary isolated data directory.
+if(process.env.MUSIC_DOWNLOADER_TEST_USER_DATA&&app.setPath){
+  const testDir=path.resolve(process.env.MUSIC_DOWNLOADER_TEST_USER_DATA);
+  fs.mkdirSync(testDir,{recursive:true});
+  app.setPath('userData',testDir);
+}
 app.setAppUserModelId(APPLICATION_ID);
 const ownsInstance=app.requestSingleInstanceLock?.()!==false;
 if(!ownsInstance){
