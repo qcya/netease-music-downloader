@@ -76,12 +76,11 @@
       </section>
 
       <section id="view-playlists" class="view" aria-labelledby="playlists-title">
-        <div class="page-header"><div class="eyebrow">MY PLAYLISTS</div><h1 id="playlists-title">我的歌单</h1><p>从「本地」添加已下载的歌曲，随时播放或移出歌单，不复制和删除音乐文件。</p></div>
-        <div class="page-actions"><button type="button" class="soft-action" id="create-playlist">＋ 新建歌单</button><select id="playlist-select" aria-label="选择我的歌单"></select></div>
+        <div class="page-header"><div class="eyebrow">MY PLAYLIST</div><h1 id="playlists-title">我的歌单</h1><p>歌单内歌曲带有 [歌单] 文件名前缀，按顺序连续播放，最后一首结束后从第一首继续。</p></div>
         <div class="local-list" id="my-playlist-tracks"><div class="empty-simple">下载歌曲后，可从「本地」添加到我的歌单。</div></div>
       </section>
       <section id="view-local" class="view" aria-labelledby="local-title">
-        <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>完整下载的音乐，以及尚在下载中的任务。播放直接读取本地文件。</p></div>
+        <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>文件名前有 [歌单] 表示已加入我的歌单。删除操作会移入回收站，不会直接永久删除。</p></div>
         <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button></div>
         <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
         <details id="local-downloads" class="local-downloads" hidden>
