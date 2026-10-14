@@ -8,6 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
 const { createFloatingLyricsController } = require('./floating_window.js');
+const { createPlaylistStore } = require('./local_playlist.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
@@ -139,34 +140,17 @@ function inDirectory(directory, file) {
   const full = path.resolve(file);
   return full.startsWith(root);
 }
-/** My playlists store only validated local filenames, never arbitrary untrusted renderer paths. */
-function availableLocalTrack(name){
-  if(typeof name!=='string'||!name||path.basename(name)!==name||!AUDIO_EXTS.has(path.extname(name).toLowerCase()))throw new Error('无效本地歌曲名称');
-  const file=path.join(config().downloadDir,name);
-  if(!inDirectory(config().downloadDir,file)||!fs.existsSync(file)||!fs.statSync(file).isFile())throw new Error('本地音乐文件不存在');
-  return file;
-}
-function readPlaylists(){
-  const saved=readJSON(playlistsFile(),null);
-  if(!Array.isArray(saved))return [{id:'default',name:'我的歌单',tracks:[]}];
-  const valid=saved.filter(p=>p&&typeof p.id==='string'&&/^[a-zA-Z0-9-]{1,64}$/.test(p.id)&&typeof p.name==='string'&&Array.isArray(p.tracks))
-    .slice(0,50).map(p=>({id:p.id,name:p.name.slice(0,50),tracks:[...new Set(p.tracks.filter(n=>typeof n==='string'&&n===path.basename(n)&&AUDIO_EXTS.has(path.extname(n).toLowerCase())))].slice(0,5000)}));
-  return valid.length?valid:[{id:'default',name:'我的歌单',tracks:[]}];
-}
-function savePlaylists(rows){writeJSONAtomic(playlistsFile(),rows)}
-function createLocalPlaylist(name){
-  const title=String(name||'').trim();if(!title||title.length>40)throw new Error('歌单名称须为 1–40 字');
-  const rows=readPlaylists();if(rows.length>=50)throw new Error('最多 50 个歌单');
-  if(rows.some(p=>p.name===title))throw new Error('同名歌单已存在');
-  const p={id:randomUUID(),name:title,tracks:[]};rows.push(p);savePlaylists(rows);return p;
-}
+/** A single playlist shares the download directory; [歌单] is a real filename prefix.
+ * Legacy multiple-playlist JSON is merged without deleting files. */
+const localPlaylist=createPlaylistStore({
+  getDir:()=>config().downloadDir,
+  getIndexFile:()=>playlistsFile(),
+  readJSON,writeJSONAtomic
+});
+function availableLocalTrack(name){return localPlaylist.localFile(name)}
+function readPlaylists(){return localPlaylist.list()}
 function changeLocalPlaylist(id,name,add){
-  const rows=readPlaylists(),p=rows.find(p=>p.id===id);if(!p)throw new Error('歌单不存在');
-  if(add)availableLocalTrack(name);
-  else if(typeof name!=='string'||name!==path.basename(name))throw new Error('无效歌曲名称');
-  if(add&&!p.tracks.includes(name))p.tracks.push(name);
-  if(!add)p.tracks=p.tracks.filter(x=>x!==name);
-  savePlaylists(rows);return p;
+  return add?localPlaylist.add(id,name):localPlaylist.remove(id,name);
 }
 function cachedManifest() {
   const rows = readJSON(manifestFile(), {});
@@ -582,7 +566,6 @@ app.whenReady().then(() => {
     return r.canceled ? null : r.filePaths[0];
   });
   ipcMain.handle('playlists:list',()=>readPlaylists());
-  ipcMain.handle('playlists:create',(_e,name)=>createLocalPlaylist(name));
   ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
   ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
   ipcMain.handle('background:choose',async()=>{
@@ -697,11 +680,24 @@ app.whenReady().then(() => {
     if(!item)throw new Error('收藏中的文件已丢失');
     return {ok:true,url:localAudioUrl(item.audioPath),id:sid,name:item.name,artists:item.artists,fromCache:true};
   });
+  ipcMain.handle('local:delete', async (_e,name,confirmed) => {
+    if(confirmed!==true)throw new Error('删除歌曲前必须明确确认');
+    const full=availableLocalTrack(name);
+    const sidecar=full.slice(0,-path.extname(full).length)+'.lrc';
+    if(typeof shell.trashItem!=='function')throw new Error('当前系统不支持回收站删除');
+    await shell.trashItem(full);
+    // Audio must be safely in Recycle Bin before its lyric sidecar is moved.
+    if(fs.existsSync(sidecar)){
+      try{await shell.trashItem(sidecar)}catch(e){console.warn('歌曲已移入回收站，但歌词文件移动失败：',e.message)}
+    }
+    localPlaylist.afterDelete(name);
+    return {ok:true};
+  });
   ipcMain.handle('local:play', (_e, name) => {
     if (typeof name !== 'string' || !name || name !== path.basename(name) || !AUDIO_EXTS.has(path.extname(name).toLowerCase())) throw new Error('无效本地文件名');
     const full=availableLocalTrack(name);
     const id = /\[(\d{1,20})\]\.[^.]+$/.exec(name)?.[1] || null;
-    return {ok:true,url:localAudioUrl(full),id,name:name.replace(/\s*\[\d+\]\.[^.]+$/, ''),artists:'',fromCache:true};
+    return {ok:true,url:localAudioUrl(full),id,name:localPlaylist.clean(name).replace(/\s*\[\d+\]\.[^.]+$/, ''),artists:'',fromCache:true};
   });
   ipcMain.handle('music:open-song', async (_e, id) => {
     const [sid] = songIds([id]);
@@ -711,8 +707,9 @@ app.whenReady().then(() => {
   ipcMain.handle('local:list', async () => {
     const dir = config().downloadDir;
     if (!fs.existsSync(dir)) return [];
+    const members=new Set(readPlaylists()[0].tracks);
     return fs.readdirSync(dir,{withFileTypes:true}).filter(x => x.isFile() && AUDIO_EXTS.has(path.extname(x.name).toLowerCase()))
-      .map(x => ({name:x.name, size: fs.statSync(path.join(dir,x.name)).size}))
+      .map(x => ({name:x.name, size: fs.statSync(path.join(dir,x.name)).size, inPlaylist:members.has(x.name)||localPlaylist.tagged(x.name)}))
       .sort((a,b) => a.name.localeCompare(b.name,'zh-CN')).slice(0,1000);
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
