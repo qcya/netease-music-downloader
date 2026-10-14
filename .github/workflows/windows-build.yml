@@ -2,6 +2,7 @@ name: Build Windows Portable
 
 on:
   # Release exactly once when the release workflow itself is merged.
+  # Windows-compatible Electron test mocks have been verified before this retry.
   push:
     branches: [main]
     paths:
