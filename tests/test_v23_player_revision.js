@@ -27,6 +27,8 @@ test('floating lyrics window has no header and transparent chrome',()=>{
  assert.match(css,/\.widget\[data-background="none"\].*background:rgba\(0,0,0,0\)/);
  assert.doesNotMatch(css,/rgba\(24,25,38,\.006\)/);
  assert.match(css,/--glow/);
+ assert.match(css,/-webkit-user-select:none/);
+ assert.match(css,/::selection\{background:transparent/);
  assert.match(js,/setIgnoreMouseEvents\(locked,\{forward:true\}\)/);
 });
 
