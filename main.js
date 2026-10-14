@@ -554,7 +554,8 @@ function createWindow() {
   });
   // Handle both ready-to-show AND did-finish-load, and surface load errors.
   // A failed load must not silently leave a hidden background process.
-  win.loadFile(path.join(__dirname, 'app', 'index.html')).catch(e=>reportStartupFailure('主界面文件加载失败',e));
+  const loading=win.loadFile(path.join(__dirname, 'app', 'index.html'));
+  loading?.catch?.(e=>reportStartupFailure('主界面文件加载失败',e));
 }
 function stopBackendChildren(){
   for(const child of activeBackendChildren){
