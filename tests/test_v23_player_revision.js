@@ -20,7 +20,7 @@ test('immersive mode covers all desktop space and never reserves a bottom white 
 
 test('floating lyrics window has no header and transparent chrome',()=>{
  const js=src('floating_window.js');
- assert.match(js,/frame:false,transparent:true,hasShadow:false,thickFrame:false/);
+ assert.match(js,/frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false/);
  const html=src('app/floating-lyrics.html');
  assert.doesNotMatch(html,/class="bar"|class="header"/);
  const css=src('app/floating-lyrics.css');
