@@ -1,8 +1,8 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.4.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "网易云音乐下载器源码开发版：独立桌面歌词、居中沉浸播放、本地歌单与并行下载",
+  "description": "音乐下载器：批量下载、本地播放、歌单与同步歌词",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "top.qcya.netease.music.desktop",
-    "productName": "网易云音乐下载器",
+    "productName": "音乐下载器",
     "artifactName": "MusicDownloader-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"
