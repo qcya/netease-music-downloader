@@ -23,10 +23,10 @@ test('download list collapses and hides when empty',()=>{
  assert.match(html,/<details id="local-downloads"/);assert.match(css,/\.local-downloads\[hidden\]/);
  assert.match(js,/holder\.hidden=rows\.length===0/);
 });
-test('floating lyrics remains draggable; locked menu remains clickable',()=>{
+test('floating lyrics remains draggable only when unlocked; lock is click-through and cannot be right-click unlocked',()=>{
  const js=read('floating_window.js'),renderer=read('app/floating-lyrics.js'),main=read('main.js');
- assert.match(js,/setIgnoreMouseEvents\(false\)/);
- assert.match(js,/label:locked\?'解锁位置/);
+ assert.match(js,/setIgnoreMouseEvents\(locked,\{forward:true\}\)/);
+ assert.match(js,/if\(!exists\(\)\|\|locked\)return false/);
  assert.match(renderer,/contextmenu/);assert.match(renderer,/dragBegin/);
  assert.doesNotMatch(main,/globalShortcut/);
 });
