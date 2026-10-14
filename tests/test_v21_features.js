@@ -5,7 +5,7 @@ const root=path.resolve(__dirname,'..');const read=p=>fs.readFileSync(path.join(
 const {normalizeLyrics,DEFAULT_LYRICS}=require('../lyric_preferences.js');
 const {embeddedBackend,backendArgs}=require('../backend_runtime.js');
 test('floating lyric preference defaults and user input normalization',()=>{
- const d=normalizeLyrics();assert.equal(d.background,'none');assert.equal(d.originalColor,'#F6A8C8');assert.equal(d.outlineColor,'#FFFFFF');
+ const d=normalizeLyrics();assert.equal(d.background,'none');assert.equal(d.originalColor,'#FFFFFF');assert.equal(d.translationColor,'#FFFFFF');assert.equal(d.glow,16);assert.equal(d.outlineColor,'#FFFFFF');
  assert.deepEqual(d,DEFAULT_LYRICS);
  const s=normalizeLyrics({background:'glass',originalColor:'url(evil)',fontSize:500,width:-1,opacity:'15',
     showOriginal:false,showTranslation:false,mouseThrough:true,outlineWidth:2.5,align:'left'});

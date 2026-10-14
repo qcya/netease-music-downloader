@@ -2,13 +2,13 @@
 const path=require('node:path');
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
 function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,onBoundsChanged,screen}){
- let floating=null,locked=false,currentHeight=110,dragStart=null;
+ let floating=null,locked=false,currentHeight=88,dragStart=null;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
  function open(){
   if(exists()){floating.show();return {open:true};}
   const s=safeSettings();
-  floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:88,maxHeight:560,
+  floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
     frame:false,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
@@ -19,8 +19,12 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   return {open:true};
  }
  function close(){if(exists())floating.close();return {open:false}}
- function lock(value){locked=!!value;if(!exists())return {open:false};floating.setIgnoreMouseEvents(false);; // keep right-click usable even when position is locked
+ function lock(value){locked=!!value;if(!exists())return {open:false};
+  // A true lock must pass BOTH mouse buttons to the underlying desktop window.
+  floating.setIgnoreMouseEvents(locked,{forward:true});
+  dragStart=null;
   floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
+
  function update(info){if(!exists()||!info||typeof info!=='object')return false;
   floating.webContents.send('lyrics:text',{title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)});return true;}
  function applySettings(s){if(!exists())return;
@@ -32,10 +36,10 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   lock(!!s.mouseThrough);
  }
  function resizeTo(height){if(!exists())return false;
-  const h=Math.max(88,Math.min(560,Math.ceil(Number(height)||150)));
+  const h=Math.max(56,Math.min(560,Math.ceil(Number(height)||150)));
   const b=floating.getBounds();if(Math.abs(h-b.height)<2)return true;
   const work=screen?.getDisplayMatching?.(b)?.workArea;
-  const maxH=work?Math.max(88,work.height-24):560;
+  const maxH=work?Math.max(56,work.height-24):560;
   const next=Math.min(h,maxH);
   const y=work?Math.min(Math.max(b.y,work.y),work.y+work.height-next):b.y;
   floating.setBounds({...b,y,height:next});currentHeight=next;return true;
@@ -47,9 +51,9 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
    floating.setPosition(nextX,nextY,false);return true;
  }
  function dragEnd(){dragStart=null;return true;}
- function showMenu(){if(!exists())return false;
+ function showMenu(){if(!exists()||locked)return false;
    const menu=Menu.buildFromTemplate([
-     {label:locked?'解锁位置（允许拖动）':'锁定位置',click:()=>lockAndSave(!locked)},
+     {label:'锁定位置（解锁请返回软件设置）',click:()=>lockAndSave(true)},
      {label:'打开歌词设置',click:()=>{const main=getMainWindow();if(main&&!main.isDestroyed()){main.show();main.focus();main.webContents.send('lyrics:open-settings');}}},
      {type:'separator'},
      {label:'关闭桌面歌词',click:()=>close()}

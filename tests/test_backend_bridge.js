@@ -124,9 +124,10 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   assert.ok(fs.existsSync(favorite.lyricPath));
   assert.equal((await invoke('favorites:list')).length,1);
   const favoritePlay=await invoke('favorites:play','12345');
-  assert.match(favoritePlay.url,/^music-media:/);
+  assert.match(favoritePlay.url,/^file:\/\//);
   const local=await invoke('local:play',found[0].name);
-  assert.match(local.url,/^music-media:/);
+  assert.match(local.url,/^file:\/\//);
+  assert.equal(new URL(local.url).protocol,'file:');
   assert.throws(()=>invoke('local:play','../settings.json'),/无效本地文件名/);
   await assert.rejects(invoke('music:download',['; rm -rf .']),/无效歌曲 ID/);
   await invoke('music:cache-clear');

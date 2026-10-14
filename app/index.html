@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: music-media: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview:; object-src 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: music-media: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview: file:; object-src 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>网易云音乐下载器</title>
   <link rel="stylesheet" href="style.css">
@@ -105,15 +105,16 @@
           <textarea id="api-bases" rows="3" placeholder="留空使用 Skill 内置接口"></textarea>
           <p class="settings-hint">接口返回的最高音质不代表一定拥有下载权限；程序会验证实际下载到的音频格式。</p>
           <div class="lyrics-customize">
-            <div class="lyrics-customize-heading"><strong>桌面悬浮歌词 · 外观与显示</strong><span>默认无背景 · 粉字白描边</span></div>
+            <div class="lyrics-customize-heading"><strong>桌面悬浮歌词 · 外观与显示</strong><span>默认无背景 · 白色柔光字体</span></div>
             <p class="settings-hint">修改后点击「保存设置」即可应用到正在显示的悬浮歌词。文字长度不再被省略号截断。</p>
             <div class="lyrics-settings-grid">
               <label for="lyr-background">背景模式<select id="lyr-background"><option value="none">无背景（默认）</option><option value="glass">粉蓝半透明背景</option><option value="solid">实色背景</option></select></label>
               <label for="lyr-align">歌词对齐<select id="lyr-align"><option value="center">居中</option><option value="left">左对齐</option><option value="right">右对齐</option></select></label>
-              <label for="lyr-original-color">原文字色<input type="color" id="lyr-original-color" value="#F6A8C8"></label>
-              <label for="lyr-translation-color">翻译字色<input type="color" id="lyr-translation-color" value="#AFCFFF"></label>
+              <label for="lyr-original-color">原文字色<input type="color" id="lyr-original-color" value="#FFFFFF"></label>
+              <label for="lyr-translation-color">翻译字色<input type="color" id="lyr-translation-color" value="#FFFFFF"></label>
               <label for="lyr-outline-color">描边颜色<input type="color" id="lyr-outline-color" value="#FFFFFF"></label>
-              <label for="lyr-outline-width">描边宽度（0–5 px）<input id="lyr-outline-width" type="range" min="0" max="5" step="0.5" value="2"></label>
+              <label for="lyr-outline-width">描边宽度（0–5 px）<input id="lyr-outline-width" type="range" min="0" max="5" step="0.5" value="0"></label>
+              <label for="lyr-glow">文字柔光强度（0–30 px）<input id="lyr-glow" type="range" min="0" max="30" step="1" value="16"></label>
               <label for="lyr-font-size">原文字号（15–64）<input id="lyr-font-size" type="number" min="15" max="64" value="30"></label>
               <label for="lyr-translation-size">翻译字号（11–42）<input id="lyr-translation-size" type="number" min="11" max="42" value="18"></label>
               <label for="lyr-width">窗口宽度（420–1400）<input id="lyr-width" type="number" min="420" max="1400" step="20" value="800"></label>
@@ -126,13 +127,13 @@
               <label><input type="checkbox" id="lyr-show-translation" checked> 显示翻译</label>
               <label><input type="checkbox" id="lyr-always-on-top" checked> 始终置顶</label>
               <label><input type="checkbox" id="lyr-auto-hide-empty"> 无歌词时自动隐藏文字</label>
-              <label><input type="checkbox" id="lyr-mouse-through"> 锁定位置（右键仍可解锁）</label>
+              <label><input type="checkbox" id="lyr-mouse-through"> 锁定歌词（鼠标完全穿透；仅能在软件内解锁）</label>
             </div>
             <div class="lyrics-settings-actions"><button type="button" class="soft-action" id="lyr-reset">恢复默认歌词风格</button><button type="button" class="subtle-action" id="lyr-test">打开歌词预览</button></div>
           </div>
           <div class="lyrics-customize"><strong>桌面歌词与沉浸播放</strong>
             <label class="setting-row"><input id="desktop-lyrics-enabled" type="checkbox"> 启用桌面悬浮歌词（启动后默认不显示）</label>
-            <p class="settings-hint">整块桌面歌词可拖动，右键弹出锁定、解锁、设置及关闭菜单。无需占用系统快捷键。</p>
+            <p class="settings-hint">未锁定时可拖动、右键操作。锁定后完全鼠标穿透，无法右键呼出菜单，请在此设置页取消勾选锁定。</p>
             <label for="player-bg-path">沉浸播放背景</label>
             <div class="input-button"><input id="player-bg-path" readonly placeholder="默认使用粉蓝渐变；可选择本地图片或视频"><button id="pick-player-bg" type="button">选择背景</button><button id="clear-player-bg" type="button">恢复默认</button></div>
             <p class="settings-hint">可选择本地视频作为动态背景；若 assets/immersive-background.mp4 存在则自动使用。个人视频不会上传至公开仓库。</p>
