@@ -418,15 +418,18 @@
     clearLyrics();
     updateFloatingLine();
     if(token===state.playToken)void loadLyrics(id,token,state.currentLocalName);
-    audio().src=url;
-    audio().load();
     if(options.startPaused){
       const position=Math.max(0,Number(options.resumeTime)||0);
+      // Listen before assigning the source so fast local metadata never races us.
       audio().addEventListener('loadedmetadata',()=>{
         if(token!==state.playToken)return;
         const limit=Number(audio().duration);
         if(Number.isFinite(limit)&&limit>0)audio().currentTime=Math.min(position,Math.max(0,limit-0.1));
       },{once:true});
+    }
+    audio().src=url;
+    audio().load();
+    if(options.startPaused){
       updatePlayerControls();return true;
     }
     updatePlayerControls();
