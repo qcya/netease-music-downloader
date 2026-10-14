@@ -879,6 +879,20 @@
     $('#playlist-box').addEventListener('submit',playlist);
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
+    for(const [id,kind] of [['import-local-files','files'],['import-local-folder','folder']]){
+      $('#'+id).addEventListener('click',async()=>{
+        const button=$('#'+id);button.disabled=true;
+        try{
+          const result=await bridge.importLocal(kind);
+          if(!result?.canceled){
+            showToast('导入完成：'+result.imported+' 首，跳过 '+result.skipped+' 首，歌词 '+result.lyrics+' 份。'+(result.limitReached?'最多处理一万首，剩余文件请分批导入。':''));
+            if(result.errors?.length)showToast(result.errors.slice(0,3).join('；'),true);
+            await refreshLocal();
+          }
+        }catch(e){showToast('导入失败：'+errMessage(e),true)}
+        finally{button.disabled=false}
+      });
+    }
     $('#pick-dir').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#download-dir').value=dir;});
     for(const id of Object.values(lyricInputs)){
       if(id==='lyr-mouse-through')continue;
@@ -905,6 +919,7 @@
     $('#save-settings').addEventListener('click',async()=>{
       try {
         state.settings = await bridge.saveSettings({...state.settings,downloadDir:$('#download-dir').value,quality:'best',cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),desktopLyricsEnabled:$('#desktop-lyrics-enabled').checked,floatingLyrics:readLyricsStyle(),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
+        updateFloatingLine();
         if(state.settings.desktopLyricsEnabled&&!state.floating){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine()}
         if(!state.settings.desktopLyricsEnabled&&state.floating){await bridge.closeFloatingLyrics();state.floating=false}
         updateDesktopLyricsToggle();
@@ -920,10 +935,11 @@
         $('#player-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
       if(Number.isFinite(audio().duration)&&audio().duration>0&&!$('#immersive-seek').matches(':active'))$('#immersive-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
       syncLyrics();
+      savePlaybackSession();
     });
     audio().addEventListener('loadedmetadata',()=>{$('#time-duration').textContent=timeLabel(audio().duration);$('#immersive-duration').textContent=timeLabel(audio().duration);});
-    for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});});
-    audio().addEventListener('ended',()=>{void advancePlaylist()});
+    for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});savePlaybackSession(true)});
+    audio().addEventListener('ended',()=>{void advancePlaylist(1,'ended')});
     audio().addEventListener('seeked',()=>syncLyrics(true));
     audio().addEventListener('error',()=>{if(audio().src)showToast('音频无法播放，可能是文件格式或缓存失效。',true);});
     $('#player-toggle').addEventListener('click',()=>{
@@ -943,7 +959,30 @@
     for(const id of ['player-mode','immersive-mode']){
       $('#'+id).addEventListener('change',()=>changePlaybackMode($('#'+id).value));
     }
-    document.addEventListener('keydown',event=>{if(!state.immersive)return;if(event.key==='Escape'){showImmersive(false);event.preventDefault()}else if(event.code==='Space'&&!['INPUT','TEXTAREA','BUTTON'].includes(document.activeElement?.tagName)){event.preventDefault();audio().paused?audio().play().catch(()=>{}):audio().pause()}});
+    document.addEventListener('keydown',event=>{
+      if(event.key==='Escape'&&state.immersive){showImmersive(false);event.preventDefault();return}
+      const focus=document.activeElement;
+      if(event.ctrlKey||event.altKey||event.metaKey||event.shiftKey||event.repeat||
+        focus?.isContentEditable||['INPUT','TEXTAREA','SELECT'].includes(focus?.tagName))return;
+      if(event.key==='ArrowLeft'){event.preventDefault();void advancePlaylist(-1,'manual')}
+      else if(event.key==='ArrowRight'){event.preventDefault();void advancePlaylist(1,'manual')}
+      else if(event.key==='ArrowUp'||event.key==='ArrowDown'){
+        event.preventDefault();
+        audio().volume=Math.max(0,Math.min(1,audio().volume+(event.key==='ArrowUp'?0.05:-0.05)));
+        const percent=String(Math.round(audio().volume*100));
+        $('#player-volume').value=percent;$('#immersive-volume').value=percent;
+      }else if(state.immersive&&event.code==='Space'&&!['BUTTON'].includes(focus?.tagName)){
+        event.preventDefault();audio().paused?audio().play().catch(()=>{}):audio().pause();
+      }
+    });
+    bridge.onMiniControl(action=>{
+      if(action==='previous')void advancePlaylist(-1,'manual');
+      else if(action==='next')void advancePlaylist(1,'manual');
+      else if(action==='toggle'&&audio().src){audio().paused?audio().play().catch(e=>showToast(errMessage(e),true)):audio().pause()}
+    });
+    bridge.onMiniStatus(info=>{state.miniOpen=!!info.open;$('#toggle-mini-player').textContent=state.miniOpen?'迷你 · 开':'迷你 · 关';$('#toggle-mini-player').setAttribute('aria-pressed',String(state.miniOpen))});
+    $('#toggle-mini-player').addEventListener('click',()=>{void toggleMiniPlayer()});
+    window.addEventListener('beforeunload',()=>savePlaybackSession(true));
     $('#toggle-desktop-lyrics').addEventListener('click',()=>toggleDesktopLyrics());
     $('#toggle-desktop-lock').addEventListener('click',()=>{void setDesktopLyricsLocked(!state.lyricsLocked)});
     $('#open-immersive').addEventListener('click',async()=>{showImmersive(!state.immersive);if(state.immersive)await showBackground()});
@@ -964,6 +1003,7 @@
       renderSettings();
       if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);
       updateDesktopLyricsToggle();
+      await restorePlaybackSession();
     }
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
