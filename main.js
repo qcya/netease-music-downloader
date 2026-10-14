@@ -9,6 +9,8 @@ const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
 const { createFloatingLyricsController } = require('./floating_window.js');
 const { createPlaylistStore } = require('./local_playlist.js');
+const { importMusic } = require('./local_import.js');
+const {createMiniPlayerController}=require('./mini_player.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
@@ -468,6 +470,7 @@ async function fetchLyrics(id, force=false) {
 }
 
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
+const miniPlayer=createMiniPlayerController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win});
 
 function safeAudioOrigin(value) {
   try {
@@ -517,7 +520,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.2', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.3', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -571,6 +574,11 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:list',()=>readPlaylists());
   ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
   ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
+  ipcMain.handle('playlists:reorder',(_e,names)=>localPlaylist.reorder(names));
+  ipcMain.handle('mini:open',()=>miniPlayer.open());
+  ipcMain.handle('mini:close',()=>miniPlayer.close());
+  ipcMain.handle('mini:state',(_e,state)=>miniPlayer.update(state));
+  ipcMain.on?.('mini:control',(event,action)=>miniPlayer.control(event.sender,action));
   ipcMain.handle('background:choose',async()=>{
     const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});
     if(result.canceled||!result.filePaths?.length)return null;
@@ -683,6 +691,25 @@ app.whenReady().then(() => {
     const [sid]=songIds([id]);const item=validFavorite(readFavorites()[sid],sid);
     if(!item)throw new Error('收藏中的文件已丢失');
     return {ok:true,url:localAudioUrl(item.audioPath),id:sid,name:item.name,artists:item.artists,fromCache:true};
+  });
+  ipcMain.handle('local:import',async(_e,kind)=>{
+    if(!['files','folder'].includes(kind))throw new Error('无效导入类型');
+    const result=await dialog.showOpenDialog(win,{
+      title:kind==='files'?'导入本地音乐文件（将复制到下载目录）':'导入音乐文件夹（将复制到下载目录）',
+      properties:kind==='files'?['openFile','multiSelections']:['openDirectory'],
+      filters:kind==='files'?[{name:'音乐文件',extensions:[...AUDIO_EXTS].map(e=>e.slice(1))}]:undefined
+    });
+    if(result.canceled||!result.filePaths?.length)return {canceled:true,imported:0};
+    return importMusic({sources:result.filePaths,destination:config().downloadDir});
+  });
+  ipcMain.handle('local:lyrics',(_e,name)=>{
+    const full=availableLocalTrack(name);
+    const sidecar=lrcSidecar(full);
+    if(!fs.existsSync(sidecar))return {found:false};
+    const stat=fs.statSync(sidecar);
+    if(!stat.isFile()||stat.size>2*1024*1024)throw new Error('歌词文件过大或无效');
+    const lrc=fs.readFileSync(sidecar,'utf8').replace(/^\uFEFF/,'');
+    return {found:!!lrc.trim(),lrc,translated_lrc:''};
   });
   ipcMain.handle('local:delete', async (_e,name,confirmed) => {
     if(confirmed!==true)throw new Error('删除歌曲前必须明确确认');
