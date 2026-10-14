@@ -412,7 +412,7 @@
     if(source==='ended'&&(state.preparing||state.advancingPlaylist))return;
     const serial=++state.advanceSerial;
     state.advancingPlaylist=true;
-    let success=false;
+    let success=false,noCandidate=false;
     try{
       let queue=initial;
       // Each candidate is attempted at most once per action.
@@ -420,6 +420,7 @@
         if(serial!==state.advanceSerial)return;
         const next=window.MusicPlaybackNavigation.step(queue,direction);
         if(!next){
+          noCandidate=true;
           if(source==='manual'&&direction<0){audio().currentTime=0;showToast('随机模式已经到达播放历史的起点。');}
           return;
         }
@@ -431,7 +432,7 @@
     }finally{
       if(serial===state.advanceSerial){
         state.advancingPlaylist=false;
-        if(!success){
+        if(!success&&!noCandidate){
           state.playQueue=null;
           showToast('歌单里没有可继续播放的本地歌曲。',true);
           updatePlayerControls();
