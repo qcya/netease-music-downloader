@@ -30,3 +30,11 @@ test('floating lyrics remains draggable; locked menu remains clickable',()=>{
  assert.match(renderer,/contextmenu/);assert.match(renderer,/dragBegin/);
  assert.doesNotMatch(main,/globalShortcut/);
 });
+
+test('user-selected background video is copied into durable application data',()=>{
+ const main=read('main.js'),renderer=read('app/renderer.js');
+ assert.match(main,/player-backgrounds/);
+ assert.match(main,/fs\.promises\.copyFile\(file,installed\)/);
+ assert.match(main,/kind:explicit\?'missing':'default'/);
+ assert.match(renderer,/H\.264 MP4/);
+});

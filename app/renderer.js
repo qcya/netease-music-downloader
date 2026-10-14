@@ -141,46 +141,98 @@
   }
   const parseLrc=window.MusicLRC.parseLrc;
   const lyricSeekTime=window.MusicLyricNavigation.seekTime;
+  const inertiaStep=window.MusicLyricNavigation.inertiaStep;
   let manualLyricScrollUntil=0, lyricDrag=null, suppressLyricClick=false;
+  let lyricGlideFrame=0, lyricSeekSerial=0;
   function holdManualLyricScroll(milliseconds=9500){manualLyricScrollUntil=performance.now()+milliseconds;}
+  function stopLyricGlide(){if(lyricGlideFrame)cancelAnimationFrame(lyricGlideFrame);lyricGlideFrame=0;}
+  function beginLyricGlide(pane,velocity){
+    stopLyricGlide();
+    if(Math.abs(velocity)<.12)return;
+    let last=performance.now(),speed=Math.max(-4,Math.min(4,velocity));
+    const tick=now=>{
+      lyricGlideFrame=0;
+      const step=inertiaStep(speed,now-last);last=now;
+      const old=pane.scrollTop;
+      pane.scrollTop+=step.pixels;
+      speed=step.velocity;
+      if(Math.abs(speed)<.04||Math.abs(pane.scrollTop-old)<.15)return;
+      holdManualLyricScroll();
+      lyricGlideFrame=requestAnimationFrame(tick);
+    };
+    lyricGlideFrame=requestAnimationFrame(tick);
+  }
   function seekLyricLine(lineIndex){
     const row=state.lyrics[lineIndex],media=audio();
-    const target=lyricSeekTime(row?.time,media.duration);
-    if(target===null){showToast('这句歌词没有有效时间戳，无法跳转。',true);return false;}
-    // Do not infer 0 when the LRC stamp is malformed or media metadata is delayed.
-    try{
-      media.currentTime=target;
-      manualLyricScrollUntil=0;
-      syncLyrics(true);
+    if(!row||!Number.isFinite(row.time)){showToast('这句歌词没有有效时间戳，无法跳转。',true);return false;}
+    if(!media.src){showToast('请先播放一首本地歌曲，再点击歌词跳转。',true);return false;}
+    const target=lyricSeekTime(row.time,media.duration);
+    if(target===null){
+      showToast('歌词时间 '+timeLabel(row.time)+' 超出当前音频时长 '+timeLabel(media.duration)+'；已阻止错误跳转到开头。请检查下载文件是否完整。',true);
+      return false;
+    }
+    stopLyricGlide();
+    const token=state.playToken,serial=++lyricSeekSerial;
+    const apply=()=>{
+      if(token!==state.playToken||serial!==lyricSeekSerial)return;
+      try{
+        media.currentTime=target;
+        manualLyricScrollUntil=0;
+        syncLyrics(true);
+        // Electron may accept a currentTime assignment without actually making the media seekable.
+        // Report that condition rather than silently showing the first lyric again.
+        setTimeout(()=>{
+          if(token!==state.playToken||serial!==lyricSeekSerial||media.seeking||media.readyState===0)return;
+          if(Math.abs(media.currentTime-target)>2)
+            showToast('歌词定位未成功（目标 '+timeLabel(target)+'，实际 '+timeLabel(media.currentTime)+'）。请检查本地音频格式及可跳转性。',true);
+        },900);
+      }catch(e){showToast('歌词跳转失败：'+errMessage(e),true);}
+    };
+    if(media.readyState===0){
+      media.addEventListener('loadedmetadata',apply,{once:true});
       return true;
-    }catch(e){showToast('歌词跳转失败：'+errMessage(e),true);return false;}
+    }
+    apply();
+    return true;
   }
   function enableLyricBrowsing(pane){
-    // Mouse wheel, trackpad and touch scrolling must not trigger audio seeking.
-    pane.addEventListener('wheel',()=>holdManualLyricScroll(),{passive:true});
-    pane.addEventListener('touchstart',()=>holdManualLyricScroll(),{passive:true});
+    // Native wheel/touch scroll is already inertial. Stop only a previous mouse glide.
+    pane.addEventListener('wheel',()=>{stopLyricGlide();holdManualLyricScroll();},{passive:true});
+    pane.addEventListener('touchstart',()=>{stopLyricGlide();holdManualLyricScroll();},{passive:true});
+    pane.addEventListener('dragstart',event=>event.preventDefault());
     pane.addEventListener('pointerdown',e=>{
       if(e.button!==0||e.pointerType==='touch')return;
-      lyricDrag={id:e.pointerId,y:e.clientY,initialY:e.clientY,startScroll:pane.scrollTop,moved:false};
+      stopLyricGlide();
+      lyricDrag={id:e.pointerId,initialY:e.clientY,lastY:e.clientY,lastAt:performance.now(),moved:false,velocity:0};
     });
     pane.addEventListener('pointermove',e=>{
       const d=lyricDrag;if(!d||d.id!==e.pointerId)return;
-      if(!d.moved&&Math.abs(e.clientY-d.initialY)<7)return;
+      if(!d.moved&&Math.abs(e.clientY-d.initialY)<6)return;
       if(!d.moved){d.moved=true;pane.setPointerCapture?.(e.pointerId);}
+      const now=performance.now(),elapsed=Math.max(8,now-d.lastAt);
+      const delta=d.lastY-e.clientY;
+      pane.scrollTop+=delta;
+      const velocity=delta/elapsed;
+      d.velocity=d.velocity*.45+velocity*.55;
+      d.lastY=e.clientY;d.lastAt=now;
       holdManualLyricScroll();
-      pane.scrollTop=d.startScroll+d.y-e.clientY;
       e.preventDefault();
     });
-    function endBrowse(){
-      if(!lyricDrag)return;
-      if(lyricDrag.moved){
-        suppressLyricClick=true;
-        setTimeout(()=>{suppressLyricClick=false},100);
-      }
+    function endBrowse(event){
+      const d=lyricDrag;if(!d||event.pointerId!==d.id)return;
       lyricDrag=null;
+      if(d.moved){
+        suppressLyricClick=true;
+        setTimeout(()=>{suppressLyricClick=false;},120);
+        if(event.type==='pointerup'&&performance.now()-d.lastAt<100)beginLyricGlide(pane,d.velocity);
+      }
+      if(pane.hasPointerCapture?.(event.pointerId))pane.releasePointerCapture(event.pointerId);
     }
     pane.addEventListener('pointerup',endBrowse);
     pane.addEventListener('pointercancel',endBrowse);
+    pane.addEventListener('lostpointercapture',event=>{
+      if(lyricDrag?.id===event.pointerId)endBrowse(event);
+    });
     pane.addEventListener('click',e=>{
       if(suppressLyricClick){e.preventDefault();e.stopImmediatePropagation();}
     },true);
@@ -282,13 +334,21 @@
     }catch{/* network metadata is optional; keep software icon as fallback */}
   }
   async function showBackground(){
+    const v=$('#immersive-bg-video'),im=$('#immersive-bg-image');
     try{
       const info=await bridge.playerBackground();
-      const v=$('#immersive-bg-video'),im=$('#immersive-bg-image');
-      v.pause();v.removeAttribute('src');v.load();v.hidden=true;im.hidden=true;
-      if(info?.kind==='video'){v.src=info.url;v.hidden=false;void v.play().catch(()=>{});}
-      else if(info?.kind==='image'){im.src=info.url;im.hidden=false;}
-    }catch{}
+      v.pause();v.onerror=null;v.removeAttribute('src');v.load();v.hidden=true;
+      im.removeAttribute('src');im.hidden=true;
+      if(info?.kind==='video'){
+        v.onerror=()=>{v.hidden=true;showToast('动态背景无法播放。建议将原视频转换为 H.264 MP4 后重新选择。',true);};
+        v.src=info.url;v.hidden=false;
+        await v.play().catch(e=>{v.hidden=true;showToast('动态背景启动失败：'+errMessage(e),true);});
+      }else if(info?.kind==='image'){
+        im.src=info.url;im.hidden=false;
+      }else if(info?.kind==='missing'){
+        showToast('原来选定的动态背景文件已丢失。请到「设置 → 沉浸播放背景」重新选择柠檬视频。',true);
+      }
+    }catch(e){showToast('读取动态背景失败：'+errMessage(e),true);}
   }
   async function loadLyrics(id,token) {
     if(!id){clearLyrics('本地音频没有可识别的网易云歌曲 ID');return;}

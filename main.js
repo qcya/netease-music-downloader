@@ -578,11 +578,23 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
   ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
   ipcMain.handle('background:choose',async()=>{
-    const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']} ]});
+    const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});
     if(result.canceled||!result.filePaths?.length)return null;
-    const file=path.resolve(result.filePaths[0]);if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase()))throw new Error('不支持的背景格式');
-    const st=fs.statSync(file);if(!st.isFile()||st.size>2*1024*1024*1024)throw new Error('背景文件过大或不可用');
-    writeConfig({...config(),playerBackgroundPath:file});return {path:file};
+    const file=path.resolve(result.filePaths[0]),ext=path.extname(file).toLowerCase();
+    if(!BACKGROUND_EXTS.has(ext))throw new Error('不支持的背景格式');
+    const st=await fs.promises.stat(file);
+    if(!st.isFile()||st.size>2*1024*1024*1024)throw new Error('背景文件过大或不可用');
+    // User-supplied video is not tracked by Git. Keep a durable app-data copy instead of
+    // retaining a fragile path to the original file or requiring it in the repository.
+    const store=path.join(app.getPath('userData'),'player-backgrounds');
+    await fs.promises.mkdir(store,{recursive:true});
+    const installed=path.join(store,randomUUID()+ext);
+    try {
+      await fs.promises.copyFile(file,installed);
+      if((await fs.promises.stat(installed)).size!==st.size)throw new Error('背景复制不完整');
+      writeConfig({...config(),playerBackgroundPath:installed});
+      return {path:installed};
+    }catch(e){await fs.promises.rm(installed,{force:true}).catch(()=>{});throw e;}
   });
   ipcMain.handle('background:clear',()=>{writeConfig({...config(),playerBackgroundPath:''});return true});
   ipcMain.handle('background:get',()=>{
@@ -590,7 +602,7 @@ app.whenReady().then(() => {
     // Optional locally supplied dynamic background. Intentionally excluded from public GitHub source.
     const fallback=resources('assets','immersive-background.mp4');
     const file=explicit||fallback;
-    if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:'default'};
+    if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:explicit?'missing':'default'};
     return {kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:grantMedia(file)};
   });
   ipcMain.handle('system:open-directory', async () => {
