@@ -40,6 +40,7 @@ Windows 桌面应用 / 单文件便携版
 | `floating-preload.js` | 桌面歌词窗口的安全通信接口。 |
 | `floating_window.js` | 创建桌面歌词窗口，处理显示、拖动、锁定、鼠标穿透与窗口尺寸。 |
 | `lyric_preferences.js` | 桌面歌词默认样式、个性化设置和参数检查。 |
+| `local_playlist.js` | 单歌单成员记录、旧歌单合并、实际文件名标记及歌词文件安全重命名。 |
 | `download_queue.js` | 下载任务队列，负责并行数量、去重、暂停、恢复和取消。 |
 | `backend_runtime.js` | 查找并启动音乐后端，支持开发环境与 EXE 内置后端。 |
 | `app_logger.js` | 程序日志与错误信息记录。 |
@@ -94,6 +95,8 @@ Windows 桌面应用 / 单文件便携版
 |---|---|
 | `tests/test_backend_bridge.js` | 测试主程序和音乐后端之间的通信与下载流程。 |
 | `tests/test_parallel_bridge.js` | 测试并发下载和相同歌曲的请求去重。 |
+| `tests/test_single_playlist.js` | 测试歌单前缀、配套歌词、旧数据合并和重名保护。 |
+| `tests/test_single_playlist_ui.js` | 测试单歌单页面、连续播放、删除确认和悬浮歌词显示规则。 |
 | `tests/test_download_queue.js` | 测试下载队列、任务顺序、暂停、恢复和取消。 |
 | `tests/test_lrc.js` | 测试歌词时间轴与翻译解析。 |
 | `tests/test_repository_hygiene.js` | 检查仓库结构、必需文件及说明文档。 |
