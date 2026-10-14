@@ -1,0 +1,60 @@
+name: Keep Only Latest Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/prune-releases.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prune-old-releases
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    if: github.repository == 'qcya/netease-music-downloader'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep newest published release and remove older releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Trust GitHub's designated "Latest" release, not semantic version
+          # sorting: the project's first public edition restarted at v1.0.0.
+          current="$(gh api "repos/${REPO}/releases/latest" --jq '.tag_name')"
+          if [[ -z "$current" ]]; then
+            echo "::error::No latest release; refusing to delete anything."
+            exit 1
+          fi
+          # Never purge usable older builds unless the release being kept
+          # actually has the expected downloadable standalone EXE.
+          exe_count="$(gh api "repos/${REPO}/releases/tags/${current}" --jq '[.assets[] | select(.name | endswith("-portable.exe"))] | length')"
+          if [[ "$exe_count" -lt 1 ]]; then
+            echo "::error::Latest release lacks a portable EXE; refusing cleanup."
+            exit 1
+          fi
+          echo "Keeping latest release: $current"
+          mapfile -t stale < <(
+            gh api "repos/${REPO}/releases" --paginate --jq '.[] | select(.draft == false) | .tag_name' |
+            grep -vFx "$current" || true
+          )
+          for tag in "${stale[@]}"; do
+            echo "Deleting old release: $tag"
+            gh release delete "$tag" --repo "$REPO" --yes
+          done
+          # Leave Git tags and commit history unchanged.
+          remaining="$(gh api "repos/${REPO}/releases" --paginate --jq '.[] | select(.draft == false) | .tag_name')"
+          if [[ "$remaining" != "$current" ]]; then
+            echo "::error::Expected only $current; found: $remaining"
+            exit 1
+          fi
+          echo "Only $current remains in public Releases."
