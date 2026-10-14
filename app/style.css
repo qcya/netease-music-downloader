@@ -339,3 +339,15 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 .immersive-mode option{color:#333}
 @media(max-width:1120px){.player-buttons{gap:5px}.player-mode{width:56px;min-width:56px;font-size:10px}.desktop-lyrics-lock{padding:7px 6px;font-size:10px}.player-synced-line{font-size:11px}.desktop-lyric-actions{gap:4px}}
 @media(max-width:960px){.player-synced-line{display:none}.desktop-lyrics-toggle{padding:7px 6px}}
+
+
+/* v1.0.3: order management, import actions and optional mini player. */
+#view-local .page-actions{display:flex;gap:9px;flex-wrap:wrap}
+.playlist-entry{display:flex;align-items:center;gap:10px;cursor:grab}
+.playlist-entry:active{cursor:grabbing}
+.playlist-entry.dragging{opacity:.45}
+.playlist-entry strong{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.playlist-drag-handle{font-size:22px;color:#b7a0bd;cursor:grab;flex-shrink:0;user-select:none}
+.mini-player-toggle{border:1px solid #e2d2e7;border-radius:11px;padding:7px 9px;background:#fff0f8;color:#996f93;font-size:11px;white-space:nowrap;cursor:pointer}
+.mini-player-toggle[aria-pressed="true"]{background:#f0deef;color:#87658c}
+@media(max-width:1120px){.mini-player-toggle{padding:6px 5px;font-size:10px}}
