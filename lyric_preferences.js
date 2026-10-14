@@ -2,7 +2,7 @@
 /** Shared settings contract: strict validation before values reach a CSS property or a native window. */
 const DEFAULT_LYRICS = Object.freeze({
   background:'none', originalColor:'#FFFFFF',translationColor:'#FFFFFF', outlineColor:'#FFFFFF',
-  outlineWidth:0,shadow:2,glow:16,fontSize:30,translationSize:18,lineHeight:1.36,
+  outlineWidth:0,shadow:2,glow:16,fontSize:30,translationSize:18,lineHeight:1.28,
   width:800,align:'center',showOriginal:true,showTranslation:true,alwaysOnTop:true,
   opacity:100,autoHideEmpty:false,mouseThrough:false
 });
