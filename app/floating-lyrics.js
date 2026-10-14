@@ -20,19 +20,19 @@ function paint(){
   for(const [key,val] of Object.entries({
     '--original':x.originalColor||'#FFFFFF','--translated':x.translationColor||'#FFFFFF',
     '--outline':x.outlineColor||'#FFFFFF','--outline-width':`${x.outlineWidth??0}px`,
-    '--shadow':`${x.shadow??2}px`,'--glow':`${x.glow??14}px`,
+    '--shadow':`${x.shadow??2}px`,'--lyric-shadow-scale':String(x.shadow??2),'--glow':`${x.glow??14}px`,
     '--lyric-primary-color':x.originalColor||'#FFFFFF','--lyric-secondary-color':x.translationColor||'#FFFFFF',
     '--lyric-glow-radius':`${x.glow??14}px`,'--original-size':`${x.fontSize??30}px`,
     '--translated-size':`${x.translationSize??18}px`,'--lyric-line-height':String(x.lineHeight??1.28),
     '--text-align':x.align||'center','--panel-opacity':String((x.opacity??100)/100)
   }))root.setProperty(key,val);
   $('widget').dataset.background=x.background||'none';
-  const lyric=lastInfo.line||'';
+  const noLyrics=!(lastInfo.line||'').trim();
+  const lyric=noLyrics&&x.autoHideEmpty!==true&&lastInfo.title!=='桌面歌词'?'♪ 暂无同步歌词':lastInfo.line||'';
   $('lyric').textContent=lyric;
   $('translate').textContent=lastInfo.translation||'';
   $('widget').dataset.locked=String(locked);
-  const noLyrics=!lastInfo.line?.trim();
-  $('widget').hidden=noLyrics;
+  $('widget').hidden=noLyrics&&(x.autoHideEmpty===true||lastInfo.title==='桌面歌词');
   $('lyric').hidden=x.showOriginal===false||(x.autoHideEmpty===true&&noLyrics);
   $('translate').hidden=x.showTranslation===false||!lastInfo.translation;
   measure();
