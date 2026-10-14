@@ -26,7 +26,7 @@
 
 - 开发版双击 `启动桌面版.bat`。
 - 新机器先双击 `安装依赖.bat`。在没有 winget 的 Windows 上也可以直接使用 npm/Node 的已安装环境。
-- `构建Windows_EXE.bat` 产生 `dist/MusicDownloader-2.0.0-portable.exe`。
+- `构建Windows_EXE.bat` 产生 `dist/MusicDownloader-2.0.1-portable.exe`。
 - GitHub Actions 中 `Build Windows Portable` 可手动构建并从 Actions Artifacts 取走 EXE，无需每次在本地重新下载 Electron。
 
 ## 安全与限制
@@ -34,3 +34,7 @@
 该工具依赖第三方接口，歌曲能否下载、歌词能否获取和最高音质均受实际服务端支持、版权及授权权限约束。软件不应绕过付费或技术保护措施。此版本自动化测试主要使用模拟 API；Windows Electron 视觉验收、实际桌面歌词窗口及真实接口下载仍需用户端测试。
 
 如要公开分发，请自行确认项目图标、第三方依赖与所用音乐服务的适用授权；公开 GitHub 仓库本身不等于项目已有开源许可证。
+
+## v2.0.1 图标更新
+
+已将旧版资源 `assets/app.ico` 与 `assets/avatar.png` 替换成新表情包。新版编译生成 `dist/MusicDownloader-2.0.1-portable.exe`，此前的 v2.0.0 EXE 不会被自动删除；需要时可手动删除旧 EXE。

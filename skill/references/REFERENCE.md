@@ -59,3 +59,7 @@ $env:NETEASE_API_BASE_URL = 'https://musicapi.qijieya.cn,https://api.qijieya.cn'
 - Flac/wav 识别以魔数为准，FLAC STREAMINFO 可以读到采样率与位深；MP3 如第一段内可定位 MPEG1-L3 帧则可读取首帧码率。这不等于整首歌的响度、平均码率和主观音质评估。
 - VIP、地域、版权和版权方授权将影响音源可获得性。不支持破解 DRM、不保证下载付费歌曲、不自动尝试未经授权的账号或 Cookie。
 - 请勿将提供结果中的曲目再次大量传播或商用，需遵守适用协议和版权规定。
+
+## v2.1 内置后端与 AI Skill 契约
+
+`python skill/scripts/music_skill.py --capabilities` 无网络返回可调用命令及 JSON 输出契约；`--runtime-info` 离线返回 Python/requests 版本及是否冻结为单文件后端。Windows 客户端打包出的同名命令可在 `music_backend.exe` 执行（开发者使用，普通用户无需处理）。AI 通过 Python Skill 脚本调用时不依赖 Electron，不需要操控图形界面。

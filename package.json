@@ -1,13 +1,14 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "粉蓝网易云音乐下载器：流式MP3试听、外挂桌面歌词、独立收藏路径、任务管理和AI Skill",
+  "description": "粉蓝网易云音乐下载器：可自定义桌面外挂歌词、免 Python 的单 EXE 携带版和 AI Skill",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win portable --x64",
-    "check": "node --check main.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check app/lrc.js && node --check app/renderer.js && node --check app/floating-lyrics.js"
+    "build:win": "npm run check && npm run build:backend && electron-builder --win portable --x64",
+    "check": "node --check main.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check lyric_preferences.js && node --check backend_runtime.js && node --check app_logger.js && node --check app/lrc.js && node --check app/renderer.js && node --check app/floating-lyrics.js",
+    "build:backend": "python scripts/build_backend.py"
   },
   "devDependencies": {
     "electron": "37.2.0",
@@ -21,10 +22,13 @@
       "output": "dist"
     },
     "files": [
+      "app_logger.js",
       "main.js",
       "download_queue.js",
       "floating_window.js",
       "floating-preload.js",
+      "lyric_preferences.js",
+      "backend_runtime.js",
       "preload.js",
       "app/**/*",
       "assets/**/*",
@@ -38,6 +42,10 @@
       {
         "from": "assets/app.ico",
         "to": "app.ico"
+      },
+      {
+        "from": "backend/music_backend.exe",
+        "to": "backend/music_backend.exe"
       }
     ],
     "win": {

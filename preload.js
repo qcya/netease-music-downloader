@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   lockFloatingLyrics:locked=>ipcRenderer.invoke('lyrics:lock',locked),
   updateFloatingLyrics:data=>ipcRenderer.invoke('lyrics:update',data),
   floatingLyricsStatus:()=>ipcRenderer.invoke('lyrics:status'),
+  lyricsPreferences:()=>ipcRenderer.invoke('lyrics:preferences'),
   onFloatingLyricsStatus:cb=>{const listener=(_e,data)=>cb(data);ipcRenderer.on('lyrics:status',listener);return()=>ipcRenderer.removeListener('lyrics:status',listener)},
   listFavorites:()=>ipcRenderer.invoke('favorites:list'),
   addFavorite:track=>ipcRenderer.invoke('favorites:add',track),

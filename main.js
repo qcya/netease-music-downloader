@@ -7,6 +7,9 @@ const { randomUUID } = require('node:crypto');
 const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
 const { createFloatingLyricsController } = require('./floating_window.js');
+const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
+const {embeddedBackend}=require('./backend_runtime.js');
+const {createLogger}=require('./app_logger.js');
 
 const APPLICATION_ID = 'top.qcya.netease.music.desktop';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
@@ -220,7 +223,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3 };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -229,7 +232,7 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,quality,apiBases:bases,cacheLimitMB,parallelDownloads};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -255,11 +258,12 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir: dir, favoritesDir, setupCompleted, quality, apiBases: [...new Set(clean)], cacheLimitMB, parallelDownloads};
+  const result = {downloadDir: dir, favoritesDir, setupCompleted, quality, apiBases: [...new Set(clean)], cacheLimitMB, parallelDownloads, floatingLyrics:normalizeLyrics(value.floatingLyrics)};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
   downloadQueue.setLimit(parallelDownloads);
+  floatingLyrics.applySettings(result.floatingLyrics);
   return result;
 }
 
@@ -312,6 +316,8 @@ function pythonCandidates() {
 }
 async function findPython() {
   if (cachedPython) return cachedPython;
+  const embedded=embeddedBackend(process.resourcesPath,app.isPackaged);
+  if(embedded){cachedPython=embedded;return embedded;}
   for (const [exe, prefix] of pythonCandidates()) {
     try {
       const result = await invokeProcess(exe, [...prefix,'-c','import sys;print(sys.version_info.major,sys.version_info.minor)'], 7000);
@@ -331,7 +337,7 @@ async function runCli(cmd, args = [], opts = {}) {
     const settings = config();
     const baseArgs = settings.apiBases.flatMap(b => ['--api-base', b]);
     const env = {...process.env, PYTHONIOENCODING:'utf-8', PYTHONUTF8:'1', PYTHONUNBUFFERED:'1'};
-    const result = await invokeProcess(python.exe, [...python.prefix, backendFile(), ...baseArgs, cmd, ...args],
+    const result = await invokeProcess(python.exe, [...python.prefix,...(python.standalone?[]:[backendFile()]),...baseArgs,cmd,...args],
       opts.timeoutMs || 90_000, env, line => {
         if (opts.progress && win && !win.isDestroyed()) {
           for(const chunk of line.split('\n')){
@@ -427,7 +433,7 @@ async function fetchLyrics(id, force=false) {
   return {...out,fromCache:false};
 }
 
-const floatingLyrics=createFloatingLyricsController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win});
+const floatingLyrics=createFloatingLyricsController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
 
 function safeAudioOrigin(value) {
   try {
@@ -488,9 +494,15 @@ function createWindow() {
 
 app.setAppUserModelId(APPLICATION_ID);
 app.whenReady().then(() => {
+  const logger=createLogger(app.getPath('userData'));logger.info('start',`version=${app.getVersion?.()||'dev'} packaged=${app.isPackaged}`);
+  process.on('uncaughtException',e=>logger.error('uncaught',e?.message||e));
+  process.on('unhandledRejection',e=>logger.error('promise',e?.message||e));
   downloadQueue.setLimit(config().parallelDownloads);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
-  const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string')downloadHistory.set(entry.key,entry)}
+  const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
+    const status=['queued','running'].includes(entry.status)?'failed':entry.status;
+    downloadHistory.set(entry.key,{...entry,status,error:status==='failed'&&entry.status!==status?'程序上次关闭时任务未完成，可手动重试':entry.error});
+  }}
   const maintenanceTimer=setInterval(() => {
     if(activeCliProcesses === 0 && downloadQueue.snapshot().active === 0 && downloadQueue.snapshot().waiting === 0 && previewRequests.size === 0 && !previewPlaying) {
       try{weeklyCacheCleanup();}catch(e){console.warn('试听缓存定期清理失败：',e.message);}
@@ -514,9 +526,9 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('system:python', async () => {
     const item = await findPython();
-    const result = await invokeProcess(item.exe, [...item.prefix, '-c', 'import sys,requests;print(sys.version.split()[0])'], 9000);
+    const result = item.standalone ? await invokeProcess(item.exe,['--runtime-info'],9000) : await invokeProcess(item.exe, [...item.prefix, '-c', 'import sys,requests;print(sys.version.split()[0])'], 9000);
     if (result.code) throw new Error('已找到 Python，但缺少 requests；请运行「安装依赖.bat」。');
-    return {ok:true, version:result.stdout.trim()};
+    return {ok:true, version:item.standalone?'内置后端 · 免安装':result.stdout.trim()};
   });
   ipcMain.handle('music:search', async (_e, query, page=1) => {
     if (typeof query !== 'string' || !query.trim() || query.length > 120) throw new Error('请输入 1–120 字的歌名或关键词');
@@ -524,6 +536,7 @@ app.whenReady().then(() => {
     return await runCli('search',['--query',query.trim(),'--limit','40','--page',String(page)]);
   });
   ipcMain.handle('music:download', async (_e, ids) => {
+    logger.info('download_batch',`count=${Array.isArray(ids)?ids.length:0}`);
     const valid = songIds(ids);
     const s = config();
     fs.mkdirSync(s.downloadDir, {recursive:true});
@@ -538,7 +551,7 @@ app.whenReady().then(() => {
         return {ok:false,song:{id},status:'error',error:String(e?.message||e)};
       }
     }));
-    const success=results.filter(row=>row.ok).length;
+    const success=results.filter(row=>row.ok).length;logger.info('download_result',`success=${success} failed=${valid.length-success}`);
     return {ok:success===valid.length,requested_count:valid.length,success_count:success,
       failed_count:valid.length-success,results,output_dir:s.downloadDir};
   });
@@ -569,9 +582,11 @@ app.whenReady().then(() => {
   ipcMain.handle('favorites:list',()=>listFavorites());
   ipcMain.handle('lyrics:open',()=>floatingLyrics.open());
   ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
-  ipcMain.handle('lyrics:lock',(_e,lock)=>floatingLyrics.lock(!!lock));
+  ipcMain.handle('lyrics:lock',(_e,lock)=>{const s=config();s.floatingLyrics.mouseThrough=!!lock;writeConfig(s);return floatingLyrics.lock(!!lock)});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
+  ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
+  ipcMain.handle('lyrics:resize',(event,height)=>{if(!floatingLyrics.owns(event.sender))throw new Error('仅桌面歌词窗口可调整高度');return floatingLyrics.resizeTo(height)});
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));
   ipcMain.handle('favorites:retry-lyrics',async(_e, id)=>{
     const [sid]=songIds([id]);return refreshFavoriteLyrics(sid);

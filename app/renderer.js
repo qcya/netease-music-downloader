@@ -454,6 +454,27 @@
       }
     }catch(e){showToast(errMessage(e),true)}
   }
+  const defaultLyricStyle=()=>({background:'none',originalColor:'#F6A8C8',translationColor:'#AFCFFF',outlineColor:'#FFFFFF',outlineWidth:2,
+    shadow:2,fontSize:30,translationSize:18,lineHeight:1.36,width:800,align:'center',showOriginal:true,
+    showTranslation:true,alwaysOnTop:true,opacity:100,autoHideEmpty:false,mouseThrough:false});
+  const lyricInputs={background:'lyr-background',align:'lyr-align',originalColor:'lyr-original-color',
+    translationColor:'lyr-translation-color',outlineColor:'lyr-outline-color',outlineWidth:'lyr-outline-width',
+    fontSize:'lyr-font-size',translationSize:'lyr-translation-size',width:'lyr-width',lineHeight:'lyr-line-height',
+    opacity:'lyr-opacity',shadow:'lyr-shadow',showOriginal:'lyr-show-original',showTranslation:'lyr-show-translation',
+    alwaysOnTop:'lyr-always-on-top',autoHideEmpty:'lyr-auto-hide-empty',mouseThrough:'lyr-mouse-through'};
+  function fillLyricsStyle(style){
+    const s={...defaultLyricStyle(),...style};
+    for(const [key,id] of Object.entries(lyricInputs)){
+      const el=$('#'+id);if(el.type==='checkbox')el.checked=!!s[key];else el.value=String(s[key]);
+    }
+  }
+  function readLyricsStyle(){
+    const s={};
+    for(const [key,id] of Object.entries(lyricInputs)){
+      const el=$('#'+id);s[key]=el.type==='checkbox'?el.checked:el.type==='range'||el.type==='number'?Number(el.value):el.value;
+    }
+    return s;
+  }
   function renderSettings() {
     const s=state.settings;
     if(!s)return;
@@ -463,6 +484,7 @@
     $('#api-bases').value=(s.apiBases||[]).join('\n');
     $('#cache-limit').value=String(s.cacheLimitMB||1024);
     $('#parallel-downloads').value=String(s.parallelDownloads||3);
+    fillLyricsStyle(s.floatingLyrics);
     void updateCacheStats();
   }
   function openFirstRun(reviewOnly=false){
@@ -508,6 +530,13 @@
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#pick-dir').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#download-dir').value=dir;});
     $('#pick-favorites-dir').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#favorites-dir').value=dir;});
+    $('#lyr-reset').addEventListener('click',()=>fillLyricsStyle(defaultLyricStyle()));
+    $('#lyr-test').addEventListener('click',async()=>{
+      try {await bridge.showFloatingLyrics();state.floating=true;
+        await bridge.updateFloatingLyrics({title:'歌词外观预览',line:'月の夜に咲く 一輪の花みたいね',translation:'就像那月夜里绽放的一朵花。'});
+        showToast('已打开桌面歌词预览；保存设置后样式立即生效。');}
+      catch(e){showToast(errMessage(e),true)}
+    });
     $('#show-disclaimer').addEventListener('click',()=>openFirstRun(true));
     $('#first-pick-download').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#first-download-dir').value=dir;});
     $('#first-pick-favorites').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#first-favorites-dir').value=dir;});
@@ -520,7 +549,7 @@
     });
     $('#save-settings').addEventListener('click',async()=>{
       try {
-        state.settings = await bridge.saveSettings({downloadDir:$('#download-dir').value,favoritesDir:$('#favorites-dir').value,setupCompleted:true,quality:$('#quality').value,cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
+        state.settings = await bridge.saveSettings({downloadDir:$('#download-dir').value,favoritesDir:$('#favorites-dir').value,setupCompleted:true,quality:$('#quality').value,cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),floatingLyrics:readLyricsStyle(),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
         setStatus('已保存下载设置。','ok');showToast('设置已保存。');
       } catch(e) {showToast(errMessage(e),true);}
     });

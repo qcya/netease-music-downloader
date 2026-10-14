@@ -1,3 +1,30 @@
+# 网易云音乐下载器 v2.1（Electron + Python AI Skill）
+
+> **v2.1 更新：** 桌面歌词可自定义粉蓝配色、白色描边、背景透明度、字号、行距、翻译及自适应长句； Windows portable EXE 包含编译后的 Python 后端，不要求普通用户安装 Python。AI Skill 源码保持独立。
+
+**源码运行**：Windows 11，Node.js 20+，Python 3.10+；执行 `安装依赖.bat` 后 `启动桌面版.bat`。
+
+**制作单 EXE**：运行 `构建Windows_EXE.bat`。构建机须有 Node.js 20+ 和 Python 3.10+。脚本运行 PyInstaller 创建 `backend/music_backend.exe`，完成离线自检，再由 electron-builder 打包为 `dist/MusicDownloader-2.1.0-portable.exe`。编译后的 portable EXE 面向最终用户，不需要本机 Python/Node/npm。Electron portable 启动会在系统临时目录展开运行文件，这是单 EXE 发行模式的正常行为。
+
+**GitHub 构建**：Actions → Build Windows Portable → Run workflow；或者推送到 `main` 分支自动触发，构建产物可在对应工作流运行页的 Artifacts 中下载。
+
+**桌面歌词**：软件设置页底部可以选择无背景、粉蓝玻璃或实色，原文/翻译/描边颜色、字号、窗宽、行距、阴影、透明度、对齐方式、置顶。默认无背景、粉色原文、白色描边和淡蓝翻译。长句自动换行；歌词窗随实际内容增加高度，在屏幕限制内显示，超高可滚动。右下角拖动把手支持移动，锁定后支持鼠标穿透，回主界面点「解锁」恢复操作。
+
+**首次启动**：确认普通下载路径、收藏路径和免责声明后，不再自动弹出。设置页可修改路径并复查免责声明。
+
+**AI Skill**：`SKILL.md`、`skill/SKILL.md`、`skill/scripts/music_skill.py` 始终保留。源码 AI 调用示例：
+
+```bash
+python skill/scripts/music_skill.py --runtime-info
+python skill/scripts/music_skill.py search -q "晴天" --limit 15
+python skill/scripts/music_skill.py lyric --id 33894312
+python skill/scripts/music_skill.py download --id 33894312 --quality best
+```
+
+该项目使用第三方音乐 API。可访问的音频受权限及服务器可用性限制，不提供 DRM 绕过。不保证所有歌曲可获得歌词或无损格式。版权使用请遵守所在地法律和服务条款。
+
+## 历史说明
+
 # v2.0 新功能
 
 详细升级说明请先阅读 [UPGRADE_V2.md](UPGRADE_V2.md)。包含首次使用免责声明、独立下载和收藏路径、桌面悬浮歌词、任务管理、流式 MP3 试听回退与 GitHub Actions Windows 构建。
@@ -140,3 +167,9 @@ skill/scripts/music_skill.py   原 Python 下载核心
 ## 限制
 
 搜索和下载仍依赖旧项目使用的第三方网易云音乐 API。真实服务状态、会员权限和实际可下载的音质不能从模拟测试推断出来。程序不会破解 DRM，也不能保证受限制曲目可用。这一版已完成源代码和模拟 API 的联调，**尚未在本环境生成 Windows EXE，也尚未在真实 Windows 上验证任务栏图标**。
+
+## v2.0.1 图标替换
+
+EXE 应用图标和侧栏头像均已换成新的「我…我的钱」表情包，旧图标不再包含在这两个资源文件中。若 Windows 任务栏仍显示旧图标，请取消固定旧快捷方式，重新固定新版 EXE。
+
+**诊断日志**：保存在程序用户数据目录 `logs/application.log`，超过约 2 MB 自动轮换。运行日志避免记录完整 API URL 和 Cookie。如需排查，请自行检查日志中是否有个人信息再分享。

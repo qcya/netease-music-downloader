@@ -21,7 +21,9 @@ def test_batch_crlf_and_utf8_nobom():
 def test_build_rejects_missing_exe_and_verifies_icon():
     data = (BASE / '构建Windows_EXE.bat').read_bytes().decode('utf-8')
     assert 'if errorlevel 1 goto :failed' in data
-    assert 'if not exist "dist\\MusicDownloader-1.3.0-portable.exe" goto :missing_exe' in data
+    import json
+    version = json.loads((BASE / 'package.json').read_text(encoding='utf-8'))['version']
+    assert f'if not exist "dist\\MusicDownloader-{version}-portable.exe" goto :missing_exe' in data
     assert 'check_exe_icon.ps1' in data
     assert ':icon_error' in data
     # Windows PowerShell 5.1 needs BOM for UTF-8 Chinese script filenames.
@@ -40,5 +42,5 @@ def test_install_mirror_and_binary_checks():
 def test_packager_uses_v26_mirror():
     import json
     pack = json.loads((BASE / 'package.json').read_text(encoding='utf-8'))
-    assert pack['devDependencies']['electron-builder'].startswith('^26.')
+    assert pack['devDependencies']['electron-builder'].lstrip('^~').startswith('26.')
     assert pack['build']['electronDownload']['mirror'] == 'https://npmmirror.com/mirrors/electron/'

@@ -263,3 +263,18 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 #artist-filter{height:29px;border:1px solid #e4eafa;border-radius:10px;background:#fff;padding:0 11px;font-size:11px;max-width:180px;outline:none;color:#667a96;margin-right:auto}
 #artist-filter:focus{border-color:#b7d2f6;box-shadow:0 0 0 2px #e9f4ff}
 .song-card[hidden]{display:none!important}
+
+/* v2.1 lyric preferences follow the existing pastel visual language without adding a new theme. */
+.lyrics-customize{display:flex;flex-direction:column;gap:12px;padding:19px 20px;margin:10px 0 6px;background:linear-gradient(130deg,#fff5fa,#f2f9ff);border:1px solid #ecdfea;border-radius:18px}
+.lyrics-customize-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;color:#66758d}
+.lyrics-customize-heading strong{font-size:14px}.lyrics-customize-heading span{font-size:11px;color:#a2a7bb}
+.lyrics-settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 18px}
+.lyrics-settings-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;color:#6f7d90}
+.lyrics-settings-grid input[type="color"]{padding:4px 7px;min-height:41px;cursor:pointer}
+.lyrics-settings-grid input[type="range"]{padding:9px 0;accent-color:#e7aacb;cursor:pointer}
+.lyrics-settings-grid input[type="number"]{min-height:42px}
+.lyrics-settings-switches{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:3px 0}
+.lyrics-settings-switches label{display:flex;align-items:center;gap:7px;margin:0;cursor:pointer;min-width:0}
+.lyrics-settings-switches input{width:auto!important;accent-color:#e8a9c6}
+.lyrics-settings-actions{display:flex;gap:10px;flex-wrap:wrap}
+@media(max-width:760px){.lyrics-settings-grid{grid-template-columns:1fr}.lyrics-settings-switches{grid-template-columns:1fr}}

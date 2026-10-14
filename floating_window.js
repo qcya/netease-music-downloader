@@ -1,25 +1,45 @@
 'use strict';
 const path=require('node:path');
-/** Isolated floating lyrics BrowserWindow: no Node integration or untrusted navigation. */
-function createFloatingLyricsController({BrowserWindow,baseDir,getMainWindow}){
-  let floating=null;
-  function exists(){return !!floating&&!floating.isDestroyed()}
-  function open(){
-    if(exists()){floating.show();return {open:true};}
-    floating=new BrowserWindow({width:710,height:150,minWidth:400,minHeight:98,frame:false,
-      transparent:true,alwaysOnTop:true,skipTaskbar:true,resizable:true,backgroundColor:'#00000000',show:false,
-      webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
-    floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
-    floating.once('ready-to-show',()=>{if(exists())floating.show()});
-    floating.on('closed',()=>{floating=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
-    floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
-    floating.webContents.on('will-navigate',e=>e.preventDefault());
-    return {open:true};
-  }
-  function close(){if(exists())floating.close();return {open:false}}
-  function lock(locked){if(!exists())return {open:false};floating.setIgnoreMouseEvents(locked,{forward:true});floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
-  function update(info){if(!exists()||!info||typeof info!=='object')return false;
-    floating.webContents.send('lyrics:text',{title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,400)});return true;}
-  return {open,close,lock,update,exists};
+/** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
+function createFloatingLyricsController({BrowserWindow,baseDir,getMainWindow,getSettings,onBoundsChanged,screen}){
+ let floating=null,locked=false,currentHeight=150;
+ const exists=()=>!!floating&&!floating.isDestroyed();
+ const safeSettings=()=>getSettings?.()||{};
+ function open(){
+  if(exists()){floating.show();return {open:true};}
+  const s=safeSettings();
+  floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:88,maxHeight:560,
+    frame:false,transparent:true,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
+    backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
+  floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
+  floating.once('ready-to-show',()=>{if(exists()){floating.show();floating.webContents.send('lyrics:settings',safeSettings());lock(!!safeSettings().mouseThrough);}});
+  floating.on('closed',()=>{floating=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
+  floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+  floating.webContents.on('will-navigate',e=>e.preventDefault());
+  return {open:true};
+ }
+ function close(){if(exists())floating.close();return {open:false}}
+ function lock(value){locked=!!value;if(!exists())return {open:false};floating.setIgnoreMouseEvents(locked,{forward:true});floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
+ function update(info){if(!exists()||!info||typeof info!=='object')return false;
+  floating.webContents.send('lyrics:text',{title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)});return true;}
+ function applySettings(s){if(!exists())return;
+  floating.setAlwaysOnTop(s.alwaysOnTop!==false);
+  const b=floating.getBounds(),work=screen?.getDisplayMatching?.(b)?.workArea;
+  const width=work?Math.min(s.width,work.width-24):s.width;
+  if(b.width!==width)floating.setSize(width,b.height);
+  floating.webContents.send('lyrics:settings',s);
+  lock(!!s.mouseThrough);
+ }
+ function resizeTo(height){if(!exists())return false;
+  const h=Math.max(88,Math.min(560,Math.ceil(Number(height)||150)));
+  const b=floating.getBounds();if(Math.abs(h-b.height)<2)return true;
+  const work=screen?.getDisplayMatching?.(b)?.workArea;
+  const maxH=work?Math.max(88,work.height-24):560;
+  const next=Math.min(h,maxH);
+  const y=work?Math.min(Math.max(b.y,work.y),work.y+work.height-next):b.y;
+  floating.setBounds({...b,y,height:next});currentHeight=next;return true;
+ }
+ function owns(webContents){return exists()&&webContents?.id===floating.webContents.id;}
+ return {open,close,lock,update,applySettings,resizeTo,exists,owns};
 }
 module.exports={createFloatingLyricsController};

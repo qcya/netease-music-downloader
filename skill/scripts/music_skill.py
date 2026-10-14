@@ -678,11 +678,13 @@ def download_many(api: MusicAPI, songs: list[dict], dest: Path, quality: str, ov
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="网易云音乐 Agent Skill（JSON API）")
+    parser.add_argument("--runtime-info", action="store_true", help="离线返回内置后端运行信息")
+    parser.add_argument("--capabilities", action="store_true", help="离线列出 AI Skill 支持的命令和输出契约")
     parser.add_argument("--pretty", action="store_true", help="美化 JSON 输出")
     parser.add_argument("--api-base", action="append", help="自定义 API 基址（可多次指定，覆盖内置接口）")
     parser.add_argument("--state-dir", type=Path, default=STATE_DIR)
     parser.add_argument("--timeout", type=int, default=12)
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(dest="command", required=False)
     d = sub.add_parser("doctor", help="逐个检查 API 可用性")
     s = sub.add_parser("search", help="根据关键词搜索（只返回列表）")
     s.add_argument("--query", "-q", required=True)
@@ -715,6 +717,19 @@ def main(argv: list[str] | None = None) -> int:
         cmd.add_argument("--overwrite", action="store_true")
 
     args = parser.parse_args(argv)
+    if args.capabilities:
+        emit({"ok": True, "skill": APP_NAME, "schema_version": 1,
+              "commands": ["doctor", "search", "song", "lyric", "preview-source", "download", "select", "playlist", "playlist-download"],
+              "audio_qualities": ["best", "lossless", "mp3", "preview"],
+              "stdout": "one UTF-8 JSON object", "progress": "stderr",
+              "exit_codes": {"0": "success", "1": "partial/unavailable", "2": "invalid request"},
+              "note": "Results subject to third-party availability and song rights; do not fabricate URLs."})
+        return 0
+    if args.runtime_info:
+        emit({"ok": True, "backend": "netease-music-skill", "python": sys.version.split()[0], "requests": requests.__version__, "embedded": bool(getattr(sys, "frozen", False))})
+        return 0
+    if not args.command:
+        parser.error("需要指定命令，例如 search、download、lyric 或 doctor")
     if args.timeout < 1:
         raise MusicError("timeout 不能小于 1 秒")
     bases = args.api_base or ([x.strip() for x in os.environ.get("NETEASE_API_BASE_URL", "").split(",") if x.strip()] or None)

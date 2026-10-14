@@ -50,3 +50,11 @@ Thumbs.db
 .idea/
 *.log
 *.tmp
+
+# Local standalone backend build output (compiled by CI)
+/backend/
+/build/
+*.spec
+
+# Runtime logs
+/logs/
