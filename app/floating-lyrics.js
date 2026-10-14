@@ -1,7 +1,7 @@
 'use strict';
 const $=id=>document.getElementById(id);
 let prefs=null;
-let lastInfo={title:'桌面歌词',line:'播放音乐后将在这里显示歌词',translation:''};
+let lastInfo={title:'桌面歌词',line:'',translation:''};
 let measurePending=false;
 function measure(){
   if(measurePending)return;
@@ -27,11 +27,12 @@ function paint(){
     '--text-align':x.align||'center','--panel-opacity':String((x.opacity??100)/100)
   }))root.setProperty(key,val);
   $('widget').dataset.background=x.background||'none';
-  const lyric=lastInfo.line||'♪ 暂无同步歌词';
+  const lyric=lastInfo.line||'';
   $('lyric').textContent=lyric;
   $('translate').textContent=lastInfo.translation||'';
   $('widget').dataset.locked=String(locked);
-  const noLyrics=!lastInfo.line||lastInfo.line.includes('暂无同步歌词');
+  const noLyrics=!lastInfo.line?.trim();
+  $('widget').hidden=noLyrics;
   $('lyric').hidden=x.showOriginal===false||(x.autoHideEmpty===true&&noLyrics);
   $('translate').hidden=x.showTranslation===false||!lastInfo.translation;
   measure();

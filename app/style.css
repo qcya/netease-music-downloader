@@ -121,6 +121,10 @@ input::-webkit-search-cancel-button {cursor:pointer;}
 .local-item svg{color:#a9bee1;flex:0 0 auto;}
 .local-item-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .local-item-size{font-size:11px;color:#abb2c0;}
+.local-item.in-playlist{border-color:#b8d8ee;background:#f4faff}
+.local-item.in-playlist .local-item-name{color:#39749a;font-weight:700}
+.local-delete{border:1px solid #efd3d8;border-radius:10px;background:#fff4f5;color:#b94455;padding:7px 11px;cursor:pointer}
+.local-delete:hover{background:#ffe4e7;border-color:#e7abb5}
 .empty-simple{padding:50px 10px;color:#a2adbf;text-align:center;}
 .settings-card{border:1px solid #f1e9f0;background:#fffafd;box-shadow:0 8px 22px #8794b713;border-radius:20px;padding:26px 28px;max-width:760px;display:flex;flex-direction:column;gap:11px;overflow:auto;}
 .settings-card label{font-size:12px;color:#6f7d8c;font-weight:700;margin-top:7px;}
