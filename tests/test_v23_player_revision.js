@@ -25,6 +25,9 @@ test('floating lyrics window has no header and transparent chrome',()=>{
  assert.doesNotMatch(html,/class="bar"|class="header"/);
  const css=src('app/floating-lyrics.css');
  assert.match(css,/\.widget\[data-background="none"\].*background:rgba\(0,0,0,0\)/);
+ assert.doesNotMatch(css,/rgba\(24,25,38,\.006\)/);
+ assert.match(css,/--glow/);
+ assert.match(js,/setIgnoreMouseEvents\(locked,\{forward:true\}\)/);
 });
 
 test('desktop lyric toggle exists, shortcut controls are removed',()=>{

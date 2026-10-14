@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
+const { pathToFileURL } = require('node:url');
 const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
 const { createFloatingLyricsController } = require('./floating_window.js');
@@ -185,6 +186,13 @@ function grantMedia(file) {
   grantedMedia.set(token, file);
   if (grantedMedia.size > 150) grantedMedia.delete(grantedMedia.keys().next().value);
   return `music-media://audio/${token}`;
+}
+/** Direct local file loading is required for reliable native audio seeking in Electron.
+ * The custom protocol.handle Response path can report a song duration but expose zero seekable ranges. */
+function localAudioUrl(file) {
+  const full=path.resolve(file);
+  if(!AUDIO_EXTS.has(path.extname(full).toLowerCase())||!fs.statSync(full).isFile())throw new Error('本地音频不存在或格式不允许');
+  return pathToFileURL(full).href;
 }
 function mimeAudio(file) {
   return ({'.mp3':'audio/mpeg','.flac':'audio/flac','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.aac':'audio/aac','.mp4':'video/mp4','.webm':'video/webm','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'})[path.extname(file).toLowerCase()] || 'application/octet-stream';
@@ -687,13 +695,13 @@ app.whenReady().then(() => {
   ipcMain.handle('favorites:play',(_e,id)=>{
     const [sid]=songIds([id]);const item=validFavorite(readFavorites()[sid],sid);
     if(!item)throw new Error('收藏中的文件已丢失');
-    return {ok:true,url:grantMedia(item.audioPath),id:sid,name:item.name,artists:item.artists,fromCache:true};
+    return {ok:true,url:localAudioUrl(item.audioPath),id:sid,name:item.name,artists:item.artists,fromCache:true};
   });
   ipcMain.handle('local:play', (_e, name) => {
     if (typeof name !== 'string' || !name || name !== path.basename(name) || !AUDIO_EXTS.has(path.extname(name).toLowerCase())) throw new Error('无效本地文件名');
     const full=availableLocalTrack(name);
     const id = /\[(\d{1,20})\]\.[^.]+$/.exec(name)?.[1] || null;
-    return {ok:true,url:grantMedia(full),id,name:name.replace(/\s*\[\d+\]\.[^.]+$/, ''),artists:'',fromCache:true};
+    return {ok:true,url:localAudioUrl(full),id,name:name.replace(/\s*\[\d+\]\.[^.]+$/, ''),artists:'',fromCache:true};
   });
   ipcMain.handle('music:open-song', async (_e, id) => {
     const [sid] = songIds([id]);

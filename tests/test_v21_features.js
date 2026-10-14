@@ -5,12 +5,18 @@ const root=path.resolve(__dirname,'..');const read=p=>fs.readFileSync(path.join(
 const {normalizeLyrics,DEFAULT_LYRICS}=require('../lyric_preferences.js');
 const {embeddedBackend,backendArgs}=require('../backend_runtime.js');
 test('floating lyric preference defaults and user input normalization',()=>{
- const d=normalizeLyrics();assert.equal(d.background,'none');assert.equal(d.originalColor,'#F6A8C8');assert.equal(d.outlineColor,'#FFFFFF');
+ const d=normalizeLyrics();assert.equal(d.background,'none');assert.equal(d.originalColor,'#FFFFFF');assert.equal(d.translationColor,'#FFFFFF');assert.equal(d.glow,16);assert.equal(d.outlineColor,'#FFFFFF');
  assert.deepEqual(d,DEFAULT_LYRICS);
  const s=normalizeLyrics({background:'glass',originalColor:'url(evil)',fontSize:500,width:-1,opacity:'15',
     showOriginal:false,showTranslation:false,mouseThrough:true,outlineWidth:2.5,align:'left'});
- assert.equal(s.originalColor,'#F6A8C8');assert.equal(s.fontSize,64);assert.equal(s.width,420);assert.equal(s.opacity,30);
+ assert.equal(s.originalColor,'#FFFFFF');assert.equal(s.fontSize,64);assert.equal(s.width,420);assert.equal(s.opacity,30);
  assert.equal(s.outlineWidth,2.5);assert.equal(s.mouseThrough,true);assert.equal(s.showOriginal,false);
+});
+test('legacy preset becomes white glow without destroying customized palette',()=>{
+ const migrated=normalizeLyrics({originalColor:'#F6A8C8',translationColor:'#AFCFFF',outlineWidth:2});
+ assert.equal(migrated.originalColor,'#FFFFFF');assert.equal(migrated.translationColor,'#FFFFFF');assert.equal(migrated.outlineWidth,0);assert.equal(migrated.glow,16);
+ const custom=normalizeLyrics({originalColor:'#FF00FF',translationColor:'#00FFFF',glow:28});
+ assert.equal(custom.originalColor,'#FF00FF');assert.equal(custom.translationColor,'#00FFFF');assert.equal(custom.glow,28);
 });
 test('floating long text wraps and resize request sent through isolated bridge',()=>{
  const css=read('app/floating-lyrics.css'),js=read('app/floating-lyrics.js'),html=read('app/index.html');
@@ -18,7 +24,7 @@ test('floating long text wraps and resize request sent through isolated bridge',
  assert.doesNotMatch(css,/text-overflow:ellipsis[^\n]*\.lyric/);
  assert.match(js,/scrollHeight/);assert.match(js,/floatingBridge\.resize/);
  for(const id of ['lyr-background','lyr-original-color','lyr-outline-color','lyr-translation-color','lyr-width',
- 'lyr-mouse-through','lyr-show-translation','lyr-align','lyr-shadow'])assert.ok(html.includes(`id="${id}"`),id);
+ 'lyr-mouse-through','lyr-show-translation','lyr-align','lyr-shadow','lyr-glow'])assert.ok(html.includes(`id="${id}"`),id);
  assert.match(read('main.js'),/ipcMain\.handle\('lyrics:resize'/);
 });
 test('packaged runtime requires local embedded backend and has no system Python fallback',()=>{

@@ -561,13 +561,13 @@
       }
     }catch(e){showToast(errMessage(e),true)}
   }
-  const defaultLyricStyle=()=>({background:'none',originalColor:'#F6A8C8',translationColor:'#AFCFFF',outlineColor:'#FFFFFF',outlineWidth:2,
-    shadow:2,fontSize:30,translationSize:18,lineHeight:1.36,width:800,align:'center',showOriginal:true,
+  const defaultLyricStyle=()=>({background:'none',originalColor:'#FFFFFF',translationColor:'#FFFFFF',outlineColor:'#FFFFFF',outlineWidth:0,glow:16,
+    shadow:2,fontSize:30,translationSize:18,lineHeight:1.28,width:800,align:'center',showOriginal:true,
     showTranslation:true,alwaysOnTop:true,opacity:100,autoHideEmpty:false,mouseThrough:false});
   const lyricInputs={background:'lyr-background',align:'lyr-align',originalColor:'lyr-original-color',
     translationColor:'lyr-translation-color',outlineColor:'lyr-outline-color',outlineWidth:'lyr-outline-width',
     fontSize:'lyr-font-size',translationSize:'lyr-translation-size',width:'lyr-width',lineHeight:'lyr-line-height',
-    opacity:'lyr-opacity',shadow:'lyr-shadow',showOriginal:'lyr-show-original',showTranslation:'lyr-show-translation',
+    opacity:'lyr-opacity',shadow:'lyr-shadow',glow:'lyr-glow',showOriginal:'lyr-show-original',showTranslation:'lyr-show-translation',
     alwaysOnTop:'lyr-always-on-top',autoHideEmpty:'lyr-auto-hide-empty',mouseThrough:'lyr-mouse-through'};
   function fillLyricsStyle(style){
     const s={...defaultLyricStyle(),...style};

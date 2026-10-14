@@ -18,9 +18,9 @@ function paint(){
   const x=prefs||{};
   const root=document.documentElement.style;
   for(const [key,val] of Object.entries({
-    '--original':x.originalColor||'#F6A8C8','--translated':x.translationColor||'#AFCFFF',
+    '--original':x.originalColor||'#FFFFFF','--translated':x.translationColor||'#FFFFFF',
     '--outline':x.outlineColor||'#FFFFFF','--outline-width':`${x.outlineWidth??2}px`,
-    '--shadow':`${x.shadow??2}px`,'--original-size':`${x.fontSize??30}px`,
+    '--shadow':`${x.shadow??2}px`,'--glow':`${x.glow??16}px`,'--original-size':`${x.fontSize??30}px`,
     '--translated-size':`${x.translationSize??18}px`,'--lyric-line-height':String(x.lineHeight??1.36),
     '--text-align':x.align||'center','--panel-opacity':String((x.opacity??100)/100)
   }))root.setProperty(key,val);
@@ -28,6 +28,7 @@ function paint(){
   const lyric=lastInfo.line||'♪ 暂无同步歌词';
   $('lyric').textContent=lyric;
   $('translate').textContent=lastInfo.translation||'';
+  $('widget').dataset.locked=String(locked);
   const noLyrics=!lastInfo.line||lastInfo.line.includes('暂无同步歌词');
   $('lyric').hidden=x.showOriginal===false||(x.autoHideEmpty===true&&noLyrics);
   $('translate').hidden=x.showTranslation===false||!lastInfo.translation;
@@ -50,7 +51,7 @@ document.body.addEventListener('pointerup',endDrag);
 document.body.addEventListener('pointercancel',endDrag);
 window.addEventListener('blur',endDrag);
 document.body.addEventListener('contextmenu',event=>{
-  event.preventDefault();endDrag();window.floatingBridge.showMenu();
+  event.preventDefault();if(locked)return;endDrag();window.floatingBridge.showMenu();
 });
 window.floatingBridge.onText(info=>{lastInfo=info||lastInfo;paint()});
 window.floatingBridge.onSettings(next=>{prefs=next;locked=!!next?.mouseThrough;paint()});
