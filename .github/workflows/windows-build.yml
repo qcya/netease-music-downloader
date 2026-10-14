@@ -27,9 +27,9 @@ jobs:
       - name: Verify embedded backend and EXE presence
         shell: pwsh
         run: |
-          if (!(Test-Path dist/MusicDownloader-2.1.0-portable.exe)) { throw "Missing portable exe" }
+          if (!(Test-Path dist/MusicDownloader-2.3.0-portable.exe)) { throw "Missing portable exe" }
           if (!(Test-Path backend/music_backend.exe)) { throw "Missing embedded backend" }
       - uses: actions/upload-artifact@v4
         with:
           name: MusicDownloader-Windows-Portable
-          path: dist/MusicDownloader-2.1.0-portable.exe
+          path: dist/MusicDownloader-2.3.0-portable.exe

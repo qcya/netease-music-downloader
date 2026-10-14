@@ -115,6 +115,43 @@ def parse_artists(item: dict) -> str:
     return "未知歌手"
 
 
+def duration_seconds_from(item: dict) -> int:
+    """统一不同音乐接口的时长字段；输出秒，0 表示确实无法获知。
+
+    网易云 detail/search 常用 dt、duration（毫秒）；Meting 兼容接口
+    可能用 time、length、duration_seconds 或 mm:ss 文本。
+    """
+    for key in ('duration_seconds', 'dt', 'duration_ms', 'duration', 'playTime', 'time', 'length'):
+        raw = item.get(key)
+        if raw is None or raw == '':
+            continue
+        try:
+            if isinstance(raw, str) and ':' in raw:
+                parts = raw.strip().split(':')
+                if not 2 <= len(parts) <= 3:
+                    continue
+                values = [float(x) for x in parts]
+                if any(x < 0 for x in values):
+                    continue
+                seconds = round(sum(value * (60 ** (len(values)-idx-1)) for idx, value in enumerate(values)))
+            else:
+                val = float(raw)
+                if not 0 < val < 1e9:
+                    continue
+                if key in ('dt', 'duration_ms'):
+                    seconds = round(val / 1000)
+                elif key == 'duration_seconds':
+                    seconds = round(val)
+                else:
+                    # 绝大多数接口时间数字超过 1000 时以毫秒计。
+                    seconds = round(val / 1000) if val >= 1000 else round(val)
+            if seconds > 0:
+                return seconds
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return 0
+
+
 def parse_track(item: Any) -> dict | None:
     if not isinstance(item, dict):
         return None
@@ -136,13 +173,14 @@ def parse_track(item: Any) -> dict | None:
     cover = cover or item.get("picUrl") or item.get("coverUrl") or ""
     if isinstance(album, dict):
         album = album.get("name") or album.get("title") or ""
-    duration = item.get("dt") or item.get("duration") or 0
-    try:
-        duration = int(duration)
-    except (TypeError, ValueError):
-        duration = 0
-    if duration > 100000:
-        duration //= 1000
+    # Search metadata: omit explicitly advertised trial-only entries.
+    trial=item.get('freeTrialInfo') or item.get('trialInfo')
+    if trial and isinstance(trial,dict) and trial.get('end') and trial.get('start') is not None:
+        return None
+    duration = duration_seconds_from(item)
+    # This is a metadata filter, not proof that the returned audio is a full recording.
+    if duration and duration <= 20:
+        return None
     return {"id": str(ident), "name": str(title), "artists": parse_artists(item), "album": str(album or ""), "duration_seconds": duration, "cover_url": str(cover or ""), "page_url": f"https://music.163.com/#/song?id={ident}"}
 
 
@@ -308,6 +346,55 @@ class MusicAPI:
         finally:
             resp.close()
 
+    def supplement_durations(self, songs: list[dict]) -> list[dict]:
+        """搜索接口没附带时长时，批量从 song/detail 补齐，避免逐首请求。
+
+        仅查询缺少时长的 ID；如果详情接口不可用，保留搜索结果，不伪造时长。
+        """
+        missing = [t['id'] for t in songs if not t.get('duration_seconds')]
+        if not missing:
+            return songs
+        found: dict[str, int] = {}
+        for i in range(0, len(missing), 100):
+            subset = missing[i:i + 100]
+            for base in self.bases:
+                data = self.json(base, '/song/detail', {'ids': ','.join(subset)})
+                if data is None:
+                    continue
+                # 不用 parse_song_list：短于 20 秒的详细信息也需要拿来过滤。
+                obj = data
+                for _ in range(4):
+                    if isinstance(obj, list):
+                        break
+                    if not isinstance(obj, dict):
+                        break
+                    if isinstance(obj.get('songs'), list):
+                        obj = obj['songs']
+                        break
+                    if isinstance(obj.get('data'), list):
+                        obj = obj['data']
+                        break
+                    obj = obj.get('result', obj.get('data'))
+                if not isinstance(obj, list):
+                    continue
+                for entry in obj:
+                    if isinstance(entry, dict):
+                        sid = str(entry.get('id') or entry.get('songId') or '')
+                        length = duration_seconds_from(entry)
+                        if sid in subset and length:
+                            found[sid] = length
+                if all(sid in found for sid in subset):
+                    break
+        out = []
+        for track in songs:
+            duration = track.get('duration_seconds') or found.get(track['id'], 0)
+            if duration and duration <= 20:
+                continue
+            if duration:
+                track = {**track, 'duration_seconds': duration}
+            out.append(track)
+        return out
+
     def search(self, query: str, limit: int, page: int) -> dict:
         for base in self.bases:
             # Enhanced Netease API 优先；Meting 搜索作为兼容回退。
@@ -320,7 +407,8 @@ class MusicAPI:
                     continue
                 songs, total = parse_song_list(data)
                 if songs or total == 0:
-                    return {"results": songs[:limit], "total": total if total is not None else len(songs), "total_is_exact": total is not None, "source": base + path}
+                    songs = self.supplement_durations(songs[:limit])
+                    return {"results": songs, "total": total if total is not None else len(songs), "total_is_exact": total is not None, "source": base + path}
                 if isinstance(data, dict) and data.get("code") == 200 and (data.get("result") is not None):
                     return {"results": [], "total": 0, "total_is_exact": True, "source": base + path}
         raise MusicError("所有搜索接口均未返回可用歌曲数据。请运行 doctor 检查网络和 API 状态。")
@@ -523,7 +611,29 @@ def parse_indices(spec: str, count: int) -> list[int]:
     return picked
 
 
-def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: str) -> dict | None:
+
+def verified_audio_duration(filename: Path, kind: str) -> float | None:
+    """Read actual duration from the downloaded container, never from remote metadata.
+
+    Mutagen is optional for standalone Skill installations. Unknown/corrupt files
+    are handled as unknown rather than asserting that they are complete.
+    """
+    try:
+        from mutagen import File as audio_file, MutagenError
+        info=audio_file(str(filename))
+        duration=float(info.info.length)
+        return duration if 0 < duration < 30*3600 else None
+    except (ImportError, AttributeError, OSError, ValueError, TypeError, Exception):
+        # Malformed/truncated response: duration is unknown, not verified.
+        return None
+
+
+def is_truncated_trial(expected_seconds: float, actual_seconds: float | None) -> bool:
+    """Only reject obvious short previews, with ample tolerance for metadata drift."""
+    return bool(actual_seconds is not None and expected_seconds >= 60 and actual_seconds <= 35
+                and actual_seconds < expected_seconds * 0.65)
+
+def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: str, expected_duration: float = 0) -> dict | None:
     url = candidate["url"]
     if not isinstance(url, str) or urlparse(url).scheme not in ("https", "http"):
         return None
@@ -577,6 +687,10 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
         if size < 1024:
             api.errors.append(f"音频大小异常：{size} bytes")
             return None
+        actual_duration=verified_audio_duration(tmp,kind)
+        if is_truncated_trial(expected_duration,actual_duration):
+            api.errors.append(f"{candidate['source']} 仅返回 {actual_duration:.1f}s 的试听片段，原歌曲约 {expected_duration:.1f}s；已丢弃短片段")
+            return None
         # 基础完整性检查：验证文件头及声明的长度。系统有 ffprobe 时再验证可解码性。
         if os.environ.get("NETEASE_VERIFY_FFPROBE") == "1" and shutil.which("ffprobe"):
             import subprocess
@@ -593,7 +707,7 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
             if bit:
                 meta["mp3_first_frame_kbps"] = bit
         success = True
-        return {"temporary_path": str(tmp), "bytes": size, "format": kind, "source": candidate["source"], "api_level": candidate["level"], "quality_metadata": meta}
+        return {"temporary_path": str(tmp), "bytes": size, "format": kind, "source": candidate["source"], "api_level": candidate["level"], "quality_metadata": meta,"actual_duration_seconds":actual_duration}
     except (OSError, requests.RequestException) as e:
         api.errors.append(f"读取音频中断：{type(e).__name__}: {e}")
         return None
@@ -645,7 +759,7 @@ def download_one(api: MusicAPI, song: dict, out_dir: Path, quality: str, *, over
     best = None
     try:
         for cand in candidates:
-            result = fetch_audio(api, cand, out_dir, quality)
+            result = fetch_audio(api, cand, out_dir, quality, float(song.get("duration_seconds") or 0))
             if not result:
                 continue
             result["claimed_bitrate"] = cand.get("claimed_bitrate")
@@ -680,7 +794,8 @@ def download_one(api: MusicAPI, song: dict, out_dir: Path, quality: str, *, over
             for old in present:
                 if Path(old) != dst:
                     Path(old).unlink(missing_ok=True)
-        return {"ok": True, "status": "downloaded", "song": song, "path": str(dst), "format": best["format"], "bytes": best["bytes"], "source": best["source"], "api_level": best["api_level"], "quality_metadata": best["quality_metadata"]}
+        warning = (f"所连接接口没有返回可用 FLAC/WAV 无损音频，已降级保存 {best['format'].upper()}。" if quality=='best' and best['format'] not in ('flac','wav') else '')
+        return {"ok": True, "status": "downloaded", "song": song, "path": str(dst), "format": best["format"], "bytes": best["bytes"], "source": best["source"], "api_level": best["api_level"], "quality_metadata": best["quality_metadata"],"warning":warning}
     finally:
         if best:
             Path(best["temporary_path"]).unlink(missing_ok=True)

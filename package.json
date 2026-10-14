@@ -1,8 +1,8 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "private": true,
-  "description": "粉蓝网易云音乐下载器：可自定义桌面外挂歌词、免 Python 的单 EXE 携带版和 AI Skill",
+  "description": "粉蓝音乐管理器开发版：本地歌单、完整音乐下载、沉浸歌词和桌面歌词",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

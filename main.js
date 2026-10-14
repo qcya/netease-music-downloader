@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, globalShortcut } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -14,6 +14,7 @@ const {createLogger}=require('./app_logger.js');
 // 开发版使用独立的 Windows 任务栏分组，避免复用旧版 EXE 的固定图标。
 const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
+const BACKGROUND_EXTS=new Set(['.mp4','.webm','.png','.jpg','.jpeg','.webp']);
 let win;
 const downloadHistory=new Map();
 let historyFlushTimer=null;
@@ -49,6 +50,7 @@ function cacheDir() { return path.join(app.getPath('userData'), 'audio-cache'); 
 function lyricDir() { return path.join(app.getPath('userData'), 'lyric-cache'); }
 function manifestFile() { return path.join(cacheDir(), 'manifest.json'); }
 function favoritesFile() { return path.join(app.getPath('userData'), 'favorites.json'); }
+function playlistsFile(){return path.join(app.getPath('userData'),'my-playlists.json')}
 function favoritesDir() { return config().favoritesDir; }
 function historyFile(){return path.join(app.getPath('userData'),'download-history.json');}
 function cacheMaintenanceFile() { return path.join(app.getPath('userData'), 'cache-maintenance.json'); }
@@ -135,6 +137,51 @@ function inDirectory(directory, file) {
   const full = path.resolve(file);
   return full.startsWith(root);
 }
+/** My playlists store only validated local filenames, never arbitrary untrusted renderer paths. */
+function availableLocalTrack(name){
+  if(typeof name!=='string'||!name||path.basename(name)!==name||!AUDIO_EXTS.has(path.extname(name).toLowerCase()))throw new Error('无效本地歌曲名称');
+  const file=path.join(config().downloadDir,name);
+  if(!inDirectory(config().downloadDir,file)||!fs.existsSync(file)||!fs.statSync(file).isFile())throw new Error('本地音乐文件不存在');
+  return file;
+}
+function readPlaylists(){
+  const saved=readJSON(playlistsFile(),null);
+  if(!Array.isArray(saved))return [{id:'default',name:'我的歌单',tracks:[]}];
+  const valid=saved.filter(p=>p&&typeof p.id==='string'&&/^[a-zA-Z0-9-]{1,64}$/.test(p.id)&&typeof p.name==='string'&&Array.isArray(p.tracks))
+    .slice(0,50).map(p=>({id:p.id,name:p.name.slice(0,50),tracks:[...new Set(p.tracks.filter(n=>typeof n==='string'&&n===path.basename(n)&&AUDIO_EXTS.has(path.extname(n).toLowerCase())))].slice(0,5000)}));
+  return valid.length?valid:[{id:'default',name:'我的歌单',tracks:[]}];
+}
+function savePlaylists(rows){writeJSONAtomic(playlistsFile(),rows)}
+function createLocalPlaylist(name){
+  const title=String(name||'').trim();if(!title||title.length>40)throw new Error('歌单名称须为 1–40 字');
+  const rows=readPlaylists();if(rows.length>=50)throw new Error('最多 50 个歌单');
+  if(rows.some(p=>p.name===title))throw new Error('同名歌单已存在');
+  const p={id:randomUUID(),name:title,tracks:[]};rows.push(p);savePlaylists(rows);return p;
+}
+function changeLocalPlaylist(id,name,add){
+  const rows=readPlaylists(),p=rows.find(p=>p.id===id);if(!p)throw new Error('歌单不存在');
+  if(add)availableLocalTrack(name);
+  else if(typeof name!=='string'||name!==path.basename(name))throw new Error('无效歌曲名称');
+  if(add&&!p.tracks.includes(name))p.tracks.push(name);
+  if(!add)p.tracks=p.tracks.filter(x=>x!==name);
+  savePlaylists(rows);return p;
+}
+const DEFAULT_SHORTCUT='Control+Alt+L';
+function validShortcut(value){return typeof value==='string'&&/^(?:(?:Control|Alt|Shift|Super)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2]))$/.test(value)&&/(?:Control|Alt|Super)\+/.test(value)}
+let activeShortcut=null;
+function registerLyricsShortcut(next){
+  if(!globalShortcut?.register)return;
+  const accelerator=validShortcut(next)?next:DEFAULT_SHORTCUT;
+  if(activeShortcut===accelerator)return;
+  if(activeShortcut)globalShortcut.unregister(activeShortcut);
+  activeShortcut=null;
+  if(globalShortcut.register(accelerator,()=>{
+    const locked=!!config().floatingLyrics.mouseThrough;
+    if(!floatingLyrics.exists()){floatingLyrics.open();return}
+    floatingLyrics.lockAndSave(!locked);
+  })) activeShortcut=accelerator;
+  else console.warn('无法注册桌面歌词快捷键',accelerator);
+}
 function cachedManifest() {
   const rows = readJSON(manifestFile(), {});
   return rows && typeof rows === 'object' && !Array.isArray(rows) ? rows : {};
@@ -148,14 +195,14 @@ function cacheItem(id) {
   return {...row, full};
 }
 function grantMedia(file) {
-  if (!fs.existsSync(file) || !AUDIO_EXTS.has(path.extname(file).toLowerCase())) throw new Error('不是有效的本地音频文件');
+  if (!fs.existsSync(file) || ![...AUDIO_EXTS,...BACKGROUND_EXTS].includes(path.extname(file).toLowerCase())) throw new Error('不是允许的本地媒体文件');
   const token = randomUUID();
   grantedMedia.set(token, file);
   if (grantedMedia.size > 150) grantedMedia.delete(grantedMedia.keys().next().value);
   return `music-media://audio/${token}`;
 }
 function mimeAudio(file) {
-  return ({'.mp3':'audio/mpeg','.flac':'audio/flac','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.aac':'audio/aac'})[path.extname(file).toLowerCase()] || 'application/octet-stream';
+  return ({'.mp3':'audio/mpeg','.flac':'audio/flac','.wav':'audio/wav','.m4a':'audio/mp4','.ogg':'audio/ogg','.aac':'audio/aac','.mp4':'video/mp4','.webm':'video/webm','.jpg':'image/jpeg','.jpeg':'image/jpeg','.png':'image/png','.webp':'image/webp'})[path.extname(file).toLowerCase()] || 'application/octet-stream';
 }
 async function mediaResponse(request) {
   const parsed = new URL(request.url);
@@ -226,16 +273,16 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
       const dir = (typeof stored.downloadDir === 'string' && stored.downloadDir.trim()) ? stored.downloadDir : defaultSettings.downloadDir;
-      const quality = ['best', 'lossless', 'mp3'].includes(stored.quality) ? stored.quality : 'best';
+      const quality = 'best'; // No legacy MP3-only preference in the new download-first UI.
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,lyricsShortcut:validShortcut(stored.lyricsShortcut)?stored.lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -247,7 +294,7 @@ function writeConfig(value) {
   if (!dir || dir.length > 1024 || !path.isAbsolute(dir)) throw new Error('保存目录必须是完整的本地路径');
   const favoritesDir=typeof value.favoritesDir==='string'&&path.isAbsolute(value.favoritesDir)&&value.favoritesDir.length<=1024?value.favoritesDir:path.join(dir,'收藏');
   const setupCompleted=value.setupCompleted===true;
-  const quality = ['best','lossless','mp3'].includes(value.quality) ? value.quality : 'best';
+  const quality = 'best'; // Search-result downloads always request the highest available format.
   const bases = Array.isArray(value.apiBases) ? value.apiBases : [];
   if (bases.length > 8) throw new Error('接口数量最多 8 个');
   const clean = bases.map(raw => {
@@ -261,12 +308,13 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir: dir, favoritesDir, setupCompleted, quality, apiBases: [...new Set(clean)], cacheLimitMB, parallelDownloads, floatingLyrics:normalizeLyrics(value.floatingLyrics)};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,lyricsShortcut:validShortcut(value.lyricsShortcut)?value.lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
   downloadQueue.setLimit(parallelDownloads);
   floatingLyrics.applySettings(result.floatingLyrics);
+  registerLyricsShortcut(result.lyricsShortcut);
   return result;
 }
 
@@ -513,6 +561,7 @@ app.whenReady().then(() => {
   process.on('uncaughtException',e=>logger.error('uncaught',e?.message||e));
   process.on('unhandledRejection',e=>logger.error('promise',e?.message||e));
   downloadQueue.setLimit(config().parallelDownloads);
+  registerLyricsShortcut(config().lyricsShortcut);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
   const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
     const status=['queued','running'].includes(entry.status)?'failed':entry.status;
@@ -536,6 +585,23 @@ app.whenReady().then(() => {
   ipcMain.handle('system:choose-directory', async () => {
     const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
     return r.canceled ? null : r.filePaths[0];
+  });
+  ipcMain.handle('playlists:list',()=>readPlaylists());
+  ipcMain.handle('playlists:create',(_e,name)=>createLocalPlaylist(name));
+  ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
+  ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
+  ipcMain.handle('background:choose',async()=>{
+    const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']} ]});
+    if(result.canceled||!result.filePaths?.length)return null;
+    const file=path.resolve(result.filePaths[0]);if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase()))throw new Error('不支持的背景格式');
+    const st=fs.statSync(file);if(!st.isFile()||st.size>2*1024*1024*1024)throw new Error('背景文件过大或不可用');
+    writeConfig({...config(),playerBackgroundPath:file});return {path:file};
+  });
+  ipcMain.handle('background:clear',()=>{writeConfig({...config(),playerBackgroundPath:''});return true});
+  ipcMain.handle('background:get',()=>{
+    const file=config().playerBackgroundPath;
+    if(!file||!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:'default'};
+    return {kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:grantMedia(file)};
   });
   ipcMain.handle('system:open-directory', async () => {
     const dest = config().downloadDir;
@@ -622,8 +688,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('local:play', (_e, name) => {
     if (typeof name !== 'string' || !name || name !== path.basename(name) || !AUDIO_EXTS.has(path.extname(name).toLowerCase())) throw new Error('无效本地文件名');
-    const full=path.join(config().downloadDir,name);
-    if(!inDirectory(config().downloadDir,full) || !fs.existsSync(full) || !fs.statSync(full).isFile()) throw new Error('本地音乐文件不存在');
+    const full=availableLocalTrack(name);
     const id = /\[(\d{1,20})\]\.[^.]+$/.exec(name)?.[1] || null;
     return {ok:true,url:grantMedia(full),id,name:name.replace(/\s*\[\d+\]\.[^.]+$/, ''),artists:'',fromCache:true};
   });
@@ -641,4 +706,5 @@ app.whenReady().then(() => {
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
+app.on('will-quit',()=>{globalShortcut?.unregisterAll?.()});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

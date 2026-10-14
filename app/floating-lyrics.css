@@ -9,3 +9,5 @@ body{display:flex;align-items:flex-start;justify-content:center;user-select:none
 .lyric{font-size:var(--original-size);font-weight:800;line-height:var(--lyric-line-height);letter-spacing:.25px;color:var(--original);-webkit-text-stroke:var(--outline-width) var(--outline);paint-order:stroke fill;filter:drop-shadow(0 1px var(--shadow) rgba(70,85,120,.38))}
 .translate{font-size:var(--translated-size);font-weight:650;line-height:1.5;color:var(--translated);-webkit-text-stroke:calc(var(--outline-width) * .55) var(--outline);paint-order:stroke fill;filter:drop-shadow(0 1px 1px rgba(70,85,120,.24))}
 .caption[hidden]{display:none!important}
+
+:focus,:focus-visible{outline:none!important}html,body,.widget,.caption{background-color:transparent;box-shadow:none} .widget[data-background="glass"],.widget[data-background="solid"]{background-color:unset}

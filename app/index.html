@@ -2,10 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview:; object-src 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: music-media: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview:; object-src 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>网易云音乐下载器</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="immersive.css">
 </head>
 <body>
   <div class="app-shell">
@@ -16,6 +17,7 @@
       </div>
       <nav class="main-nav" aria-label="主导航">
         <button class="nav-item active" data-view="home" type="button"><span class="nav-icon" data-icon="home"></span><span>首页</span></button>
+        <button class="nav-item" data-view="playlists" type="button"><span class="nav-icon" data-icon="list"></span><span>我的歌单</span></button>
         <button class="nav-item" data-view="local" type="button"><span class="nav-icon" data-icon="folder"></span><span>本地</span></button>
         <button class="nav-item" data-view="settings" type="button"><span class="nav-icon" data-icon="settings"></span><span>设置</span></button>
       </nav>
@@ -72,43 +74,31 @@
         <div class="bottom-status" role="status" aria-live="polite"><span id="status-icon" data-icon="info"></span><span id="status-text">准备就绪 · 优先下载最高可用音质</span><button type="button" class="status-folder" id="open-folder"><span data-icon="folder"></span> 打开下载目录</button></div>
       </section>
 
+      <section id="view-playlists" class="view" aria-labelledby="playlists-title">
+        <div class="page-header"><div class="eyebrow">MY PLAYLISTS</div><h1 id="playlists-title">我的歌单</h1><p>从「本地」添加已下载的歌曲，随时播放或移出歌单，不复制和删除音乐文件。</p></div>
+        <div class="page-actions"><button type="button" class="soft-action" id="create-playlist">＋ 新建歌单</button><select id="playlist-select" aria-label="选择我的歌单"></select></div>
+        <div class="local-list" id="my-playlist-tracks"><div class="empty-simple">下载歌曲后，可从「本地」添加到我的歌单。</div></div>
+      </section>
       <section id="view-local" class="view" aria-labelledby="local-title">
-        <div class="page-header"><div class="eyebrow">MY MUSIC</div><h1 id="local-title">我的音乐</h1><p>下载、收藏和任务进度统一放在这里。</p></div>
-        <nav class="local-tabs" aria-label="我的音乐分类">
-          <button type="button" class="local-tab active" data-local-tab="downloads">下载列表</button>
-          <button type="button" class="local-tab" data-local-tab="favorites">我的收藏</button>
-          <button type="button" class="local-tab" data-local-tab="tasks">进行中与历史</button>
-        </nav>
-        <div class="local-tab-panel active" id="local-downloads">
-          <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开文件夹</button></div>
-          <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
-        </div>
-        <div class="local-tab-panel" id="local-favorites">
-          <p class="settings-hint">收藏会保存无损音频及能获取到的 LRC 歌词，不参与试听缓存清理。</p>
-          <div class="favorites-list" id="favorites-list"><div class="empty-simple">收藏夹还是空的。</div></div>
-        </div>
-        <div class="local-tab-panel" id="local-tasks">
-          <div class="page-actions"><button class="soft-action" id="refresh-tasks" type="button">刷新下载列表</button><span class="settings-hint">运行中进度自动更新；失败任务可重试。</span></div>
-          <div class="task-list" id="task-list"><div class="empty-simple">暂无下载任务</div></div>
-        </div>
+        <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>完整下载的音乐，以及尚在下载中的任务。播放直接读取本地文件。</p></div>
+        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button></div>
+        <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
+        <div class="local-downloads-section"><strong>下载列表</strong><span>任务完成后会自动刷新本地歌曲</span></div>
+        <div class="task-list" id="task-list"><div class="empty-simple">暂无下载任务</div></div>
       </section>
       <section id="view-settings" class="view" aria-labelledby="settings-title">
         <div class="page-header"><div class="eyebrow">PREFERENCES</div><h1 id="settings-title">下载设置</h1><p>保存位置和音质偏好，仅影响后续下载。</p></div>
         <div class="settings-card">
           <label for="download-dir">音乐保存目录</label>
           <div class="input-button"><input id="download-dir" readonly aria-label="音乐保存目录"><button id="pick-dir" type="button">选择目录</button></div>
-          <label for="favorites-dir">收藏保存目录</label>
-          <div class="input-button"><input id="favorites-dir" readonly aria-label="收藏保存目录"><button id="pick-favorites-dir" type="button">选择目录</button></div>
-          <p class="settings-hint">收藏路径独立于普通下载路径，更改路径不会清除此前保存的收藏记录。</p>
-          <label for="quality">音质偏好</label>
-          <select id="quality"><option value="best">自动选择最高可用音质（推荐）</option><option value="lossless">只接受无损音频</option><option value="mp3">优先 MP3（兼容性更好）</option></select>
+                    <p class="settings-hint">默认选择最高可获得的音质；没有 FLAC / WAV 时自动尝试 MP3，并明确显示降级提醒。</p>
           <label for="parallel-downloads">同时下载歌曲数</label>
           <select id="parallel-downloads"><option value="1">1 首（最保守）</option><option value="2">2 首</option><option value="3">3 首（推荐）</option><option value="4">4 首</option><option value="6">6 首（接口限流时请调低）</option></select>
           <p class="settings-hint">多个歌曲并行下载，其余自动排队；不是把同一音频拆成多个分段。</p>
           <label for="cache-limit">试听缓存容量上限</label>
           <select id="cache-limit"><option value="512">512 MB</option><option value="1024">1 GB（推荐）</option><option value="2048">2 GB</option><option value="5120">5 GB</option></select>
           <div class="cache-tools"><span id="cache-stats">正在读取缓存…</span><button id="clear-cache" type="button">清除试听和临时歌词缓存</button></div>
-          <p class="settings-hint">试听优先缓存 128 kbps MP3（仅当源站提供）；每隔 7 天自动清理临时缓存。收藏的无损音乐和歌词不会被清理。</p>
+          <p class="settings-hint">保留临时试听缓存兼容性；现在优先从本地完整歌曲播放。每隔 7 天清理临时缓存，不影响正式下载和歌单。</p>
           <label for="api-bases">自定义接口地址（选填，每行一个）</label>
           <textarea id="api-bases" rows="3" placeholder="留空使用 Skill 内置接口"></textarea>
           <p class="settings-hint">接口返回的最高音质不代表一定拥有下载权限；程序会验证实际下载到的音频格式。</p>
@@ -138,36 +128,48 @@
             </div>
             <div class="lyrics-settings-actions"><button type="button" class="soft-action" id="lyr-reset">恢复默认歌词风格</button><button type="button" class="subtle-action" id="lyr-test">打开歌词预览</button></div>
           </div>
-          <button class="subtle-action" id="show-disclaimer" type="button">查看使用说明与免责声明</button>
+          <div class="lyrics-customize"><strong>桌面歌词与沉浸播放</strong>
+            <label class="setting-row"><input id="desktop-lyrics-enabled" type="checkbox"> 启用桌面悬浮歌词（启动后默认不显示）</label>
+            <label for="lyrics-shortcut">桌面歌词锁定 / 解锁快捷键</label><input id="lyrics-shortcut" readonly placeholder="按 Ctrl + Alt + L 等组合键录制" title="点击后按下快捷键，Delete 恢复默认快捷键">
+            <p class="settings-hint">右键悬浮歌词可打开菜单。锁定穿透鼠标后，仍可使用快捷键解锁。</p>
+            <label for="player-bg-path">沉浸播放背景</label>
+            <div class="input-button"><input id="player-bg-path" readonly placeholder="默认使用粉蓝渐变；可选择本地图片或视频"><button id="pick-player-bg" type="button">选择背景</button><button id="clear-player-bg" type="button">恢复默认</button></div>
+            <p class="settings-hint">可选择你自己的《柠檬》视频作为背景。为避免公开仓库携带第三方视频，软件只保存本机的文件路径。</p>
+          </div>
+          <button class="subtle-action" id="show-disclaimer" type="button">查看免责声明</button>
           <button class="save-button" id="save-settings" type="button"><span data-icon="check"></span> 保存设置</button>
         </div>
       </section>
-      <div class="lyrics-panel" id="lyrics-panel" role="region" aria-label="同步歌词" hidden>
-        <div class="lyrics-heading"><span>同步歌词</span><button id="toggle-immersive" type="button">沉浸模式</button><button id="close-lyrics" type="button" title="收起歌词" aria-label="收起歌词">×</button></div>
-        <div class="lyrics-song" id="lyrics-song">还没有播放歌曲</div>
-        <div class="lyrics-scroll" id="lyrics-scroll"><div class="lyrics-empty">播放歌曲后会在这里显示歌词</div></div>
-      </div>
+      <section class="immersive-player" id="immersive-player" hidden aria-label="沉浸式歌词播放器">
+        <div class="immersive-backdrop"></div><img id="immersive-bg-image" class="immersive-bg" alt="" hidden>
+        <video id="immersive-bg-video" class="immersive-bg" muted loop playsinline preload="metadata" hidden></video>
+        <div class="immersive-scrim"></div>
+        <div class="immersive-layout">
+          <div class="immersive-left">
+            <button type="button" id="immersive-close" class="immersive-return">← 返回音乐</button>
+            <div class="immersive-title" id="immersive-title">等待播放</div>
+            <div class="immersive-artist" id="immersive-artist">音乐下载器</div>
+            <div class="immersive-record"><div class="immersive-record-cover" id="immersive-record-cover"><img id="immersive-art" src="../assets/avatar.png" alt="唱片封面"></div></div>
+            <div class="immersive-caption">星海音乐 · 歌词可视化</div>
+          </div>
+          <div class="immersive-right" id="immersive-lyrics"><div class="immersive-empty">播放一首歌，歌词会在这里随旋律滚动</div></div>
+        </div>
+      </section>
       <div class="player-dock" id="player-dock">
-        <div class="player-cover"><span data-icon="music"></span></div>
+        <button type="button" class="player-cover player-cover-button" id="open-immersive" title="打开沉浸歌词" aria-label="打开沉浸式歌词播放器"><span data-icon="music"></span></button>
         <div class="player-info"><div class="player-song" id="player-song">还没有播放歌曲</div><div class="player-artist" id="player-artist">点选搜索结果中的播放按钮</div></div>
         <div class="player-center">
-          <div class="player-buttons"><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span><button type="button" class="player-lyrics-btn" id="toggle-lyrics" aria-label="显示歌词">词</button><button type="button" class="player-lyrics-btn" id="toggle-floating" aria-label="显示桌面悬浮歌词">桌面词</button><button type="button" class="player-lyrics-btn" id="unlock-floating" title="解除悬浮歌词的鼠标穿透">解锁</button></div>
+          <div class="player-buttons"><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span></div>
           <div class="player-progress"><span id="time-current">0:00</span><input type="range" id="player-seek" min="0" max="1000" value="0" step="1" aria-label="播放进度"><span id="time-duration">0:00</span></div>
         </div>
         <div class="player-volume"><span data-icon="volume"></span><input id="player-volume" type="range" min="0" max="100" value="75" aria-label="音量"></div>
       </div>
       <audio id="music-audio" preload="metadata"></audio>
       <div id="first-run" class="first-run-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="first-run-title">
-        <div class="first-run-card">
-          <div class="first-run-symbol">✦</div><h2 id="first-run-title">欢迎使用音乐下载器</h2>
-          <p>首次启动请确认音乐保存位置，后续可在「设置」中随时修改。</p>
-          <label for="first-download-dir">普通音乐下载位置</label>
-          <div class="input-button"><input id="first-download-dir" readonly><button id="first-pick-download" type="button">更改</button></div>
-          <label for="first-favorites-dir">收藏保存位置（无损音频 + 歌词）</label>
-          <div class="input-button"><input id="first-favorites-dir" readonly><button id="first-pick-favorites" type="button">更改</button></div>
-          <div class="disclaimer"><strong>使用说明与免责声明</strong><p>本工具为第三方开源音乐管理与下载项目，并非网易云音乐官方客户端。音频、歌词及封面版权归原权利人所有。请仅在授权及适用法律允许的范围内获取、保存和使用内容；部分曲目受会员、地域或版权权限限制，无法保证所有接口长期可用。本程序不提供绕过付费或数字版权保护的功能。</p></div>
-          <label class="agree"><input id="agree-disclaimer" type="checkbox">我已阅读以上说明，并确认使用与保存路径</label>
-          <button class="save-button first-confirm" id="first-confirm" type="button" disabled>确认并开始使用</button>
+        <div class="first-run-card disclaimer-only"><div class="first-run-symbol">✦</div><h2 id="first-run-title">免责声明</h2>
+          <div class="disclaimer"><p>本软件不是网易云音乐官方客户端。音乐、歌词、封面及相关版权归权利人所有。请仅在获得授权及适用法律允许的范围内下载、保存或使用内容；受会员、地区、版权及接口策略影响的歌曲可能无法获取。本软件不提供绕过数字版权保护的功能。</p></div>
+          <label class="agree"><input id="agree-disclaimer" type="checkbox"> 我已阅读并理解上述免责声明</label>
+          <button class="save-button first-confirm" id="first-confirm" type="button" disabled>确认，进入软件</button>
         </div>
       </div>
     </main>

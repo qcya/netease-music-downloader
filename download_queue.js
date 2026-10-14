@@ -26,7 +26,7 @@ function createDownloadQueue({limit=3,onState=()=>{}}={}) {
       Promise.resolve().then(()=>{if(task.controller.signal.aborted)throw new Error('任务已取消');return task.action(task.controller.signal,progress=>report(task,'running',{progress}));}).then(
         result=>{
           const cancelled=task.controller.signal.aborted;
-          report(task,cancelled?'cancelled':result?.ok===false?'failed':'completed',{error:cancelled?'':result?.error||''});
+          report(task,cancelled?'cancelled':result?.ok===false?'failed':'completed',{error:cancelled?'':result?.error||'',warning:cancelled?'':result?.warning||'',format:result?.format||''});
           finish(task);
           task.resolve(cancelled?{ok:false,cancelled:true,status:'cancelled'}:result);
         },error=>{
