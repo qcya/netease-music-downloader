@@ -131,10 +131,11 @@
           <div class="lyrics-customize"><strong>桌面歌词与沉浸播放</strong>
             <label class="setting-row"><input id="desktop-lyrics-enabled" type="checkbox"> 启用桌面悬浮歌词（启动后默认不显示）</label>
             <label for="lyrics-shortcut">桌面歌词锁定 / 解锁快捷键</label><input id="lyrics-shortcut" readonly placeholder="按 Ctrl + Alt + L 等组合键录制" title="点击后按下快捷键，Delete 恢复默认快捷键">
+            <p id="lyrics-shortcut-status" class="settings-hint" role="status">快捷键状态待检查</p>
             <p class="settings-hint">右键悬浮歌词可打开菜单。锁定穿透鼠标后，仍可使用快捷键解锁。</p>
             <label for="player-bg-path">沉浸播放背景</label>
             <div class="input-button"><input id="player-bg-path" readonly placeholder="默认使用粉蓝渐变；可选择本地图片或视频"><button id="pick-player-bg" type="button">选择背景</button><button id="clear-player-bg" type="button">恢复默认</button></div>
-            <p class="settings-hint">可选择你自己的《柠檬》视频作为背景。为避免公开仓库携带第三方视频，软件只保存本机的文件路径。</p>
+            <p class="settings-hint">可选择本地视频作为动态背景；若 assets/immersive-background.mp4 存在则自动使用。个人视频不会上传至公开仓库。</p>
           </div>
           <button class="subtle-action" id="show-disclaimer" type="button">查看免责声明</button>
           <button class="save-button" id="save-settings" type="button"><span data-icon="check"></span> 保存设置</button>
@@ -154,12 +155,19 @@
           </div>
           <div class="immersive-right" id="immersive-lyrics"><div class="immersive-empty">播放一首歌，歌词会在这里随旋律滚动</div></div>
         </div>
+        <div class="immersive-controls" role="group" aria-label="沉浸播放器操作">
+          <button type="button" id="immersive-toggle" aria-label="播放或暂停">▶</button>
+          <span id="immersive-current" class="immersive-time">0:00</span>
+          <input id="immersive-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="沉浸播放进度">
+          <span id="immersive-duration" class="immersive-time">0:00</span>
+          <div class="immersive-volume"><span aria-hidden="true">♫</span><input id="immersive-volume" type="range" min="0" max="100" value="75" aria-label="沉浸播放器音量"></div>
+        </div>
       </section>
       <div class="player-dock" id="player-dock">
-        <button type="button" class="player-cover player-cover-button" id="open-immersive" title="打开沉浸歌词" aria-label="打开沉浸式歌词播放器"><span data-icon="music"></span></button>
+        <button type="button" class="player-cover player-cover-button" id="open-immersive" title="打开沉浸歌词" aria-label="打开沉浸式歌词播放器"><img id="player-cover-art" src="../assets/avatar.png" alt="正在播放的专辑封面"></button>
         <div class="player-info"><div class="player-song" id="player-song">还没有播放歌曲</div><div class="player-artist" id="player-artist">点选搜索结果中的播放按钮</div></div>
         <div class="player-center">
-          <div class="player-buttons"><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span></div>
+          <div class="player-buttons"><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span><button type="button" class="desktop-lyrics-toggle" id="toggle-desktop-lyrics" aria-pressed="false"><span class="toggle-indicator" aria-hidden="true"></span><span id="desktop-lyrics-button-text">桌面歌词 · 关</span></button></div>
           <div class="player-progress"><span id="time-current">0:00</span><input type="range" id="player-seek" min="0" max="1000" value="0" step="1" aria-label="播放进度"><span id="time-duration">0:00</span></div>
         </div>
         <div class="player-volume"><span data-icon="volume"></span><input id="player-volume" type="range" min="0" max="100" value="75" aria-label="音量"></div>

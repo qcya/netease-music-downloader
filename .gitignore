@@ -58,3 +58,6 @@ Thumbs.db
 
 # Runtime logs
 /logs/
+
+# Locally supplied immersive background video; do not publish media assets
+assets/immersive-background.mp4

@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "private": true,
   "description": "粉蓝音乐管理器开发版：本地歌单、完整音乐下载、沉浸歌词和桌面歌词",
   "main": "main.js",

@@ -9,7 +9,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   if(exists()){floating.show();return {open:true};}
   const s=safeSettings();
   floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:88,maxHeight:560,
-    frame:false,transparent:true,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
+    frame:false,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
   floating.once('ready-to-show',()=>{if(exists()){floating.show();floating.webContents.send('lyrics:settings',safeSettings());lock(!!safeSettings().mouseThrough);}});

@@ -1,6 +1,6 @@
 /* The user's music_vis.html provided the spatial reference: vinyl at left, scrolling lyrics at right. */
 #immersive-player[hidden]{display:none!important}
-#immersive-player{position:fixed;inset:0 0 94px;z-index:21;overflow:hidden;background:linear-gradient(128deg,#ead8ee 0%,#a9d3f1 65%,#f7d5e4);color:white}
+#immersive-player{position:fixed;inset:0;z-index:50;overflow:hidden;background:linear-gradient(128deg,#ead8ee 0%,#a9d3f1 65%,#f7d5e4);color:white}
 .immersive-backdrop,.immersive-bg,.immersive-scrim{position:absolute;inset:0;width:100%;height:100%}
 .immersive-backdrop{background:radial-gradient(circle at 21% 75%,#f9d6e6 0%,transparent 48%),linear-gradient(110deg,#596c9b,#98c6df 70%,#c5a2bf)}
 .immersive-bg{object-fit:cover}
@@ -39,10 +39,23 @@ body.immersive-paused .immersive-record{animation-play-state:paused}
 .playlist-entry strong{flex:1;min-width:0;text-overflow:ellipsis;overflow:hidden;white-space:nowrap;font-size:13px;color:#5a6071}
 .playlist-entry button,.local-ops button{font-size:11px;border:0;background:#e8f2ff;color:#6483a4;border-radius:9px;padding:8px 11px;cursor:pointer}
 .player-cover-button{border:0;cursor:pointer}
+.player-cover-button img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .setting-row{display:flex;align-items:center;gap:8px!important}
 .setting-row input{width:auto!important}
 #lyrics-shortcut{cursor:pointer}
 .disclaimer-only{max-width:560px}
 @media(max-width:850px){.immersive-layout{grid-template-columns:42% 58%;gap:0}.immersive-record{--disc-size:min(30vw,35vh,240px)}.immersive-right{padding-left:4%;padding-right:4%}.immersive-title{font-size:28px}}
 
-body.immersive-open .player-dock{position:fixed;left:0;right:0;bottom:0;z-index:22;width:100%;min-height:94px}
+/* Immersive UI owns the entire screen: the original player dock is hidden. */
+body.immersive-open .player-dock{display:none!important}
+body.immersive-open .toast-container{z-index:60}
+.immersive-controls{position:absolute;z-index:6;left:50%;bottom:clamp(16px,3.2vh,36px);transform:translateX(-50%);display:flex;align-items:center;gap:16px;width:min(690px,calc(100% - 60px));padding:10px 16px;border:1px solid rgba(255,255,255,.24);border-radius:20px;background:rgba(24,33,57,.27);color:#fff;backdrop-filter:blur(10px);box-shadow:0 8px 20px #12233c33;transition:background .2s,opacity .2s;opacity:.64}
+.immersive-controls:hover,.immersive-controls:focus-within{background:rgba(24,33,57,.52);opacity:1}
+.immersive-controls button{display:grid;place-items:center;flex:none;width:36px;height:36px;border:0;border-radius:50%;background:#ffe7f6;color:#815f88;cursor:pointer;font-size:17px}
+.immersive-controls button:hover{background:white}
+.immersive-controls input[type=range]{min-width:30px;flex:1;accent-color:#ffd7e8;cursor:pointer}
+.immersive-time{font:600 12px/1.2 'Microsoft YaHei UI',sans-serif;min-width:35px;text-align:center;font-variant-numeric:tabular-nums}
+.immersive-volume{display:flex;align-items:center;gap:5px;flex:0 0 100px;font-size:13px}
+.immersive-layout{padding-bottom:clamp(82px,12vh,118px)}
+@media(max-width:700px){.immersive-controls{width:calc(100% - 28px);gap:8px;padding:7px}.immersive-volume{flex-basis:65px}.immersive-return{padding:7px 12px}}
+

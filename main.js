@@ -35,6 +35,7 @@ const grantedMedia = new Map();
 const remotePreview = new Map();
 const previewSourceCache=new Map();
 const previewSourcePending=new Map();
+const lyricsPending=new Map();
 if (protocol?.registerSchemesAsPrivileged) {
   protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 }
@@ -169,18 +170,31 @@ function changeLocalPlaylist(id,name,add){
 const DEFAULT_SHORTCUT='Control+Alt+L';
 function validShortcut(value){return typeof value==='string'&&/^(?:(?:Control|Alt|Shift|Super)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2]))$/.test(value)&&/(?:Control|Alt|Super)\+/.test(value)}
 let activeShortcut=null;
-function registerLyricsShortcut(next){
-  if(!globalShortcut?.register)return;
+let failedShortcut=null;
+let shortcutState={enabled:false,registered:false,accelerator:DEFAULT_SHORTCUT};
+function registerLyricsShortcut(next,enabled=config().desktopLyricsEnabled){
   const accelerator=validShortcut(next)?next:DEFAULT_SHORTCUT;
-  if(activeShortcut===accelerator)return;
+  if(!globalShortcut?.register)return shortcutState;
+  if(!enabled){
+    if(activeShortcut)globalShortcut.unregister(activeShortcut);
+    activeShortcut=null;failedShortcut=null;
+    shortcutState={enabled:false,registered:false,accelerator};
+    return shortcutState;
+  }
+  if(activeShortcut===accelerator)return shortcutState;
+  if(failedShortcut===accelerator)return shortcutState; // don't spam the same OS conflict
   if(activeShortcut)globalShortcut.unregister(activeShortcut);
   activeShortcut=null;
-  if(globalShortcut.register(accelerator,()=>{
+  const success=globalShortcut.register(accelerator,()=>{
+    if(!floatingLyrics.exists()){floatingLyrics.open();return;}
     const locked=!!config().floatingLyrics.mouseThrough;
-    if(!floatingLyrics.exists()){floatingLyrics.open();return}
     floatingLyrics.lockAndSave(!locked);
-  })) activeShortcut=accelerator;
-  else console.warn('无法注册桌面歌词快捷键',accelerator);
+  });
+  failedShortcut=success?null:accelerator;
+  if(success)activeShortcut=accelerator;
+  shortcutState={enabled:true,registered:success,accelerator};
+  if(!success)console.warn('桌面歌词快捷键被占用，可在设置中修改：',accelerator);
+  return shortcutState;
 }
 function cachedManifest() {
   const rows = readJSON(manifestFile(), {});
@@ -314,7 +328,7 @@ function writeConfig(value) {
   fs.renameSync(configFile() + '.tmp', configFile());
   downloadQueue.setLimit(parallelDownloads);
   floatingLyrics.applySettings(result.floatingLyrics);
-  registerLyricsShortcut(result.lyricsShortcut);
+  registerLyricsShortcut(result.lyricsShortcut,result.desktopLyricsEnabled);
   return result;
 }
 
@@ -469,22 +483,26 @@ function prepareAudio(id) {
 
 async function fetchLyrics(id, force=false) {
   const [sid] = songIds([id]);
-  const file=path.join(lyricDir(),sid+'.json');
-  const favorite=validFavorite(readFavorites()[sid],sid);
-  if (!force && favorite?.lyricExists) {
-    const text=fs.readFileSync(favorite.lyricPath,'utf8');
-    return {id:sid,found:true,lrc:text,translated_lrc:'',fromFavorite:true};
-  }
-  const saved=readJSON(file,null);
-  // 旧版本缓存过的“无歌词”不是可信结果；修复歌词接口后强制重查。
-  if (!force && saved && saved.schema===2 && Date.now()-saved.checkedAt < (saved.found ? 30*24*3600e3 : 10*60_000)) {
-    return {id:sid,found:saved.found,lrc:saved.lrc,translated_lrc:saved.translated_lrc,diagnostic:saved.diagnostic||[],fromCache:true};
-  }
-  const fresh=await runCli('lyric',['--id',sid],{timeoutMs:90_000,concurrent:true});
-  const out={schema:2,id:sid,found:!!fresh.found,lrc:fresh.lrc||'',translated_lrc:fresh.translated_lrc||'',
-             diagnostic:fresh.diagnostic||[],checkedAt:Date.now()};
-  writeJSONAtomic(file,out);
-  return {...out,fromCache:false};
+  if(lyricsPending.has(sid))return lyricsPending.get(sid);
+  const task=(async()=>{
+    const file=path.join(lyricDir(),sid+'.json');
+    const favorite=validFavorite(readFavorites()[sid],sid);
+    if(!force && favorite?.lyricExists){
+      const text=fs.readFileSync(favorite.lyricPath,'utf8');
+      return {id:sid,found:true,lrc:text,translated_lrc:'',fromFavorite:true};
+    }
+    const saved=readJSON(file,null);
+    if(!force && saved && saved.schema===2 && Date.now()-saved.checkedAt < (saved.found ? 30*24*3600e3 : 10*60_000)) {
+      return {id:sid,found:saved.found,lrc:saved.lrc,translated_lrc:saved.translated_lrc,diagnostic:saved.diagnostic||[],fromCache:true};
+    }
+    const fresh=await runCli('lyric',['--id',sid],{timeoutMs:90_000});
+    const out={schema:2,id:sid,found:!!fresh.found,lrc:fresh.lrc||'',translated_lrc:fresh.translated_lrc||'',
+               diagnostic:fresh.diagnostic||[],checkedAt:Date.now()};
+    writeJSONAtomic(file,out);
+    return {...out,fromCache:false};
+  })();
+  lyricsPending.set(sid,task);
+  try{return await task;}finally{if(lyricsPending.get(sid)===task)lyricsPending.delete(sid)}
 }
 
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
@@ -561,7 +579,7 @@ app.whenReady().then(() => {
   process.on('uncaughtException',e=>logger.error('uncaught',e?.message||e));
   process.on('unhandledRejection',e=>logger.error('promise',e?.message||e));
   downloadQueue.setLimit(config().parallelDownloads);
-  registerLyricsShortcut(config().lyricsShortcut);
+  registerLyricsShortcut(config().lyricsShortcut,config().desktopLyricsEnabled);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
   const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
     const status=['queued','running'].includes(entry.status)?'failed':entry.status;
@@ -599,8 +617,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('background:clear',()=>{writeConfig({...config(),playerBackgroundPath:''});return true});
   ipcMain.handle('background:get',()=>{
-    const file=config().playerBackgroundPath;
-    if(!file||!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:'default'};
+    const explicit=config().playerBackgroundPath;
+    // Optional locally supplied dynamic background. Intentionally excluded from public GitHub source.
+    const fallback=resources('assets','immersive-background.mp4');
+    const file=explicit||fallback;
+    if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:'default'};
     return {kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:grantMedia(file)};
   });
   ipcMain.handle('system:open-directory', async () => {
@@ -621,6 +642,7 @@ app.whenReady().then(() => {
     if(!Number.isInteger(page)||page<1||page>500)throw new Error('页码无效');
     return await runCli('search',['--query',query.trim(),'--limit','40','--page',String(page)]);
   });
+  ipcMain.handle('music:song-info', async (_e, id) => { const [sid] = songIds([id]); return (await runCli('song',['--id',sid],{timeoutMs:25000})).song; });
   ipcMain.handle('music:download', async (_e, ids) => {
     logger.info('download_batch',`count=${Array.isArray(ids)?ids.length:0}`);
     const valid = songIds(ids);
@@ -670,6 +692,7 @@ app.whenReady().then(() => {
   ipcMain.handle('lyrics:lock',(_e,lock)=>{const s=config();s.floatingLyrics.mouseThrough=!!lock;writeConfig(s);return floatingLyrics.lock(!!lock)});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
+  ipcMain.handle('lyrics:shortcut-status',()=>shortcutState);
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
   ipcMain.handle('lyrics:resize',(event,height)=>{if(!floatingLyrics.owns(event.sender))throw new Error('仅桌面歌词窗口可调整高度');return floatingLyrics.resizeTo(height)});
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));

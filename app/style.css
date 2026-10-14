@@ -293,3 +293,26 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 #view-local .favorites-list,#view-local .task-list{flex:1;min-height:0;overflow-y:auto}
 #view-local .task-list{padding:5px 5px 22px 0}
 @media(max-width:1090px){#view-local{padding:14px 24px 22px}}
+
+/* v2.3.1 — practical and accessible desktop lyrics controls, compact settings */
+.player-dock{gap:12px;padding:10px clamp(12px,2vw,25px)}
+.player-center{min-width:0}
+.player-buttons{gap:12px;justify-content:stretch}
+.player-synced-line{flex:1;min-width:0;max-width:none;text-align:center;font-size:12px}
+.desktop-lyrics-toggle{display:flex;align-items:center;justify-content:center;gap:7px;flex:0 0 auto;min-width:104px;padding:8px 11px;border-radius:12px;border:1px solid #d5e4f4;background:#f3f8ff;color:#768ba7;font-weight:700;font-size:11px;white-space:nowrap;transition:background .16s,color .16s,border-color .16s}
+.desktop-lyrics-toggle:hover{background:#e5f1ff;border-color:#bed9ef}
+.desktop-lyrics-toggle[aria-pressed="true"]{border-color:#ecbbd9;background:#fce5f1;color:#af6f9c}
+.toggle-indicator{width:7px;height:7px;border-radius:50%;background:#b8c2d4;flex:0 0 auto}
+.desktop-lyrics-toggle[aria-pressed="true"] .toggle-indicator{background:#eaa2c8;box-shadow:0 0 0 3px #f7d9ea}
+.lyrics-customize{gap:11px;padding:18px 19px}
+.lyrics-advanced{border:1px solid #e6e6f0;background:#fffafd;border-radius:13px;padding:0 14px 14px}
+.lyrics-advanced summary{padding:13px 3px;cursor:pointer;color:#71829b;font-size:12px;font-weight:700;list-style-position:inside}
+.lyrics-advanced[open] summary{margin-bottom:12px;border-bottom:1px solid #f1e7ef}
+.lyrics-advanced .lyrics-settings-grid{padding:2px 0 15px}
+.lyrics-advanced .lyrics-settings-switches{padding:10px 0}
+.shortcut-status{display:block;font-size:11px;line-height:1.5;color:#8499ad}
+.shortcut-status.unavailable{color:#bb7592}
+#view-settings .settings-card{max-width:880px;margin-inline:auto;width:100%;min-width:0}
+#view-settings .settings-card select,#view-settings .settings-card textarea,#view-settings .settings-card input{min-width:0}
+@media(max-width:1060px){.player-info{width:145px;flex-basis:145px}.player-volume{width:88px;flex-basis:88px}.player-volume input{width:65px}.desktop-lyrics-toggle{min-width:91px;padding:8px}}
+@media(max-width:840px){.player-artist{display:none}.player-info{width:100px;flex-basis:100px}.desktop-lyrics-toggle{font-size:10px;min-width:76px}.player-synced-line{font-size:11px}}

@@ -140,6 +140,8 @@
     return `${Math.floor(n/60)}:${String(n%60).padStart(2,'0')}`;
   }
   const parseLrc=window.MusicLRC.parseLrc;
+  const songMetadata=new Map();
+  const safeCoverUrl=url=>{try{const u=new URL(url);return u.protocol==='https:'&&/(^|\.)music\.(?:126|163)\.net$/.test(u.hostname)?u.href:null}catch{return null}};
   function clearLyrics(message='正在获取歌词…') {
     state.lyrics=[];state.lyricIndex=-1;
     $('#player-synced-line').textContent=message;
@@ -191,6 +193,7 @@
   function clockOff(){if(lyricFrame)cancelAnimationFrame(lyricFrame);lyricFrame=0;syncLyrics(true)}
   function updatePlayerControls(){
     $('#player-toggle').innerHTML=icon(!audio().paused&&!audio().ended?'pause':'play');
+    $('#immersive-toggle').textContent=!audio().paused&&!audio().ended?'Ⅱ':'▶';
     // Never mutate search-result download buttons. Only the player button reflects playback state.
     document.body.classList.toggle('immersive-paused',audio().paused);
     document.body.classList.toggle('immersive-active',!audio().paused);
@@ -204,9 +207,20 @@
   function renderImmersiveInfo(info){
     $('#immersive-title').textContent=info?.name||'等待播放';
     $('#immersive-artist').textContent=info?.artists||'本地音乐';
-    let art=info?.cover_url;
-    try{const u=new URL(art);if(u.protocol!=='https:'||!/(^|\.)music\.(?:126|163)\.net$/.test(u.hostname))art='';}catch{art='';}
+    const art=safeCoverUrl(info?.cover_url);
     $('#immersive-art').src=art||'../assets/avatar.png';
+    const mini=$('#player-cover-art');if(mini)mini.src=art||'../assets/avatar.png';
+  }
+  async function enrichLocalMetadata(id,token){
+    if(!id)return;
+    try{
+      let song=songMetadata.get(String(id));
+      if(!song){song=await bridge.songInfo(String(id));if(song)songMetadata.set(String(id),song)}
+      if(token!==state.playToken||!song)return;
+      const cover=safeCoverUrl(song.cover_url);
+      if(cover){state.playerInfo={...state.playerInfo,cover_url:cover};renderImmersiveInfo(state.playerInfo)}
+      if(song.artists && !state.playerInfo?.artists){state.playerInfo.artists=song.artists;$('#player-artist').textContent=song.artists;$('#immersive-artist').textContent=song.artists}
+    }catch{/* network metadata is optional; keep software icon as fallback */}
   }
   async function showBackground(){
     try{
@@ -235,6 +249,7 @@
     $('#player-song').textContent=info.name||'未知歌曲';
     $('#player-artist').textContent=(info.artists||'本地音乐')+(info.fromCache?' · 已缓存':' · 新缓存');
     renderImmersiveInfo(info);
+    void enrichLocalMetadata(id,token);
     clearLyrics();
     updateFloatingLine();
     if(token===state.playToken)void loadLyrics(id,token);
@@ -308,10 +323,17 @@
     catch(e){showToast('翻页失败：'+errMessage(e),true);}
     finally{setBusy(false);}
   }
+  async function prefetchLyricsForDownloads(ids){
+    // Prefetch concurrently with downloads, but never spawn 50 Python processes at once.
+    const pending=[...ids];
+    const worker=async()=>{while(pending.length){const id=pending.shift();try{await bridge.fetchLyrics(id)}catch{/* lyrics remain optional */}}};
+    await Promise.all(Array.from({length:Math.min(2,pending.length)},()=>worker()));
+  }
   async function downloadSongs(ids) {
     const unique=[...new Set((ids||[]).map(String))];
     if(!unique.length) return;
     state.activeDownloadBatches++;
+    void prefetchLyricsForDownloads(unique);
     setStatus(`已提交 ${unique.length} 首歌曲：最多 ${state.settings?.parallelDownloads||3} 首并行，其余自动排队。`);
     try {
       const res=await bridge.download(unique);
@@ -439,6 +461,34 @@
     }
     return s;
   }
+  function updateDesktopLyricsToggle(){
+    const on=!!state.floating;
+    const button=$('#toggle-desktop-lyrics');
+    button.setAttribute('aria-pressed',String(on));
+    button.setAttribute('aria-label',on?'关闭桌面歌词':'开启桌面歌词');
+    $('#desktop-lyrics-button-text').textContent=on?'桌面歌词 · 开':'桌面歌词 · 关';
+    $('#desktop-lyrics-enabled').checked=on;
+  }
+  async function toggleDesktopLyrics(next){
+    const enabled=typeof next==='boolean'?next:!state.floating;
+    const btn=$('#toggle-desktop-lyrics');btn.disabled=true;
+    try{
+      if(enabled){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine();}
+      else {await bridge.closeFloatingLyrics();state.floating=false;}
+      if(state.settings)state.settings=await bridge.saveSettings({...state.settings,desktopLyricsEnabled:enabled});
+      updateDesktopLyricsToggle();
+    }catch(e){showToast('桌面歌词切换失败：'+errMessage(e),true);}
+    finally{btn.disabled=false;}
+  }
+  async function updateShortcutStatus(){
+    try{
+      const result=await bridge.lyricsShortcutStatus();const el=$('#lyrics-shortcut-status');
+      if(!result.enabled){el.textContent='桌面歌词关闭时不占用系统快捷键';el.classList.remove('unavailable');return;}
+      if(result.registered){el.textContent=`快捷键已启用：${result.accelerator}`;el.classList.remove('unavailable');return;}
+      el.textContent=`${result.accelerator} 注册失败（可能被其他程序占用）。可在此修改后保存；主播放器开关仍然可用。`;
+      el.classList.add('unavailable');
+    }catch{}
+  }
   function renderSettings() {
     const s=state.settings;
     if(!s)return;
@@ -451,6 +501,7 @@
     $('#lyrics-shortcut').value=s.lyricsShortcut||'Control+Alt+L';
     $('#player-bg-path').value=s.playerBackgroundPath||'';
     void updateCacheStats();
+    updateDesktopLyricsToggle();void updateShortcutStatus();
   }
   function openFirstRun(reviewOnly=false){
     $('#agree-disclaimer').checked=false;$('#first-confirm').disabled=true;
@@ -474,7 +525,7 @@
       }
     });
     bridge.onDownloadTask(task=>displayDownloadJob(task));
-    bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open});
+    bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;updateDesktopLyricsToggle();});
     bridge.onOpenLyricsSettings(()=>showView('settings'));
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
     $('#create-playlist').addEventListener('click',async()=>{const name=prompt('新歌单名称：','我的歌单');if(!name?.trim())return;try{const p=await bridge.playlistsCreate(name);state.activePlaylistId=p.id;await refreshPlaylists()}catch(e){showToast(errMessage(e),true)}});
@@ -523,6 +574,7 @@
         state.settings = await bridge.saveSettings({...state.settings,downloadDir:$('#download-dir').value,quality:'best',cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),desktopLyricsEnabled:$('#desktop-lyrics-enabled').checked,lyricsShortcut:$('#lyrics-shortcut').value,floatingLyrics:readLyricsStyle(),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
         if(state.settings.desktopLyricsEnabled&&!state.floating){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine()}
         if(!state.settings.desktopLyricsEnabled&&state.floating){await bridge.closeFloatingLyrics();state.floating=false}
+        updateDesktopLyricsToggle();await updateShortcutStatus();
         setStatus('已保存下载设置。','ok');showToast('设置已保存。');
       } catch(e) {showToast(errMessage(e),true);}
     });
@@ -530,11 +582,13 @@
     audio().volume=.75;
     audio().addEventListener('timeupdate',()=>{
       $('#time-current').textContent=timeLabel(audio().currentTime);
+      $('#immersive-current').textContent=timeLabel(audio().currentTime);
       if(Number.isFinite(audio().duration) && audio().duration>0 && !$('#player-seek').matches(':active'))
         $('#player-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
+      if(Number.isFinite(audio().duration)&&audio().duration>0&&!$('#immersive-seek').matches(':active'))$('#immersive-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
       syncLyrics();
     });
-    audio().addEventListener('loadedmetadata',()=>{$('#time-duration').textContent=timeLabel(audio().duration);});
+    audio().addEventListener('loadedmetadata',()=>{$('#time-duration').textContent=timeLabel(audio().duration);$('#immersive-duration').textContent=timeLabel(audio().duration);});
     for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});});
     audio().addEventListener('seeked',()=>syncLyrics(true));
     audio().addEventListener('error',()=>{if(audio().src)showToast('音频无法播放，可能是文件格式或缓存失效。',true);});
@@ -545,7 +599,12 @@
     $('#player-seek').addEventListener('input',()=>{
       if(Number.isFinite(audio().duration)&&audio().duration>0)audio().currentTime=Number($('#player-seek').value)/1000*audio().duration;
     });
-    $('#player-volume').addEventListener('input',()=>{audio().volume=Number($('#player-volume').value)/100;});
+    $('#player-volume').addEventListener('input',()=>{audio().volume=Number($('#player-volume').value)/100;$('#immersive-volume').value=$('#player-volume').value});
+    $('#immersive-volume').addEventListener('input',()=>{audio().volume=Number($('#immersive-volume').value)/100;$('#player-volume').value=$('#immersive-volume').value});
+    $('#immersive-seek').addEventListener('input',()=>{if(Number.isFinite(audio().duration)&&audio().duration>0)audio().currentTime=Number($('#immersive-seek').value)/1000*audio().duration});
+    $('#immersive-toggle').addEventListener('click',()=>{if(!audio().src||state.preparing)return;audio().paused?audio().play().catch(e=>showToast(errMessage(e),true)):audio().pause()});
+    document.addEventListener('keydown',event=>{if(!state.immersive)return;if(event.key==='Escape'){showImmersive(false);event.preventDefault()}else if(event.code==='Space'&&!['INPUT','TEXTAREA','BUTTON'].includes(document.activeElement?.tagName)){event.preventDefault();audio().paused?audio().play().catch(()=>{}):audio().pause()}});
+    $('#toggle-desktop-lyrics').addEventListener('click',()=>toggleDesktopLyrics());
     $('#open-immersive').addEventListener('click',async()=>{showImmersive(!state.immersive);if(state.immersive)await showBackground()});
     $('#immersive-close').addEventListener('click',()=>showImmersive(false));
     $('#clear-cache').addEventListener('click',async()=>{
@@ -556,7 +615,7 @@
       try {await bridge.clearCache();await updateCacheStats();showToast('试听缓存已清理，下载目录中的音乐仍在。');}
       catch(e){showToast(errMessage(e),true);}
     });
-    try {state.settings=await bridge.getSettings();renderSettings();if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);if(state.settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine();}}
+    try {state.settings=await bridge.getSettings();renderSettings();if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);if(state.settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine();}updateDesktopLyricsToggle();await updateShortcutStatus();}
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
     catch(e){$('#python-label').textContent='Python 环境未就绪';setStatus(errMessage(e),'error');showToast(errMessage(e),true);}
