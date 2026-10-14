@@ -1,6 +1,6 @@
 <div align="center">
 
-# 音乐下载器 v1.0.3
+# 音乐下载器 v1.0.4
 
 **音乐下载 · 下载管理 · 本地播放 · 同步歌词**
 
@@ -20,7 +20,7 @@ Windows 桌面应用 / 单文件便携版
 
 ## 下载与运行
 
-普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.3-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
+普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.4-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
 
 开发者：使用 Node.js 20+ 与 Python 3.10+。首次运行 `安装依赖.bat`，以后使用 `启动桌面版.bat` 或 `npm start` 启动源码。需要自行生成便携版时可运行 `构建Windows_EXE.bat`。
 
@@ -33,7 +33,7 @@ Windows 桌面应用 / 单文件便携版
 | 文件名 | 中文说明 |
 |---|---|
 | `README.md` | 项目介绍、下载入口、运行方法和完整的文件说明。 |
-| `RELEASE_NOTES_v1.0.3.md` | 正式版发布内容、主要功能和 EXE 文件校验说明。 |
+| `RELEASE_NOTES_v1.0.4.md` | 正式版发布内容、主要功能和 EXE 文件校验说明。 |
 | `package.json` | 项目版本、依赖、启动命令以及 Electron 打包设置。 |
 | `main.js` | 桌面程序主进程，管理窗口、系统配置、歌曲下载与本地播放接口。 |
 | `preload.js` | 主窗口的安全通信接口，供前端调用本地功能。 |
@@ -144,7 +144,7 @@ python -m pytest -q tests
 
 使用下载内容时，请遵守适用法律和版权规定。
 
-## v1.0.3 更新
+## v1.0.4 更新
 
 - 我的歌单固定为一个，旧歌单记录合并，取消新建和切换歌单的控件。
 - 加入歌单时自动在音频和配套 LRC 文件名前添加 `[歌单] `；移出时恢复原文件名，发生文件名冲突时拒绝覆盖原文件。
@@ -153,7 +153,7 @@ python -m pytest -q tests
 - 搜索结果仅显示歌名和歌手，不再展示专辑、时长和来源 ID；播放器时间仍正常显示。
 - 悬浮歌词仅在有真实同步歌词时显示，停止显示无歌词时的占位白条。
 
-## v1.0.3 播放控制与歌词设置修复
+## v1.0.4 播放控制与歌词设置修复
 
 - 播放器增加上一首、下一首按钮，沉浸播放器也可切歌。
 - 歌单支持顺序、随机（无重复轮播且保留历史）、倒序播放；播放模式保存在当前电脑。
@@ -162,7 +162,7 @@ python -m pytest -q tests
 - 打开软件本身时，悬浮歌词自动避让主界面，不遮挡设置控件；切换到其他应用后才重新显示。
 - 新增播放导航和悬浮窗口焦点状态的自动回归测试。
 
-## v1.0.3 功能更新
+## v1.0.4 功能更新
 
 - 新增单曲循环和播完停止，保留原有顺序、随机、倒序模式。
 - 单歌单支持拖动歌曲改变播放顺序，重启后仍保存。

@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "description": "音乐下载器：批量下载、本地播放、歌单与同步歌词",
   "main": "main.js",
