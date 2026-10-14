@@ -76,12 +76,12 @@
       </section>
 
       <section id="view-playlists" class="view" aria-labelledby="playlists-title">
-        <div class="page-header"><div class="eyebrow">MY PLAYLIST</div><h1 id="playlists-title">我的歌单</h1><p>歌单内歌曲带有 [歌单] 文件名前缀，按顺序连续播放，最后一首结束后从第一首继续。</p></div>
+        <div class="page-header"><div class="eyebrow">MY PLAYLIST</div><h1 id="playlists-title">我的歌单</h1><p>歌单内歌曲带有 [歌单] 文件名前缀，按顺序连续播放，支持拖动歌曲调整顺序；顺序播放模式下，最后一首结束后会回到第一首。</p></div>
         <div class="local-list" id="my-playlist-tracks"><div class="empty-simple">下载歌曲后，可从「本地」添加到我的歌单。</div></div>
       </section>
       <section id="view-local" class="view" aria-labelledby="local-title">
         <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>文件名前有 [歌单] 表示已加入我的歌单。删除操作会移入回收站，不会直接永久删除。</p></div>
-        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button></div>
+        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button><button type="button" class="soft-action" id="import-local-files">导入音乐文件</button><button type="button" class="soft-action" id="import-local-folder">导入文件夹</button></div><p class="settings-hint">导入会复制音乐和同名歌词到下载目录，不移动你原来的文件。</p>
         <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
         <details id="local-downloads" class="local-downloads" hidden>
           <summary class="local-downloads-section"><strong>下载列表</strong><span id="download-list-summary">待处理任务</span><span class="download-chevron" aria-hidden="true">▾</span></summary>
@@ -162,7 +162,7 @@
           <button type="button" class="immersive-skip" id="immersive-prev" aria-label="上一首" title="上一首">◀◀</button>
           <button type="button" id="immersive-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button>
           <button type="button" class="immersive-skip" id="immersive-next" aria-label="下一首" title="下一首">▶▶</button>
-          <select id="immersive-mode" class="immersive-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option></select>
+          <select id="immersive-mode" class="immersive-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option><option value="repeat-one">单曲循环</option><option value="stop-after">播放完停止</option></select>
           <span id="immersive-current" class="immersive-time">0:00</span>
           <input id="immersive-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="沉浸播放进度">
           <span id="immersive-duration" class="immersive-time">0:00</span>
@@ -173,7 +173,7 @@
         <button type="button" class="player-cover player-cover-button" id="open-immersive" title="打开沉浸歌词" aria-label="打开沉浸式歌词播放器"><img id="player-cover-art" src="../assets/avatar.png" alt="正在播放的专辑封面"></button>
         <div class="player-info"><div class="player-song" id="player-song">还没有播放歌曲</div><div class="player-artist" id="player-artist">点选搜索结果中的播放按钮</div></div>
         <div class="player-center">
-          <div class="player-buttons"><button type="button" class="player-skip" id="player-prev" title="上一首" aria-label="上一首">◀◀</button><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><button type="button" class="player-skip" id="player-next" title="下一首" aria-label="下一首">▶▶</button><select class="player-mode" id="player-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option></select><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span><div class="desktop-lyric-actions"><button type="button" class="desktop-lyrics-toggle" id="toggle-desktop-lyrics" aria-pressed="false"><span class="toggle-indicator" aria-hidden="true"></span><span id="desktop-lyrics-button-text">桌面歌词 · 关</span></button><button type="button" class="desktop-lyrics-lock" id="toggle-desktop-lock" aria-pressed="false" aria-label="锁定桌面歌词" title="锁定后鼠标穿透">锁定歌词</button></div></div>
+          <div class="player-buttons"><button type="button" class="player-skip" id="player-prev" title="上一首" aria-label="上一首">◀◀</button><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><button type="button" class="player-skip" id="player-next" title="下一首" aria-label="下一首">▶▶</button><select class="player-mode" id="player-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option><option value="repeat-one">单曲循环</option><option value="stop-after">播放完停止</option></select><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span><div class="desktop-lyric-actions"><button type="button" class="desktop-lyrics-toggle" id="toggle-desktop-lyrics" aria-pressed="false"><span class="toggle-indicator" aria-hidden="true"></span><span id="desktop-lyrics-button-text">桌面歌词 · 关</span></button><button type="button" class="desktop-lyrics-lock" id="toggle-desktop-lock" aria-pressed="false" aria-label="锁定桌面歌词" title="锁定后鼠标穿透">锁定歌词</button><button type="button" class="mini-player-toggle" id="toggle-mini-player" aria-pressed="false">迷你 · 关</button></div></div>
           <div class="player-progress"><span id="time-current">0:00</span><input type="range" id="player-seek" min="0" max="1000" value="0" step="1" aria-label="播放进度"><span id="time-duration">0:00</span></div>
         </div>
         <div class="player-volume"><span data-icon="volume"></span><input id="player-volume" type="range" min="0" max="100" value="75" aria-label="音量"></div>
