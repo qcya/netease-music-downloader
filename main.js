@@ -607,8 +607,8 @@ app.whenReady().then(() => {
   ipcMain.handle('background:clear',()=>{writeConfig({...config(),playerBackgroundPath:''});return true});
   ipcMain.handle('background:get',()=>{
     const explicit=config().playerBackgroundPath;
-    // Optional locally supplied dynamic background. Intentionally excluded from public GitHub source.
-    const fallback=resources('assets','immersive-background.mp4');
+    // Bundled GitHub asset lives inside app.asar in packaged mode, not process.resourcesPath.
+    const fallback=path.join(__dirname,'assets','immersive-background-1080p.mp4');
     const file=explicit||fallback;
     if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:explicit?'missing':'default'};
     return {kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:grantMedia(file)};
