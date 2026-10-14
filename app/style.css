@@ -318,3 +318,24 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 #view-settings .settings-card select,#view-settings .settings-card textarea,#view-settings .settings-card input{min-width:0}
 @media(max-width:1060px){.player-info{width:145px;flex-basis:145px}.player-volume{width:88px;flex-basis:88px}.player-volume input{width:65px}.desktop-lyrics-toggle{min-width:91px;padding:8px}}
 @media(max-width:840px){.player-artist{display:none}.player-info{width:100px;flex-basis:100px}.desktop-lyrics-toggle{font-size:10px;min-width:76px}.player-synced-line{font-size:11px}}
+
+
+/* v1.0.2: fast transport, playback order, and immediately accessible lyrics lock. */
+.player-buttons{gap:7px;align-items:center}
+.player-skip{border:0;border-radius:10px;padding:7px 8px;background:#f4e4f0;color:#836783;cursor:pointer;white-space:nowrap;font-size:10px;flex-shrink:0}
+.player-skip:hover{background:#ecd3e5}
+.player-skip:disabled,.desktop-lyrics-lock:disabled{opacity:.48;cursor:default}
+.player-mode{width:64px;min-width:64px;flex-shrink:0;border:1px solid #e6dced;border-radius:10px;padding:7px 2px;background:#f9f5fb;color:#778297;font-size:11px;cursor:pointer}
+.desktop-lyric-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.desktop-lyrics-lock{border:1px solid #d5e4f4;border-radius:12px;padding:8px 10px;background:#f3f8ff;color:#768ba7;font-weight:700;font-size:11px;white-space:nowrap;cursor:pointer}
+.desktop-lyrics-lock[aria-pressed="true"]{border-color:#e5b5d8;background:#fce3f1;color:#a65e95}
+.desktop-lyrics-toggle{min-width:0}
+.lyric-style-preview{padding:15px 18px;margin-top:2px;border-radius:13px;background:linear-gradient(125deg,#74859f,#9d8eaa);text-align:center;overflow-wrap:anywhere;--lyric-primary-color:#fff;--lyric-secondary-color:#fff;--lyric-glow-radius:14px}
+.lyric-style-preview .lyric{font-size:30px;font-weight:740;line-height:1.28}
+.lyric-style-preview .translate{font-size:18px;margin-top:2px}
+.lyric-style-preview[hidden]{display:none!important}
+.immersive-skip{border:0;border-radius:50%;width:38px;height:38px;background:#ffffff28;color:#fff;cursor:pointer;font-size:12px}
+.immersive-mode{max-width:75px;min-width:62px;border:1px solid #ffffff50;border-radius:10px;background:#2839518c;color:white;padding:7px 5px;font-size:12px;cursor:pointer}
+.immersive-mode option{color:#333}
+@media(max-width:1120px){.player-buttons{gap:5px}.player-mode{width:56px;min-width:56px;font-size:10px}.desktop-lyrics-lock{padding:7px 6px;font-size:10px}.player-synced-line{font-size:11px}.desktop-lyric-actions{gap:4px}}
+@media(max-width:960px){.player-synced-line{display:none}.desktop-lyrics-toggle{padding:7px 6px}}

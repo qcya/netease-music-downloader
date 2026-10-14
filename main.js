@@ -517,7 +517,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.0', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.2', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -530,7 +530,10 @@ function createWindow() {
     win.setAppDetails({appId: APPLICATION_ID, appIconPath: appIcon(), appIconIndex:0});
   }
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  // Desktop lyrics must not cover/intercept our own controls while this window is active.
+  win.on?.('focus',()=>floatingLyrics.setMainFocused(true));
+  win.on?.('blur',()=>floatingLyrics.setMainFocused(false));
+  win.once('ready-to-show', () => {win.show();floatingLyrics.setMainFocused(true)});
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({action:'deny'}));
 }
@@ -665,6 +668,7 @@ app.whenReady().then(() => {
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
+  ipcMain.handle('lyrics:preview-style',(_e,style)=>{floatingLyrics.applySettings(normalizeLyrics(style));return true});
   ipcMain.handle('lyrics:resize',(event,height)=>{if(!floatingLyrics.owns(event.sender))throw new Error('仅桌面歌词窗口可调整高度');return floatingLyrics.resizeTo(height)});
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));
   ipcMain.handle('favorites:retry-lyrics',async(_e, id)=>{
