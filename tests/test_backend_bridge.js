@@ -20,6 +20,7 @@ class Window {
   show(){}
   isDestroyed(){return this.closed}
   setAppDetails(){}
+  setIcon(){}
   static getAllWindows(){return []}
 }
 const electron = {
