@@ -15,6 +15,8 @@ test('floating lyric preference defaults and user input normalization',()=>{
 test('legacy preset becomes white glow without destroying customized palette',()=>{
  const migrated=normalizeLyrics({originalColor:'#F6A8C8',translationColor:'#AFCFFF',outlineWidth:2});
  assert.equal(migrated.originalColor,'#FFFFFF');assert.equal(migrated.translationColor,'#FFFFFF');assert.equal(migrated.outlineWidth,0);assert.equal(migrated.glow,14);
+ const previousWhite=normalizeLyrics({originalColor:'#FFFFFF',translationColor:'#FFFFFF',outlineWidth:0,glow:16});
+ assert.equal(previousWhite.glow,14);
  const custom=normalizeLyrics({originalColor:'#FF00FF',translationColor:'#00FFFF',glow:28});
  assert.equal(custom.originalColor,'#FF00FF');assert.equal(custom.translationColor,'#00FFFF');assert.equal(custom.glow,28);
 });
