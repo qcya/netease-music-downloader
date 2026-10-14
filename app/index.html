@@ -83,8 +83,10 @@
         <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>完整下载的音乐，以及尚在下载中的任务。播放直接读取本地文件。</p></div>
         <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button></div>
         <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
-        <div class="local-downloads-section"><strong>下载列表</strong><span>任务完成后会自动刷新本地歌曲</span></div>
-        <div class="task-list" id="task-list"><div class="empty-simple">暂无下载任务</div></div>
+        <details id="local-downloads" class="local-downloads" hidden>
+          <summary class="local-downloads-section"><strong>下载列表</strong><span id="download-list-summary">待处理任务</span><span class="download-chevron" aria-hidden="true">▾</span></summary>
+          <div class="task-list" id="task-list"></div>
+        </details>
       </section>
       <section id="view-settings" class="view" aria-labelledby="settings-title">
         <div class="page-header"><div class="eyebrow">PREFERENCES</div><h1 id="settings-title">下载设置</h1><p>保存位置和音质偏好，仅影响后续下载。</p></div>
@@ -124,15 +126,13 @@
               <label><input type="checkbox" id="lyr-show-translation" checked> 显示翻译</label>
               <label><input type="checkbox" id="lyr-always-on-top" checked> 始终置顶</label>
               <label><input type="checkbox" id="lyr-auto-hide-empty"> 无歌词时自动隐藏文字</label>
-              <label><input type="checkbox" id="lyr-mouse-through"> 锁定位置并鼠标穿透（可在主界面解锁）</label>
+              <label><input type="checkbox" id="lyr-mouse-through"> 锁定位置（右键仍可解锁）</label>
             </div>
             <div class="lyrics-settings-actions"><button type="button" class="soft-action" id="lyr-reset">恢复默认歌词风格</button><button type="button" class="subtle-action" id="lyr-test">打开歌词预览</button></div>
           </div>
           <div class="lyrics-customize"><strong>桌面歌词与沉浸播放</strong>
             <label class="setting-row"><input id="desktop-lyrics-enabled" type="checkbox"> 启用桌面悬浮歌词（启动后默认不显示）</label>
-            <label for="lyrics-shortcut">桌面歌词锁定 / 解锁快捷键</label><input id="lyrics-shortcut" readonly placeholder="按 Ctrl + Alt + L 等组合键录制" title="点击后按下快捷键，Delete 恢复默认快捷键">
-            <p id="lyrics-shortcut-status" class="settings-hint" role="status">快捷键状态待检查</p>
-            <p class="settings-hint">右键悬浮歌词可打开菜单。锁定穿透鼠标后，仍可使用快捷键解锁。</p>
+            <p class="settings-hint">整块桌面歌词可拖动，右键弹出锁定、解锁、设置及关闭菜单。无需占用系统快捷键。</p>
             <label for="player-bg-path">沉浸播放背景</label>
             <div class="input-button"><input id="player-bg-path" readonly placeholder="默认使用粉蓝渐变；可选择本地图片或视频"><button id="pick-player-bg" type="button">选择背景</button><button id="clear-player-bg" type="button">恢复默认</button></div>
             <p class="settings-hint">可选择本地视频作为动态背景；若 assets/immersive-background.mp4 存在则自动使用。个人视频不会上传至公开仓库。</p>
@@ -146,17 +146,18 @@
         <video id="immersive-bg-video" class="immersive-bg" muted loop playsinline preload="metadata" hidden></video>
         <div class="immersive-scrim"></div>
         <div class="immersive-layout">
-          <div class="immersive-left">
+          <header class="immersive-heading">
             <button type="button" id="immersive-close" class="immersive-return">← 返回音乐</button>
-            <div class="immersive-title" id="immersive-title">等待播放</div>
-            <div class="immersive-artist" id="immersive-artist">音乐下载器</div>
-            <div class="immersive-record"><div class="immersive-record-cover" id="immersive-record-cover"><img id="immersive-art" src="../assets/avatar.png" alt="唱片封面"></div></div>
-            <div class="immersive-caption">星海音乐 · 歌词可视化</div>
-          </div>
-          <div class="immersive-right" id="immersive-lyrics"><div class="immersive-empty">播放一首歌，歌词会在这里随旋律滚动</div></div>
+            <div class="immersive-track-info">
+              <div class="immersive-title" id="immersive-title">等待播放</div>
+              <div class="immersive-title-extra" id="immersive-title-extra" hidden></div>
+              <div class="immersive-artist" id="immersive-artist">音乐下载器</div>
+            </div>
+          </header>
+          <div class="immersive-right" id="immersive-lyrics" aria-label="同步歌词"><div class="immersive-empty">播放一首歌，歌词会在这里随旋律滚动</div></div>
         </div>
         <div class="immersive-controls" role="group" aria-label="沉浸播放器操作">
-          <button type="button" id="immersive-toggle" aria-label="播放或暂停">▶</button>
+          <button type="button" id="immersive-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button>
           <span id="immersive-current" class="immersive-time">0:00</span>
           <input id="immersive-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="沉浸播放进度">
           <span id="immersive-duration" class="immersive-time">0:00</span>
@@ -184,6 +185,7 @@
   </div>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
   <script src="lrc.js"></script>
+  <script src="lyric_navigation.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

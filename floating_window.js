@@ -19,7 +19,8 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   return {open:true};
  }
  function close(){if(exists())floating.close();return {open:false}}
- function lock(value){locked=!!value;if(!exists())return {open:false};floating.setIgnoreMouseEvents(locked,{forward:true});floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
+ function lock(value){locked=!!value;if(!exists())return {open:false};floating.setIgnoreMouseEvents(false);; // keep right-click usable even when position is locked
+  floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
  function update(info){if(!exists()||!info||typeof info!=='object')return false;
   floating.webContents.send('lyrics:text',{title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)});return true;}
  function applySettings(s){if(!exists())return;
@@ -46,9 +47,9 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
    floating.setPosition(nextX,nextY,false);return true;
  }
  function dragEnd(){dragStart=null;return true;}
- function showMenu(){if(!exists()||locked)return false;
+ function showMenu(){if(!exists())return false;
    const menu=Menu.buildFromTemplate([
-     {label:'锁定位置 / 鼠标穿透',click:()=>lockAndSave(true)},
+     {label:locked?'解锁位置（允许拖动）':'锁定位置',click:()=>lockAndSave(!locked)},
      {label:'打开歌词设置',click:()=>{const main=getMainWindow();if(main&&!main.isDestroyed()){main.show();main.focus();main.webContents.send('lyrics:open-settings');}}},
      {type:'separator'},
      {label:'关闭桌面歌词',click:()=>close()}

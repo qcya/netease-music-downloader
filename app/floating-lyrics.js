@@ -35,10 +35,10 @@ function paint(){
 }
 // Do not use -webkit-app-region:drag: Windows suppresses right-click in draggable areas.
 // Cursor position is read by the main process, and the entire transparent overlay is draggable.
-let dragging=false;
+let dragging=false,locked=false;
 function endDrag(){if(!dragging)return;dragging=false;window.floatingBridge.dragEnd();}
 document.body.addEventListener('pointerdown',event=>{
-  if(event.button!==0)return;
+  if(event.button!==0||locked)return;
   dragging=true;
   document.body.setPointerCapture?.(event.pointerId);
   window.floatingBridge.dragBegin();
@@ -53,8 +53,8 @@ document.body.addEventListener('contextmenu',event=>{
   event.preventDefault();endDrag();window.floatingBridge.showMenu();
 });
 window.floatingBridge.onText(info=>{lastInfo=info||lastInfo;paint()});
-window.floatingBridge.onSettings(next=>{prefs=next;paint()});
-window.floatingBridge.onLocked(locked=>{$('widget').dataset.locked=String(locked)});
+window.floatingBridge.onSettings(next=>{prefs=next;locked=!!next?.mouseThrough;paint()});
+window.floatingBridge.onLocked(value=>{locked=!!value;$('widget').dataset.locked=String(locked)});
 window.addEventListener('resize',measure);
 new ResizeObserver(measure).observe($('widget'));
-window.floatingBridge.getSettings().then(next=>{prefs=next;paint()}).catch(()=>paint());
+window.floatingBridge.getSettings().then(next=>{prefs=next;locked=!!next?.mouseThrough;paint()}).catch(()=>paint());

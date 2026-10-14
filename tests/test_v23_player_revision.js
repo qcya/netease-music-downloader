@@ -27,9 +27,10 @@ test('floating lyrics window has no header and transparent chrome',()=>{
  assert.match(css,/\.widget\[data-background="none"\].*background:rgba\(0,0,0,0\)/);
 });
 
-test('desktop lyric toggle and registered shortcut status exist',()=>{
+test('desktop lyric toggle exists, shortcut controls are removed',()=>{
  const html=src('app/index.html');
- for(const id of ['toggle-desktop-lyrics','desktop-lyrics-button-text','lyrics-shortcut-status'])assert.match(html,new RegExp(`id="${id}"`));
+ for(const id of ['toggle-desktop-lyrics','desktop-lyrics-button-text'])assert.match(html,new RegExp(`id="${id}"`));
+ assert.doesNotMatch(html,/lyrics-shortcut-status|id="lyrics-shortcut"/);
 });
 
 test('downloaded songs get source album art asynchronously without delaying audio',()=>{

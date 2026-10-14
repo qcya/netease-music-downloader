@@ -15,3 +15,7 @@ html,body{background:rgba(0,0,0,0)!important;border:0!important;outline:0!import
 .widget[data-background="none"]{background:rgba(0,0,0,0)!important;border:0!important;outline:0!important;box-shadow:none!important}
 :focus,:focus-visible{outline:0!important}
 
+
+/* Transparent hit-test surface for Windows: visually invisible but accepts pointer events everywhere. */
+body{background:rgba(24,25,38,.006)!important}
+.widget[data-background="none"]{background:rgba(24,25,38,.006)!important}

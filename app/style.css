@@ -310,8 +310,6 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 .lyrics-advanced[open] summary{margin-bottom:12px;border-bottom:1px solid #f1e7ef}
 .lyrics-advanced .lyrics-settings-grid{padding:2px 0 15px}
 .lyrics-advanced .lyrics-settings-switches{padding:10px 0}
-.shortcut-status{display:block;font-size:11px;line-height:1.5;color:#8499ad}
-.shortcut-status.unavailable{color:#bb7592}
 #view-settings .settings-card{max-width:880px;margin-inline:auto;width:100%;min-width:0}
 #view-settings .settings-card select,#view-settings .settings-card textarea,#view-settings .settings-card input{min-width:0}
 @media(max-width:1060px){.player-info{width:145px;flex-basis:145px}.player-volume{width:88px;flex-basis:88px}.player-volume input{width:65px}.desktop-lyrics-toggle{min-width:91px;padding:8px}}

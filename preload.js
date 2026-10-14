@@ -27,7 +27,6 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   lockFloatingLyrics:locked=>ipcRenderer.invoke('lyrics:lock',locked),
   updateFloatingLyrics:data=>ipcRenderer.invoke('lyrics:update',data),
   floatingLyricsStatus:()=>ipcRenderer.invoke('lyrics:status'),
-  lyricsShortcutStatus:()=>ipcRenderer.invoke('lyrics:shortcut-status'),
   lyricsPreferences:()=>ipcRenderer.invoke('lyrics:preferences'),
   onOpenLyricsSettings:cb=>{const listener=()=>cb();ipcRenderer.on('lyrics:open-settings',listener);return()=>ipcRenderer.removeListener('lyrics:open-settings',listener)},
   onFloatingLyricsStatus:cb=>{const listener=(_e,data)=>cb(data);ipcRenderer.on('lyrics:status',listener);return()=>ipcRenderer.removeListener('lyrics:status',listener)},

@@ -1,13 +1,13 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "private": true,
-  "description": "粉蓝音乐管理器开发版：本地歌单、完整音乐下载、沉浸歌词和桌面歌词",
+  "description": "网易云音乐下载器源码开发版：独立桌面歌词、居中沉浸播放、本地歌单与并行下载",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build:win": "npm run check && npm run build:backend && electron-builder --win portable --x64",
-    "check": "node --check main.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check lyric_preferences.js && node --check backend_runtime.js && node --check app_logger.js && node --check app/lrc.js && node --check app/renderer.js && node --check app/floating-lyrics.js",
+    "check": "node --check main.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check lyric_preferences.js && node --check backend_runtime.js && node --check app_logger.js && node --check app/lrc.js && node --check app/lyric_navigation.js && node --check app/renderer.js && node --check app/floating-lyrics.js",
     "build:backend": "python scripts/build_backend.py"
   },
   "devDependencies": {

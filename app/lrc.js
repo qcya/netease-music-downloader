@@ -1,5 +1,16 @@
 'use strict';
 (function (root) {
+  function splitBilingual(raw) {
+    const text = String(raw || '').trim();
+    // Example: 迎えたくはないな1秒前（不想接受事实的1秒前）
+    // Match a trailing Chinese translation without stripping ordinary Chinese song subtitles.
+    const m = /^(.*?)\s*[（(]\s*([^（）()]*[\u3400-\u9fff][^（）()]*)\s*[）)]\s*$/.exec(text);
+    if (!m) return {original:text, translation:''};
+    const original=m[1].trim(), translated=m[2].trim();
+    const nonChinese = /[\u3040-\u30ff\uac00-\ud7af]/.test(original) || /[A-Za-z]{2,}/.test(original);
+    if (!original || !nonChinese || !translated) return {original:text, translation:''};
+    return {original, translation:translated};
+  }
   function parseLrc(text, translated = '') {
     const rows = [];
     const offsetTag = /\[offset\s*:\s*(-?\d+)\s*\]/i.exec(text || '');
@@ -22,10 +33,16 @@
     extract(text, rows);
     extract(translated, translatedMap);
     rows.sort((a, b) => a.time - b.time);
-    for (const row of rows) row.translation = translatedMap.get(Math.round(row.time * 100)) || '';
+    for (const row of rows) {
+      const bilingual=splitBilingual(row.text);
+      row.text=bilingual.original;
+      // Dedicated tlyric is authoritative; inline translations are a fallback.
+      row.translation=translatedMap.get(Math.round(row.time * 100)) || bilingual.translation;
+      row.translation=row.translation.replace(/^[（(]\s*|\s*[）)]$/g, '').trim();
+    }
     return rows;
   }
-  const api = Object.freeze({parseLrc});
+  const api = Object.freeze({parseLrc,splitBilingual});
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.MusicLRC = api;
 })(typeof window !== 'undefined' ? window : null);

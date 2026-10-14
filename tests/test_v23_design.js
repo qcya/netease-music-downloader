@@ -12,15 +12,15 @@ test('download action no longer changes into pause/heart buttons',()=>{
  const method=js.split('function updatePlayerControls(){')[1].split('function showImmersive')[0];
  assert.ok(!method.includes(".track-action"));
 });
-test('full lyrics page adapted to supplied left-vinyl right-lyrics HTML reference',()=>{
+test('immersive player centers the lyrics without vinyl artwork',()=>{
  const html=read('app/index.html'),css=read('app/immersive.css');
- assert.match(html,/immersive-record/);assert.match(html,/immersive-right/);
- assert.match(css,/grid-template-columns/);assert.match(css,/scroll-behavior:smooth/);
+ assert.doesNotMatch(html,/immersive-record/);assert.match(html,/immersive-right/);
+ assert.match(html,/immersive-heading/);assert.match(css,/flex-direction:column/);assert.match(css,/scroll-behavior:smooth/);
  assert.match(html,/immersive-bg-video/);
 });
-test('desktop lyrics defaults to off and shortcut is configurable',()=>{
+test('desktop lyrics stays manually controlled without registering global shortcuts',()=>{
  const main=read('main.js'),html=read('app/index.html');
- assert.match(main,/desktopLyricsEnabled:false/);assert.match(main,/globalShortcut\.register/);
- assert.match(html,/id="lyrics-shortcut"/);
+ assert.match(main,/desktopLyricsEnabled:false/);assert.doesNotMatch(main,/globalShortcut/);
+ assert.doesNotMatch(html,/id="lyrics-shortcut"/);
  assert.ok(!read('app/floating-lyrics.html').includes('title="左键拖动'));
 });

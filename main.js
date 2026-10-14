@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -167,35 +167,6 @@ function changeLocalPlaylist(id,name,add){
   if(!add)p.tracks=p.tracks.filter(x=>x!==name);
   savePlaylists(rows);return p;
 }
-const DEFAULT_SHORTCUT='Control+Alt+L';
-function validShortcut(value){return typeof value==='string'&&/^(?:(?:Control|Alt|Shift|Super)\+){1,3}(?:[A-Z0-9]|F(?:[1-9]|1[0-2]))$/.test(value)&&/(?:Control|Alt|Super)\+/.test(value)}
-let activeShortcut=null;
-let failedShortcut=null;
-let shortcutState={enabled:false,registered:false,accelerator:DEFAULT_SHORTCUT};
-function registerLyricsShortcut(next,enabled=config().desktopLyricsEnabled){
-  const accelerator=validShortcut(next)?next:DEFAULT_SHORTCUT;
-  if(!globalShortcut?.register)return shortcutState;
-  if(!enabled){
-    if(activeShortcut)globalShortcut.unregister(activeShortcut);
-    activeShortcut=null;failedShortcut=null;
-    shortcutState={enabled:false,registered:false,accelerator};
-    return shortcutState;
-  }
-  if(activeShortcut===accelerator)return shortcutState;
-  if(failedShortcut===accelerator)return shortcutState; // don't spam the same OS conflict
-  if(activeShortcut)globalShortcut.unregister(activeShortcut);
-  activeShortcut=null;
-  const success=globalShortcut.register(accelerator,()=>{
-    if(!floatingLyrics.exists()){floatingLyrics.open();return;}
-    const locked=!!config().floatingLyrics.mouseThrough;
-    floatingLyrics.lockAndSave(!locked);
-  });
-  failedShortcut=success?null:accelerator;
-  if(success)activeShortcut=accelerator;
-  shortcutState={enabled:true,registered:success,accelerator};
-  if(!success)console.warn('桌面歌词快捷键被占用，可在设置中修改：',accelerator);
-  return shortcutState;
-}
 function cachedManifest() {
   const rows = readJSON(manifestFile(), {});
   return rows && typeof rows === 'object' && !Array.isArray(rows) ? rows : {};
@@ -287,7 +258,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -296,7 +267,7 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,lyricsShortcut:validShortcut(stored.lyricsShortcut)?stored.lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -322,13 +293,12 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,lyricsShortcut:validShortcut(value.lyricsShortcut)?value.lyricsShortcut:DEFAULT_SHORTCUT,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
   downloadQueue.setLimit(parallelDownloads);
   floatingLyrics.applySettings(result.floatingLyrics);
-  registerLyricsShortcut(result.lyricsShortcut,result.desktopLyricsEnabled);
   return result;
 }
 
@@ -579,7 +549,6 @@ app.whenReady().then(() => {
   process.on('uncaughtException',e=>logger.error('uncaught',e?.message||e));
   process.on('unhandledRejection',e=>logger.error('promise',e?.message||e));
   downloadQueue.setLimit(config().parallelDownloads);
-  registerLyricsShortcut(config().lyricsShortcut,config().desktopLyricsEnabled);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
   const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
     const status=['queued','running'].includes(entry.status)?'failed':entry.status;
@@ -692,7 +661,6 @@ app.whenReady().then(() => {
   ipcMain.handle('lyrics:lock',(_e,lock)=>{const s=config();s.floatingLyrics.mouseThrough=!!lock;writeConfig(s);return floatingLyrics.lock(!!lock)});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
-  ipcMain.handle('lyrics:shortcut-status',()=>shortcutState);
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
   ipcMain.handle('lyrics:resize',(event,height)=>{if(!floatingLyrics.owns(event.sender))throw new Error('仅桌面歌词窗口可调整高度');return floatingLyrics.resizeTo(height)});
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));
@@ -729,5 +697,4 @@ app.whenReady().then(() => {
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 });
-app.on('will-quit',()=>{globalShortcut?.unregisterAll?.()});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

@@ -14,7 +14,7 @@ test('first run presents disclaimer only; paths are edited in settings',()=>{
 test('external lyric window, downloads and immersive player are wired',()=>{
  for(const name of ['floating-preload.js','app/floating-lyrics.html','app/floating-lyrics.css','app/floating-lyrics.js','app/immersive.css'])assert.ok(fs.existsSync(path.join(root,name)),name);
  const html=get('app/index.html'),main=get('main.js'),renderer=get('app/renderer.js');
- for(const id of ['task-list','immersive-player','immersive-lyrics','open-immersive','page-next','desktop-lyrics-enabled','lyrics-shortcut'])assert.ok(html.includes(`id="${id}"`),id);
+ for(const id of ['task-list','immersive-player','immersive-lyrics','open-immersive','page-next','desktop-lyrics-enabled'])assert.ok(html.includes(`id="${id}"`),id);
  assert.match(get('floating_window.js'),/setIgnoreMouseEvents/);
  assert.match(main,/ipcMain\.handle\('playlists:add'/);
  assert.match(renderer,/requestAnimationFrame\(lyricClock\)/);
