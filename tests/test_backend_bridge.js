@@ -32,7 +32,7 @@ const electron = {
   BrowserWindow:Window,
   ipcMain:{handle(k,cb){handlers.set(k,cb)}},
   dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
-  shell:{openPath:async()=>'',openExternal:async()=>true},
+  shell:{openPath:async()=>'',openExternal:async()=>true,trashItem:async file=>fs.rmSync(file)},
   protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){if(scheme==='music-media')mediaHandler=cb;else if(scheme==='music-preview')previewHandler=cb;}}
 };
 const nativeLoad=Module._load;
@@ -142,4 +142,22 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   await invoke('favorites:remove','12345');
   assert.equal((await invoke('favorites:list')).length,0);
   assert.ok(fs.existsSync(favorite.audioPath),'移出收藏不应删除无损文件');
+  // User-managed local playlist: add, real disk prefix, playback, remove, and safe delete.
+  const originalFile=path.basename(downloaded.results[0].path);
+  const added=await invoke('playlists:add','default',originalFile);
+  assert.deepEqual(added[0].tracks,['[歌单] '+originalFile]);
+  const inList=await invoke('local:list');
+  assert.equal(inList.some(file=>file.inPlaylist&&file.name==='[歌单] '+originalFile),true);
+  const fromPlaylist=await invoke('local:play','[歌单] '+originalFile);
+  assert.match(fromPlaylist.url,/^file:\/\//);
+  assert.equal(fromPlaylist.id,'12345');
+  const restored=await invoke('playlists:remove','default','[歌单] '+originalFile);
+  assert.deepEqual(restored[0].tracks,[]);
+  assert.ok(fs.existsSync(path.join(dl,originalFile)));
+  await invoke('playlists:add','default',originalFile);
+  await assert.rejects(invoke('local:delete','[歌单] '+originalFile,false),/确认/);
+  await invoke('local:delete','[歌单] '+originalFile,true);
+  assert.deepEqual((await invoke('playlists:list'))[0].tracks,[]);
+  assert.ok(!(await invoke('local:list')).some(file=>file.name==='[歌单] '+originalFile));
+
 });
