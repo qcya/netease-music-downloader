@@ -15,7 +15,7 @@ test('download action no longer changes into pause/heart buttons',()=>{
 test('immersive player centers the lyrics without vinyl artwork',()=>{
  const html=read('app/index.html'),css=read('app/immersive.css');
  assert.doesNotMatch(html,/immersive-record/);assert.match(html,/immersive-right/);
- assert.match(html,/immersive-heading/);assert.match(css,/flex-direction:column/);assert.match(css,/scroll-behavior:auto/);assert.match(src('app/renderer.js'),/behavior:force\?'instant':'smooth'/);
+ assert.match(html,/immersive-heading/);assert.match(css,/flex-direction:column/);assert.match(css,/scroll-behavior:auto/);assert.match(js,/behavior:force\?'instant':'smooth'/);
  assert.match(html,/immersive-bg-video/);
 });
 test('desktop lyrics stays manually controlled without registering global shortcuts',()=>{
