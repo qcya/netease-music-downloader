@@ -12,6 +12,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
     frame:false,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
+  floating.setBackgroundColor?.('#00000000'); // Maintain transparent native backing layer.
   floating.once('ready-to-show',()=>{if(exists()){floating.show();floating.webContents.send('lyrics:settings',safeSettings());lock(!!safeSettings().mouseThrough);}});
   floating.on('closed',()=>{dragStart=null;floating=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
   floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -42,7 +43,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   const maxH=work?Math.max(56,work.height-24):560;
   const next=Math.min(h,maxH);
   const y=work?Math.min(Math.max(b.y,work.y),work.y+work.height-next):b.y;
-  floating.setBounds({...b,y,height:next});currentHeight=next;return true;
+  floating.setBounds({...b,y,height:next});floating.setBackgroundColor?.('#00000000');currentHeight=next;return true;
  }
  function dragBegin(){if(!exists()||locked)return false;dragStart={cursor:screen.getCursorScreenPoint(),bounds:floating.getBounds()};return true;}
  function dragMove(){if(!exists()||locked||!dragStart)return false;

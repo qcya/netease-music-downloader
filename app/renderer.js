@@ -561,7 +561,7 @@
       }
     }catch(e){showToast(errMessage(e),true)}
   }
-  const defaultLyricStyle=()=>({background:'none',originalColor:'#FFFFFF',translationColor:'#FFFFFF',outlineColor:'#FFFFFF',outlineWidth:0,glow:16,
+  const defaultLyricStyle=()=>({background:'none',originalColor:'#FFFFFF',translationColor:'#FFFFFF',outlineColor:'#FFFFFF',outlineWidth:0,glow:14,
     shadow:2,fontSize:30,translationSize:18,lineHeight:1.28,width:800,align:'center',showOriginal:true,
     showTranslation:true,alwaysOnTop:true,opacity:100,autoHideEmpty:false,mouseThrough:false});
   const lyricInputs={background:'lyr-background',align:'lyr-align',originalColor:'lyr-original-color',
@@ -719,7 +719,15 @@
       try {await bridge.clearCache();await updateCacheStats();showToast('试听缓存已清理，下载目录中的音乐仍在。');}
       catch(e){showToast(errMessage(e),true);}
     });
-    try {state.settings=await bridge.getSettings();renderSettings();if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);if(state.settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine();}updateDesktopLyricsToggle();}
+    try {
+      // Desktop lyrics is manually opt-in for each application session.
+      // Do not reopen an overlay merely because a past session persisted 'enabled'.
+      state.settings={...await bridge.getSettings(),desktopLyricsEnabled:false};
+      state.floating=false;
+      renderSettings();
+      if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);
+      updateDesktopLyricsToggle();
+    }
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
     catch(e){$('#python-label').textContent='Python 环境未就绪';setStatus(errMessage(e),'error');showToast(errMessage(e),true);}

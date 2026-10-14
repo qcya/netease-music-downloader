@@ -38,3 +38,24 @@ test('user-selected background video is copied into durable application data',()
  assert.match(main,/kind:explicit\?'missing':'default'/);
  assert.match(renderer,/H\.264 MP4/);
 });
+
+test('immersive and floating lyric use shared, identical glow shadow layers',()=>{
+ const immersive=read('app/immersive.css'),floating=read('app/floating-lyrics.css');
+ const mainHtml=read('app/index.html'),floatHtml=read('app/floating-lyrics.html');
+ const shared=read('app/lyric-glow.css');
+ const defaults=require('../lyric_preferences.js').DEFAULT_LYRICS;
+ assert.match(mainHtml,/href="lyric-glow\.css"/);
+ assert.match(floatHtml,/href="lyric-glow\.css"/);
+ assert.match(shared,/\.immersive-line\.active,\.lyric\{/);
+ assert.match(shared,/\.immersive-line \.immersive-translation,\.translate\{/);
+ assert.match(shared,/0 4px 18px #20355f,0 0 var\(--lyric-glow-radius\) #fce5f7/);
+ assert.doesNotMatch(floating,/text-shadow:/);
+ assert.doesNotMatch(immersive,/\.immersive-line\.active\{[^}]*text-shadow/);
+ assert.equal(defaults.glow,14);
+});
+test('floating lyric overlay is opt-in every launch (never resumed from last saved on-state)',()=>{
+ const renderer=read('app/renderer.js'),main=read('main.js');
+ assert.match(renderer,/state\.settings=\{\.\.\.await bridge\.getSettings\(\),desktopLyricsEnabled:false\}/);
+ assert.doesNotMatch(renderer,/if\(state\.settings\.desktopLyricsEnabled\)\{await bridge\.showFloatingLyrics\(\)/);
+ assert.match(main,/desktopLyricsEnabled:false/);
+});
