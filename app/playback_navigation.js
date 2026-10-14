@@ -1,6 +1,6 @@
 'use strict';
 (function(root){
- const MODES=Object.freeze(['sequence','shuffle','reverse']);
+ const MODES=Object.freeze(['sequence','shuffle','reverse','repeat-one','stop-after']);
  const normalizeMode=mode=>MODES.includes(mode)?mode:'sequence';
  function shuffleIndices(length,exclude,rng=Math.random){
    const rows=Array.from({length},(_,i)=>i).filter(i=>i!==exclude);
@@ -16,10 +16,12 @@
    const type=normalizeMode(mode);
    return {tracks:rows,index:pos,mode:type,unplayed:type==='shuffle'?shuffleIndices(rows.length,pos,rng):[],past:[],ahead:[]};
  }
- function step(queue,direction=1,rng=Math.random){
+ function step(queue,direction=1,rng=Math.random,source='manual'){
    if(!queue?.tracks?.length)return null;
    const q={...queue,tracks:[...queue.tracks],unplayed:[...(queue.unplayed||[])],past:[...(queue.past||[])],ahead:[...(queue.ahead||[])]};
    const n=q.tracks.length,back=direction<0;
+   if(source==='ended'&&q.mode==='repeat-one')return q;
+   if(source==='ended'&&q.mode==='stop-after')return null;
    if(q.mode!=='shuffle'){
      const delta=(q.mode==='reverse'?-1:1)*(back?-1:1);
      q.index=(q.index+delta+n)%n;
