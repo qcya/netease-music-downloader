@@ -72,6 +72,13 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   await invoke('settings:set',{downloadDir:dl,quality:'best',apiBases:[`http://127.0.0.1:${server.address().port}`]});
   const savedSettings=await invoke('settings:get');
   assert.equal(savedSettings.setupCompleted,false);
+  await invoke('lyrics:lock',true);
+  assert.equal((await invoke('settings:get')).floatingLyrics.mouseThrough,true,'lock is persisted immediately');
+  await invoke('lyrics:lock',false);
+  assert.equal((await invoke('settings:get')).floatingLyrics.mouseThrough,false,'unlock is persisted immediately');
+  assert.equal(await invoke('lyrics:preview-style',{glow:22,originalColor:'#FFFFFF'}),true,'live style preview IPC is available');
+  assert.equal((await invoke('settings:get')).floatingLyrics.glow,14,'preview must not silently persist the appearance');
+
   assert.equal(savedSettings.favoritesDir,path.join(dl,'收藏'));
   const stream=await invoke('music:stream','12345');
   assert.match(stream.url,/^music-preview:\/\/audio\//);
