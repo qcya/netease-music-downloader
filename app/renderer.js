@@ -562,7 +562,7 @@
     }catch(e){showToast(errMessage(e),true)}
   }
   const defaultLyricStyle=()=>({background:'none',originalColor:'#FFFFFF',translationColor:'#FFFFFF',outlineColor:'#FFFFFF',outlineWidth:0,glow:16,
-    shadow:2,fontSize:30,translationSize:18,lineHeight:1.36,width:800,align:'center',showOriginal:true,
+    shadow:2,fontSize:30,translationSize:18,lineHeight:1.28,width:800,align:'center',showOriginal:true,
     showTranslation:true,alwaysOnTop:true,opacity:100,autoHideEmpty:false,mouseThrough:false});
   const lyricInputs={background:'lyr-background',align:'lyr-align',originalColor:'lyr-original-color',
     translationColor:'lyr-translation-color',outlineColor:'lyr-outline-color',outlineWidth:'lyr-outline-width',
