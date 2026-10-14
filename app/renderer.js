@@ -2,7 +2,7 @@
 (() => {
   const bridge = window.musicBridge;
   const $ = selector => document.querySelector(selector);
-  const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, favorites:new Set(), pendingFavorites:new Set(), downloadJobs:new Map(), activeDownloadBatches:0};
+  const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, favorites:new Set(), pendingFavorites:new Set(), downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false};
 
   const svg = {
     home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
@@ -62,8 +62,13 @@
     $('#download-selected').disabled = state.busy || !state.selected.size;
   }
   function trackCard(track) {
-    const card = node('article', 'song-card');
-    const art = node('div', 'track-icon'); art.innerHTML = icon('music');
+    const card=node('article','song-card');card.dataset.artist=(track.artists||'').toLowerCase();
+    const art = node('div', 'track-icon');art.innerHTML=icon('music');
+    // Only allow official music image CDN hosts; never render arbitrary API URLs.
+    try{const url=new URL(track.cover_url||'');if(url.protocol==='https:' && /(^|\.)music\.(?:126|163)\.net$/.test(url.hostname)){
+      const img=node('img','track-cover');img.src=url.href;img.alt='专辑封面';img.loading='lazy';
+      img.onerror=()=>img.remove();art.appendChild(img);
+    }}catch{}
     const info = node('div','track-info');
     const title = node('div','track-title',track.name || '未知歌曲'); title.title = track.name || '';
     const artist = node('div','track-meta',`歌手：${track.artists || '未知歌手'}`);
@@ -99,19 +104,21 @@
   }
   function jobText(job) {
     const scope=job.purpose==='favorite'?'收藏 · ':'';
-    const names={queued:'已排队',running:'下载中',completed:'已完成',failed:'失败'};
-    return scope+(names[job.status]||'准备中')+(job.error?`：${String(job.error).slice(0,100)}`:'');
+    const names={queued:'已排队',running:'下载中',completed:'已完成',failed:'失败',cancelled:'已取消'};
+    const pct=job.progress?.percent!=null?` ${job.progress.percent.toFixed(1)}%`:'';
+    const speed=job.progress?.speed ? ` · ${(job.progress.speed/1024/1024).toFixed(2)} MB/s`:'';
+    return scope+(names[job.status]||'准备中')+pct+speed+(job.error?`：${String(job.error).slice(0,100)}`:'');
   }
   function displayDownloadJob(job) {
     if(!job || !job.id) return;
     const id=String(job.id);
-    state.downloadJobs.set(id,job);
+    state.downloadJobs.set(id,{...(state.downloadJobs.get(id)||{}),...job});
     for(const el of document.querySelectorAll('.track-job-state')){
       if(el.dataset.songId===id){el.textContent=jobText(job);el.dataset.status=job.status;}
     }
     const panel=$('#download-activity');
     if(panel){
-      const counts={queued:0,running:0,completed:0,failed:0};
+      const counts={queued:0,running:0,completed:0,failed:0,cancelled:0};
       for(const entry of state.downloadJobs.values()){
         if(entry.status in counts)counts[entry.status]++;
       }
@@ -127,6 +134,7 @@
         detail.appendChild(item);
       }
     }
+    if(state.view==='tasks')void renderTasks();
   }
   const audio=()=>$('#music-audio');
   function timeLabel(seconds) {
@@ -148,6 +156,7 @@
       const message=result.lrc?.trim() ? result.lrc.slice(0,3500) : '这首歌暂时没有可用歌词';
       pane.appendChild(node('div','lyrics-empty',message));
       $('#player-synced-line').textContent=result.lrc?.trim()?'静态歌词（无时间轴）':'暂无歌词';
+      updateFloatingLine();
       return;
     }
     rows.forEach((row,i)=>{
@@ -175,6 +184,12 @@
       if(!$('#lyrics-panel').hidden)target?.scrollIntoView({behavior:force?'instant':'smooth',block:'center'});
       $('#player-synced-line').textContent=rows[idx].text;
     } else $('#player-synced-line').textContent='♪ 音乐即将开始';
+    updateFloatingLine();
+  }
+  function updateFloatingLine(){
+    if(!state.floating)return;
+    const row=state.lyrics[state.lyricIndex];
+    void bridge.updateFloatingLyrics({title:state.playerInfo?.name||'桌面歌词',line:row?.text||$('#player-synced-line').textContent,translation:row?.translation||''}).catch(()=>{});
   }
   function updatePlayerControls() {
     $('#player-toggle').innerHTML=icon(!audio().paused && !audio().ended ? 'pause':'play');
@@ -202,14 +217,17 @@
     $('#player-artist').textContent=(info.artists||'本地音乐')+(info.fromCache?' · 已缓存':' · 新缓存');
     $('#lyrics-song').textContent=(info.name||'未知歌曲')+' · '+(info.artists||'本地音频');
     clearLyrics();
+    updateFloatingLine();
     audio().src=url;
     audio().load();
     updatePlayerControls();
     state.preparing=false;
-    try {await audio().play();setStatus(`正在播放：${info.name||'音乐'}`,'ok');}
-    catch(e){if(token===state.playToken){setStatus('播放失败：当前音频格式可能不受系统支持','error');showToast('播放器无法解码此音频，请尝试下载 MP3 版本。',true);}}
+    let started=false;
+    try {await audio().play();started=true;setStatus(`正在播放：${info.name||'音乐'}`,'ok');}
+    catch(e){if(token===state.playToken)setStatus('试听源不可播放，正在尝试缓存备用音源…','error');}
     updatePlayerControls();
-    if(token===state.playToken)void loadLyrics(id,token);
+    if(token===state.playToken&&started)void loadLyrics(id,token);
+    return started;
   }
   async function playSong(track){
     if(!bridge || !track?.id)return;
@@ -226,9 +244,22 @@
     clearLyrics('正在准备音频…');
     setStatus(`正在准备「${track.name}」：首次播放先缓存较小的 MP3…`);
     try {
-      const info=await bridge.prepareAudio(id);
-      if(token===state.playToken)await startAudio({...info,name:track.name||info.name,artists:track.artists||info.artists},info.url,token,id);
-    } catch(e){if(token===state.playToken){state.preparing=false;setStatus(`无法试听：${errMessage(e)}`,'error');showToast(`无法试听：${errMessage(e)}`,true);}}
+      // 流式优先，接口不支持时自动退回已验证的本地 MP3 缓存。
+      let started=false;
+      try{
+        const info=await bridge.streamAudio(id);
+        if(token!==state.playToken)return;
+        started=await startAudio({...info,name:track.name,artists:track.artists},info.url,token,id);
+        if(started&&!info.fromCache){
+          // 同时后台准备完整缓存，后续再试听不必重复等待。
+          void bridge.prepareAudio(id).catch(()=>{});
+        }
+      }catch{}
+      if(!started && token===state.playToken){
+        const info=await bridge.prepareAudio(id);
+        if(token===state.playToken)await startAudio({...info,name:track.name||info.name,artists:track.artists||info.artists},info.url,token,id);
+      }
+    }catch(e){if(token===state.playToken){state.preparing=false;setStatus(`无法试听：${errMessage(e)}`,'error');showToast(`无法试听：${errMessage(e)}`,true);}}
   }
   async function playLocalFile(file) {
     if(state.busy || state.preparing){showToast('请稍后再试听。');return;}
@@ -258,6 +289,7 @@
     const suffix = Number.isInteger(total) && total > tracks.length ? ` / 共 ${total} 首` : '';
     $('#results-count').textContent = `显示 ${tracks.length} 首${suffix}`;
     $('#results-scroller').scrollTop = 0;
+    $('#artist-filter').value='';
   }
   async function search(event) {
     if (event) event.preventDefault();
@@ -266,13 +298,28 @@
     if (!q) {showToast('先输入歌名或歌手名。',true);$('#search-input').focus();return;}
     setBusy(true,`正在搜索「${q}」…`);
     try {
-      const result=await bridge.search(q);
+      state.query=q;state.page=1;
+      const result=await bridge.search(q,1);
       if (!result || !Array.isArray(result.results)) throw new Error('搜索接口没有返回歌曲列表');
       state.playlist=false;
       showTracks(result.results,result.total);
+      updatePagination(result);
       setStatus(result.results.length ? `搜索完成，找到 ${result.results.length} 条结果。选择歌曲后下载。` : '未找到匹配歌曲，请尝试其他关键词。','ok');
     } catch(e) {setStatus(`搜索失败：${errMessage(e)}`,'error');showToast(`搜索失败：${errMessage(e)}`,true);}
     finally {setBusy(false);}
+  }
+  function updatePagination(res){
+    state.total=Number(res.total||0);$('#page-label').textContent=`第 ${state.page} 页`;
+    $('#page-prev').disabled=state.page<=1;
+    $('#page-next').disabled=state.total>0?state.page*40>=state.total:(res.results?.length||0)<40;
+  }
+  async function changePage(delta){
+    if(state.busy||!state.query)return;
+    const next=state.page+delta;if(next<1)return;
+    setBusy(true,'正在读取第 '+next+' 页…');
+    try{const result=await bridge.search(state.query,next);state.page=next;showTracks(result.results,result.total);updatePagination(result);}
+    catch(e){showToast('翻页失败：'+errMessage(e),true);}
+    finally{setBusy(false);}
   }
   async function addToFavorites(track) {
     if(state.pendingFavorites.has(String(track.id))) return;
@@ -361,7 +408,7 @@
       const res=await bridge.playlist(id);
       if (!res || !Array.isArray(res.tracks)) throw new Error('歌单接口没有返回歌曲列表');
       showTracks(res.tracks,res.total);
-      state.playlist=true;
+      state.playlist=true;$('#page-prev').disabled=true;$('#page-next').disabled=true;$('#page-label').textContent='歌单曲目';
       if (res.possibly_incomplete) showToast('注意：接口可能只返回了歌单中的部分歌曲。',true);
       setStatus(`已读取 ${res.tracks.length} 首歌曲。可选择其中一首或多首下载。`,'ok');
     } catch(e) {showToast(errMessage(e),true);setStatus(`读取歌单失败：${errMessage(e)}`,'error');}
@@ -374,6 +421,7 @@
     if (view === 'local') await refreshLocal();
     if (view === 'favorites') await refreshFavorites();
     if (view === 'settings') renderSettings();
+    if (view === 'tasks') await renderTasks();
   }
   async function refreshLocal() {
     const parent=$('#local-list');parent.replaceChildren();
@@ -389,15 +437,42 @@
       }
     } catch(e) {showToast(errMessage(e),true);}
   }
+  async function renderTasks(){
+    const root=$('#task-list');if(!root)return;
+    try{const rows=await bridge.downloadHistory();root.replaceChildren();
+      if(!rows.length){root.appendChild(node('div','empty-simple','还没有下载任务'));return;}
+      for(const entry of rows){
+        const card=node('div','task-row');
+        const left=node('div','task-main');
+        const id=String(entry.id||'');const track=state.tracks.find(x=>String(x.id)===id);
+        left.append(node('strong','',track?.name||entry.name||`歌曲 ${id}`),node('span','',jobText(entry)));
+        const bar=node('div','task-progress');const fill=node('div','task-progress-fill');fill.style.width=`${Math.max(0,Math.min(100,Number(entry.progress?.percent||0)))}%`;bar.append(fill);left.append(bar);
+        const actions=node('div','task-actions');
+        if(['queued','running'].includes(entry.status)){const btn=node('button','subtle-action','取消');btn.onclick=async()=>{await bridge.cancelDownload(id);await renderTasks()};actions.append(btn)}
+        if(['failed','cancelled'].includes(entry.status)){const btn=node('button','soft-action','重试');btn.onclick=async()=>{btn.disabled=true;try{await bridge.retryDownload(id)}catch(e){showToast(errMessage(e),true)}finally{await renderTasks()}};actions.append(btn)}
+        card.append(left,actions);root.append(card);
+      }
+    }catch(e){showToast(errMessage(e),true)}
+  }
   function renderSettings() {
     const s=state.settings;
     if(!s)return;
     $('#download-dir').value=s.downloadDir;
+    $('#favorites-dir').value=s.favoritesDir||s.downloadDir+'\\收藏';
     $('#quality').value=s.quality;
     $('#api-bases').value=(s.apiBases||[]).join('\n');
     $('#cache-limit').value=String(s.cacheLimitMB||1024);
     $('#parallel-downloads').value=String(s.parallelDownloads||3);
     void updateCacheStats();
+  }
+  function openFirstRun(reviewOnly=false){
+    const s=state.settings||{};
+    $('#first-download-dir').value=s.downloadDir||'';
+    $('#first-favorites-dir').value=s.favoritesDir||'';
+    $('#agree-disclaimer').checked=false;
+    $('#first-confirm').disabled=true;
+    $('#first-run-title').textContent=reviewOnly?'使用说明与路径确认':'欢迎使用音乐下载器';
+    $('#first-run').hidden=false;
   }
   async function init() {
     attachIcons();
@@ -406,6 +481,7 @@
       // 进度消息只更新对应歌曲，不覆盖搜索与试听状态。
       const id=evt?.id;
       const message=String(evt?.message||'').trim().split('\n').filter(Boolean).pop();
+      if(id && evt.progress){const old=state.downloadJobs.get(String(id));if(old)displayDownloadJob({...old,progress:evt.progress});}
       if(id && message) {
         const entry=state.downloadJobs.get(String(id));
         if(entry?.status==='running') {
@@ -416,18 +492,35 @@
       }
     });
     bridge.onDownloadTask(task=>displayDownloadJob(task));
+    bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;$('#toggle-floating').classList.toggle('active',state.floating)});
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
     $('#search-form').addEventListener('submit',search);
     $('#example-search').addEventListener('click',()=>{$('#search-input').value='我的悲伤是水做的 洛天依';search();});
     $('#download-selected').addEventListener('click',()=>downloadSongs([...state.selected]));
+    $('#artist-filter').addEventListener('input',()=>{const q=$('#artist-filter').value.trim().toLowerCase();document.querySelectorAll('.song-card').forEach(card=>{card.hidden=!!q&&!card.dataset.artist.includes(q)})});
+    $('#page-prev').addEventListener('click',()=>changePage(-1));
+    $('#page-next').addEventListener('click',()=>changePage(1));
+    $('#pause-queue').addEventListener('click',async()=>{state.paused=!state.paused;await bridge.pauseDownloads(state.paused);$('#pause-queue').textContent=state.paused?'继续队列':'暂停队列'});
+    $('#refresh-tasks').addEventListener('click',renderTasks);
     $('#playlist-toggle').addEventListener('click',()=>$('#playlist-box').classList.toggle('hidden'));
     $('#playlist-box').addEventListener('submit',playlist);
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#pick-dir').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#download-dir').value=dir;});
+    $('#pick-favorites-dir').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#favorites-dir').value=dir;});
+    $('#show-disclaimer').addEventListener('click',()=>openFirstRun(true));
+    $('#first-pick-download').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#first-download-dir').value=dir;});
+    $('#first-pick-favorites').addEventListener('click',async()=>{const dir=await bridge.chooseDirectory();if(dir)$('#first-favorites-dir').value=dir;});
+    $('#agree-disclaimer').addEventListener('change',()=>{$('#first-confirm').disabled=!$('#agree-disclaimer').checked});
+    $('#first-confirm').addEventListener('click',async()=>{
+      if(!$('#agree-disclaimer').checked)return;
+      try{const s={...state.settings,downloadDir:$('#first-download-dir').value,favoritesDir:$('#first-favorites-dir').value,setupCompleted:true};
+        state.settings=await bridge.saveSettings(s);$('#first-run').hidden=true;renderSettings();showToast('保存目录与使用说明已确认。');}
+      catch(e){showToast('首次设置保存失败：'+errMessage(e),true)}
+    });
     $('#save-settings').addEventListener('click',async()=>{
       try {
-        state.settings = await bridge.saveSettings({downloadDir:$('#download-dir').value,quality:$('#quality').value,cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
+        state.settings = await bridge.saveSettings({downloadDir:$('#download-dir').value,favoritesDir:$('#favorites-dir').value,setupCompleted:true,quality:$('#quality').value,cacheLimitMB:Number($('#cache-limit').value),parallelDownloads:Number($('#parallel-downloads').value),apiBases:$('#api-bases').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)});
         setStatus('已保存下载设置。','ok');showToast('设置已保存。');
       } catch(e) {showToast(errMessage(e),true);}
     });
@@ -450,6 +543,12 @@
       if(Number.isFinite(audio().duration)&&audio().duration>0)audio().currentTime=Number($('#player-seek').value)/1000*audio().duration;
     });
     $('#player-volume').addEventListener('input',()=>{audio().volume=Number($('#player-volume').value)/100;});
+    $('#toggle-floating').addEventListener('click',async()=>{
+      try{if(state.floating){await bridge.closeFloatingLyrics();state.floating=false}else{await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine()}
+        $('#toggle-floating').classList.toggle('active',state.floating);}catch(e){showToast(errMessage(e),true)}
+    });
+    $('#unlock-floating').addEventListener('click',async()=>{try{await bridge.lockFloatingLyrics(false);showToast('悬浮歌词已解除鼠标穿透，可继续拖动。')}catch(e){showToast(errMessage(e),true)}});
+    $('#toggle-immersive').addEventListener('click',()=>$('#lyrics-panel').classList.toggle('immersive'));
     $('#toggle-lyrics').addEventListener('click',()=>{
       const panel=$('#lyrics-panel');panel.hidden=!panel.hidden;$('#toggle-lyrics').classList.toggle('active',!panel.hidden);
       if(!panel.hidden)syncLyrics(true);
@@ -464,7 +563,7 @@
       catch(e){showToast(errMessage(e),true);}
     });
     try {const rows=await bridge.listFavorites();state.favorites=new Set(rows.map(r=>String(r.id)));} catch {}
-    try {state.settings=await bridge.getSettings();renderSettings();}
+    try {state.settings=await bridge.getSettings();renderSettings();if(!state.settings.setupCompleted)openFirstRun(false);}
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
     catch(e){$('#python-label').textContent='Python 环境未就绪';setStatus(errMessage(e),'error');showToast(errMessage(e),true);}

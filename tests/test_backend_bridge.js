@@ -12,6 +12,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'netease-electron-test-'));
 process.env.MUSIC_PYTHON_EXE = process.env.MUSIC_PYTHON_EXE || '/opt/pyvenv/bin/python';
 const handlers = new Map();
 let mediaHandler = null;
+let previewHandler = null;
 class Window {
   constructor(o){this.opts=o;this.webContents={send(){},on(){},setWindowOpenHandler(){}};this.closed=false;}
   loadFile(p){assert.ok(fs.existsSync(p),p)}
@@ -31,7 +32,7 @@ const electron = {
   ipcMain:{handle(k,cb){handlers.set(k,cb)}},
   dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
   shell:{openPath:async()=>'',openExternal:async()=>true},
-  protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){assert.equal(scheme,'music-media');mediaHandler=cb;}}
+  protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){if(scheme==='music-media')mediaHandler=cb;else if(scheme==='music-preview')previewHandler=cb;}}
 };
 const nativeLoad=Module._load;
 Module._load=function(request,parent,isMain){if(request==='electron')return electron;return nativeLoad.call(this,request,parent,isMain)};
@@ -68,6 +69,16 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   const invoke=(name,...args)=>handlers.get(name)(null,...args);
   const dl=path.join(temp,'download');
   await invoke('settings:set',{downloadDir:dl,quality:'best',apiBases:[`http://127.0.0.1:${server.address().port}`]});
+  const savedSettings=await invoke('settings:get');
+  assert.equal(savedSettings.setupCompleted,false);
+  assert.equal(savedSettings.favoritesDir,path.join(dl,'收藏'));
+  const stream=await invoke('music:stream','12345');
+  assert.match(stream.url,/^music-preview:\/\/audio\//);
+  assert.ok(previewHandler);
+  const partial=await previewHandler(new Request(stream.url,{headers:{Range:'bytes=0-3'}}));
+  assert.equal(partial.status,200);
+  assert.equal(partial.headers.get('content-type'),'audio/mpeg');
+  assert.equal(Buffer.from(await partial.arrayBuffer()).subarray(0,3).toString(),'ID3');
   const s=await invoke('music:search','我的悲伤是水做的');
   assert.equal(s.results.length,1);
   assert.equal(s.results[0].artists,'洛天依');

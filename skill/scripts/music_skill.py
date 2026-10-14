@@ -9,6 +9,7 @@ import os
 import re
 import sys
 import time
+import shutil
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from typing import Any
@@ -107,6 +108,8 @@ def parse_track(item: Any) -> dict | None:
         return None
     title = item.get("name") or item.get("title") or "未知歌曲"
     album = item.get("al") or item.get("album") or {}
+    cover = (album.get("picUrl") or album.get("pic_url") or album.get("cover")) if isinstance(album, dict) else ""
+    cover = cover or item.get("picUrl") or item.get("coverUrl") or ""
     if isinstance(album, dict):
         album = album.get("name") or album.get("title") or ""
     duration = item.get("dt") or item.get("duration") or 0
@@ -116,7 +119,7 @@ def parse_track(item: Any) -> dict | None:
         duration = 0
     if duration > 100000:
         duration //= 1000
-    return {"id": str(ident), "name": str(title), "artists": parse_artists(item), "album": str(album or ""), "duration_seconds": duration, "page_url": f"https://music.163.com/#/song?id={ident}"}
+    return {"id": str(ident), "name": str(title), "artists": parse_artists(item), "album": str(album or ""), "duration_seconds": duration, "cover_url": str(cover or ""), "page_url": f"https://music.163.com/#/song?id={ident}"}
 
 
 def parse_song_list(payload: Any) -> tuple[list[dict], int | None]:
@@ -415,6 +418,15 @@ class MusicAPI:
         return {"id": sid, "found": False, "lrc": "", "translated_lrc": "", "source": None,
                 "diagnostic": self.errors[errors_start:][-6:]}
 
+    def preview_source(self, sid: str) -> dict:
+        """Return a short-lived, direct MP3 candidate URL for progressive listening.
+        No sound files are returned by this command; playback has to validate the stream MIME.
+        """
+        for item in self.audio_candidates(sid, "preview"):
+            if item.get("source", "").endswith("/song/url/v1") and item.get("url"):
+                return {"id":sid,"url":item["url"],"level":item.get("level","standard")}
+        raise MusicError("没有找到适合流式试听的直链，将改为完整缓存后播放")
+
     def audio_candidates(self, sid: str, quality: str):
         specs = []
         if quality == "preview":
@@ -495,6 +507,13 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
     if response is None:
         return None
     tmp = destination / (".download_" + str(os.getpid()) + "_" + str(time.time_ns()) + ".part")
+    expected = None
+    try:
+        expected = int(response.headers.get("Content-Length", ""))
+    except (ValueError, TypeError):
+        pass
+    started = time.monotonic()
+    reported = 0.0
     success = False
     try:
         iterator = response.iter_content(chunk_size=65536)
@@ -522,9 +541,28 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
                 if block:
                     f.write(block)
                     size += len(block)
+                    now = time.monotonic()
+                    if now - reported >= 0.4:
+                        elapsed = max(0.001, now - started)
+                        pct = round(100 * size / expected, 1) if expected and expected > 0 else None
+                        print("PROGRESS_JSON:" + json.dumps({"bytes":size,"total":expected,"percent":pct,"speed":int(size/elapsed)},ensure_ascii=False), file=sys.stderr, flush=True)
+                        reported = now
+        if expected is not None and size != expected:
+            api.errors.append(f"文件不完整：收到 {size} 字节，应为 {expected} 字节")
+            return None
         if size < 1024:
             api.errors.append(f"音频大小异常：{size} bytes")
             return None
+        # 基础完整性检查：验证文件头及声明的长度。系统有 ffprobe 时再验证可解码性。
+        if os.environ.get("NETEASE_VERIFY_FFPROBE") == "1" and shutil.which("ffprobe"):
+            import subprocess
+            try:
+                verified=subprocess.run(["ffprobe","-v","error","-show_entries","format=duration", "-of","default=noprint_wrappers=1",str(tmp)],capture_output=True,timeout=15)
+                if verified.returncode != 0:
+                    api.errors.append("ffprobe 无法正确解析音频容器")
+                    return None
+            except (OSError,subprocess.TimeoutExpired):
+                pass
         meta = flac_info(first) if kind == "flac" else {}
         if kind == "mp3":
             bit = mp3_bitrate_kbps(first)
@@ -563,11 +601,22 @@ def download_one(api: MusicAPI, song: dict, out_dir: Path, quality: str, *, over
     sid = song["id"]
     prefix = clean_filename(song.get("name", "未知歌曲") + " - " + song.get("artists", "未知歌手"), 120) + f" [{sid}]"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 清理前次异常中断留下的旧临时文件，避免长期占用磁盘。
+    for old_tmp in out_dir.glob(".download_*.part"):
+        try:
+            if time.time() - old_tmp.stat().st_mtime > 24 * 3600:
+                old_tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
     # 使用字符串比较，不用 glob：文件名含有 [歌曲ID]，glob 会把中括号当通配字符。
     present = [str(p) for p in out_dir.iterdir() if p.is_file() and p.name.startswith(prefix + ".") and p.suffix.lower() in (".flac", ".mp3", ".wav", ".ogg", ".m4a", ".aac")]
     suitable = [p for p in present if quality == "best" or (quality == "lossless" and Path(p).suffix.lower() in (".flac", ".wav")) or (quality in ("mp3", "preview") and Path(p).suffix.lower() == ".mp3")]
-    if suitable and not overwrite:
-        return {"ok": True, "status": "skipped_exists", "song": song, "path": suitable[0]}
+    # best 模式不能将已存在的低音质 MP3 当成最高音质。
+    # 已存在真实无损文件才直接跳过；旧 MP3 尝试升级，失败时保留原文件。
+    old_fallback = suitable[0] if suitable else None
+    if suitable and not overwrite and (quality != "best" or any(Path(p).suffix.lower() in (".flac", ".wav") for p in suitable)):
+        existing = next((p for p in suitable if Path(p).suffix.lower() in (".flac", ".wav")), suitable[0])
+        return {"ok": True, "status": "skipped_exists", "song": song, "path": existing}
     candidates = api.audio_candidates(sid, quality)
     best = None
     try:
@@ -590,8 +639,15 @@ def download_one(api: MusicAPI, song: dict, out_dir: Path, quality: str, *, over
                 and (quality == "mp3" or cand.get("requested_level") in ("exhigh", "higher", "standard") or cand["level"].startswith("mp3-request"))):
                 break
         if not best:
+            if old_fallback and Path(old_fallback).exists():
+                return {"ok": True, "status": "existing_no_upgrade", "song": song, "path": old_fallback,
+                        "warning": "当前接口未返回更高音质，保留已有文件", "diagnostic": api.errors[-3:]}
             return {"ok": False, "status": "unavailable", "song": song, "error": "没有获得有效音频；可能是版权/会员限制或接口故障", "diagnostic": api.errors[-3:]}
         dst = out_dir / (prefix + "." + best["format"])
+        if dst.exists() and not overwrite:
+            Path(best["temporary_path"]).unlink(missing_ok=True)
+            return {"ok": True, "status": "skipped_exists", "song": song, "path": str(dst)}
+        # 不将同格式同文件名的已有文件直接覆盖；先比较两者。
         if dst.exists() and not overwrite:
             Path(best["temporary_path"]).unlink(missing_ok=True)
             return {"ok": True, "status": "skipped_exists", "song": song, "path": str(dst)}
@@ -636,6 +692,8 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("playlist", help="预览整个网易云歌单，不下载")
     p.add_argument("--id", required=True)
     p.add_argument("--limit", type=int, default=0)
+    stream_parser = sub.add_parser("preview-source", help="解析用于流式试听的短期 MP3 地址")
+    stream_parser.add_argument("--id", required=True)
     g = sub.add_parser("song", help="查询单曲信息")
     g.add_argument("--id", required=True)
     lyric_parser = sub.add_parser("lyric", help="获取单曲同步歌词 LRC")
@@ -688,6 +746,10 @@ def main(argv: list[str] | None = None) -> int:
             output["auto_download"] = download_many(api, data["results"], args.out.expanduser(), args.quality, args.overwrite)
         emit(output, args.pretty)
         return 0 if output.get("auto_download", {}).get("ok", True) else 1
+    if args.command == "preview-source":
+        sid=song_id_from(args.id)
+        emit({"ok":True,**api.preview_source(sid)},args.pretty)
+        return 0
     if args.command == "song":
         sid = song_id_from(args.id)
         emit({"ok": True, "song": api.song(sid)}, args.pretty)

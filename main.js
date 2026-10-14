@@ -6,21 +6,30 @@ const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
+const { createFloatingLyricsController } = require('./floating_window.js');
 
 const APPLICATION_ID = 'top.qcya.netease.music.desktop';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
 let win;
+const downloadHistory=new Map();
+let historyFlushTimer=null;
 let activeCliProcesses = 0;
 const favoriteRequests = new Map();
 const previewRequests = new Map();
 const downloadQueue = createDownloadQueue({limit:3, onState:task => {
-  if(win && !win.isDestroyed()) win.webContents.send('download:task', task);
+  const old=downloadHistory.get(task.key)||{};
+  downloadHistory.set(task.key,{...old,...task,time:Date.now()});
+  if(downloadHistory.size>500)downloadHistory.delete(downloadHistory.keys().next().value);
+  if(win && !win.isDestroyed()) win.webContents.send('download:task',task);
+  if(historyFlushTimer)clearTimeout(historyFlushTimer);
+  historyFlushTimer=setTimeout(()=>{try{writeJSONAtomic(historyFile(),[...downloadHistory.values()].slice(-300))}catch(e){console.warn('历史保存失败',e.message)}},500);
 }});
 let cachedPython = null;
 let previewPlaying = false;
 const grantedMedia = new Map();
+const remotePreview = new Map();
 if (protocol?.registerSchemesAsPrivileged) {
-  protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}}]);
+  protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 }
 
 function resources(...p) {
@@ -34,7 +43,8 @@ function cacheDir() { return path.join(app.getPath('userData'), 'audio-cache'); 
 function lyricDir() { return path.join(app.getPath('userData'), 'lyric-cache'); }
 function manifestFile() { return path.join(cacheDir(), 'manifest.json'); }
 function favoritesFile() { return path.join(app.getPath('userData'), 'favorites.json'); }
-function favoritesDir() { return path.join(config().downloadDir, '收藏'); }
+function favoritesDir() { return config().favoritesDir; }
+function historyFile(){return path.join(app.getPath('userData'),'download-history.json');}
 function cacheMaintenanceFile() { return path.join(app.getPath('userData'), 'cache-maintenance.json'); }
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 function weeklyCacheCleanup(now=Date.now()) {
@@ -55,8 +65,10 @@ function readFavorites() {
 function validFavorite(row, id) {
   if (!row || !validId(id) || typeof row.audioPath !== 'string') return null;
   const full = path.resolve(row.audioPath);
-  if (!inDirectory(favoritesDir(),full) || !AUDIO_EXTS.has(path.extname(full).toLowerCase()) || !fs.existsSync(full)) return null;
-  return {...row,id, audioPath:full, lyricExists:!!(row.lyricPath && inDirectory(favoritesDir(),row.lyricPath) && fs.existsSync(row.lyricPath))};
+  // 独立保存收藏路径；旧收藏在用户切换下载目录后也依然有效。
+  if (!path.isAbsolute(row.audioPath) || !AUDIO_EXTS.has(path.extname(full).toLowerCase()) || !fs.existsSync(full)) return null;
+  const lyric=typeof row.lyricPath==='string' && path.resolve(row.lyricPath)===lrcSidecar(full) ? row.lyricPath : '';
+  return {...row,id,audioPath:full,lyricExists:!!(lyric&&fs.existsSync(lyric))};
 }
 function listFavorites() {return Object.entries(readFavorites()).map(([id,r])=>validFavorite(r,id)).filter(Boolean).sort((a,b)=>(b.addedAt||0)-(a.addedAt||0));}
 function lrcSidecar(audioPath) {return path.join(path.dirname(audioPath),path.parse(audioPath).name+'.lrc');}
@@ -208,7 +220,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3 };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3 };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -217,7 +229,7 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir: dir, quality, apiBases: bases, cacheLimitMB, parallelDownloads};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,quality,apiBases:bases,cacheLimitMB,parallelDownloads};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -227,6 +239,8 @@ function writeConfig(value) {
   if (!value || typeof value !== 'object') throw new Error('设置格式无效');
   const dir = typeof value.downloadDir === 'string' ? value.downloadDir.trim() : '';
   if (!dir || dir.length > 1024 || !path.isAbsolute(dir)) throw new Error('保存目录必须是完整的本地路径');
+  const favoritesDir=typeof value.favoritesDir==='string'&&path.isAbsolute(value.favoritesDir)&&value.favoritesDir.length<=1024?value.favoritesDir:path.join(dir,'收藏');
+  const setupCompleted=value.setupCompleted===true;
   const quality = ['best','lossless','mp3'].includes(value.quality) ? value.quality : 'best';
   const bases = Array.isArray(value.apiBases) ? value.apiBases : [];
   if (bases.length > 8) throw new Error('接口数量最多 8 个');
@@ -241,7 +255,7 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir: dir, quality, apiBases: [...new Set(clean)], cacheLimitMB, parallelDownloads};
+  const result = {downloadDir: dir, favoritesDir, setupCompleted, quality, apiBases: [...new Set(clean)], cacheLimitMB, parallelDownloads};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
@@ -249,10 +263,13 @@ function writeConfig(value) {
   return result;
 }
 
-function invokeProcess(executable, args, timeoutMs, environment = process.env, progress = null) {
+function invokeProcess(executable, args, timeoutMs, environment = process.env, progress = null, signal = null) {
   return new Promise((resolve, reject) => {
+    if(signal?.aborted)return reject(new Error('任务已取消'));
     const child = spawn(executable, args, { windowsHide:true, env:environment, cwd: path.dirname(backendFile()) });
-    let stdout = '', stderr = '', settled = false;
+    const terminate=()=>{try{child.kill()}catch{}};
+    if(signal)signal.addEventListener('abort',terminate,{once:true});
+    let stdout = '', stderr = '', settled = false, pendingProgress = '';
     const timeout = setTimeout(() => {
       child.kill();
       finalize(new Error('执行超时。接口可能不可用，请检查网络或稍后重试。'));
@@ -261,6 +278,8 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      if(signal)signal.removeEventListener('abort',terminate);
+      if(signal?.aborted)return reject(new Error('任务已取消'));
       if (error) reject(error);
       else resolve(result);
     }
@@ -269,13 +288,16 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
       stdout += chunk.toString('utf8');
       if (stdout.length > 8_000_000) { child.kill(); finalize(new Error('接口结果过大')); }
     });
-    child.stderr.on('data', chunk => {
-      const line = chunk.toString('utf8');
-      stderr += line;
-      if (stderr.length > 100_000) stderr = stderr.slice(-100_000);
-      if (progress) progress(line);
+    child.stderr.on('data',chunk=>{
+      const line=chunk.toString('utf8');stderr+=line;
+      if(stderr.length>100_000)stderr=stderr.slice(-100_000);
+      pendingProgress+=line;
+      while(pendingProgress.includes('\n')){
+        const end=pendingProgress.indexOf('\n');const one=pendingProgress.slice(0,end);pendingProgress=pendingProgress.slice(end+1);
+        if(progress)progress(one);
+      }
     });
-    child.on('close', code => finalize(null, {code, stdout, stderr}));
+    child.on('close',code=>{if(progress&&pendingProgress.trim())progress(pendingProgress);finalize(null,{code,stdout,stderr})});
   });
 }
 function pythonCandidates() {
@@ -312,9 +334,13 @@ async function runCli(cmd, args = [], opts = {}) {
     const result = await invokeProcess(python.exe, [...python.prefix, backendFile(), ...baseArgs, cmd, ...args],
       opts.timeoutMs || 90_000, env, line => {
         if (opts.progress && win && !win.isDestroyed()) {
-          win.webContents.send('download:progress', {id:opts.songId||null, message:line.slice(0, 500)});
+          for(const chunk of line.split('\n')){
+            const match=chunk.match(/PROGRESS_JSON:(\{[^\n]*\})/);
+            if(match){try{const parsed=JSON.parse(match[1]);win.webContents.send('download:progress',{id:opts.songId||null,progress:parsed});if(opts.onProgress)opts.onProgress(parsed)}catch{}}
+            else if(chunk.trim())win.webContents.send('download:progress',{id:opts.songId||null,message:chunk.slice(0,500)});
+          }
         }
-      });
+      }, opts.signal || null);
     let data;
     try { data = JSON.parse(result.stdout.trim()); }
     catch { throw new Error(`Python 未能返回有效数据：${(result.stderr || result.stdout || '未知错误').slice(-700)}`); }
@@ -334,9 +360,9 @@ function downloadTrack(id, targetDir, quality, purpose='download') {
   const directory=path.resolve(targetDir);
   const key=[directory,quality,sid].join('\0');
   const meta={id:sid, purpose, name:sid};
-  return downloadQueue.enqueue(key,meta,async()=>{
+  return downloadQueue.enqueue(key,meta,async(signal,reportProgress)=>{
     const data=await runCli('download',['--id',sid,'--quality',quality,'--out',directory],
-      {progress:true,songId:sid,timeoutMs:240_000});
+      {progress:true,songId:sid,timeoutMs:240_000,signal,onProgress:reportProgress});
     const item=data?.results?.[0];
     if(!item || !item.ok) return item || {ok:false,song:{id:sid},error:'下载没有返回结果'};
     return item;
@@ -401,6 +427,46 @@ async function fetchLyrics(id, force=false) {
   return {...out,fromCache:false};
 }
 
+const floatingLyrics=createFloatingLyricsController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win});
+
+function safeAudioOrigin(value) {
+  try {
+    const url=new URL(value);
+    if(url.protocol!=='https:' && !(url.protocol==='http:' && ['localhost','127.0.0.1'].includes(url.hostname)))return false;
+    return /(^|\.)(?:music\.126\.net|music\.163\.com|126\.net)$/.test(url.hostname) || ['localhost','127.0.0.1'].includes(url.hostname);
+  }catch{return false;}
+}
+async function proxyPreview(req) {
+  const token=new URL(req.url).pathname.slice(1);
+  let uri=remotePreview.get(token);
+  if(!uri)return new Response('Not found',{status:404});
+  try {
+    for(let i=0;i<4;i++) {
+      if(!safeAudioOrigin(uri))return new Response('Unsupported audio host',{status:403});
+      const headers={};const range=req.headers.get('range');if(range)headers.Range=range;
+      const response=await fetch(uri,{headers,redirect:'manual',signal:AbortSignal.timeout(22000)});
+      if(response.status>=300&&response.status<400){uri=new URL(response.headers.get('location'),uri).href;response.body?.cancel();continue;}
+      if(!response.ok)return new Response(null,{status:response.status});
+      const mime=response.headers.get('content-type')||'';
+      if(!/audio\/mpeg|audio\/mp3|application\/octet-stream/.test(mime))return new Response('Not MP3',{status:415});
+      const responseHeaders={'Content-Type':'audio/mpeg','Accept-Ranges':response.headers.get('accept-ranges')||'bytes','Cache-Control':'no-store'};
+      for(const key of ['content-length','content-range']){const v=response.headers.get(key);if(v)responseHeaders[key]=v;}
+      return new Response(response.body,{status:response.status,headers:responseHeaders});
+    }
+  }catch(e){console.warn('流式试听失败：',e.message)}
+  return new Response(null,{status:502});
+}
+async function beginStream(id){
+  const [sid]=songIds([id]);
+  const cached=cacheItem(sid);
+  if(cached&&cached.file.toLowerCase().endsWith('.mp3'))return {ok:true,fromCache:true,url:grantMedia(cached.full),name:cached.name,artists:cached.artists,id:sid};
+  const info=await runCli('preview-source',['--id',sid],{timeoutMs:18000});
+  if(!info?.url||!safeAudioOrigin(info.url))throw new Error('未找到可信的 MP3 试听地址');
+  const token=randomUUID();remotePreview.set(token,info.url);
+  if(remotePreview.size>100)remotePreview.delete(remotePreview.keys().next().value);
+  return {ok:true,id:sid,fromCache:false,streaming:true,url:`music-preview://audio/${token}`};
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
@@ -424,13 +490,14 @@ app.setAppUserModelId(APPLICATION_ID);
 app.whenReady().then(() => {
   downloadQueue.setLimit(config().parallelDownloads);
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
+  const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string')downloadHistory.set(entry.key,entry)}
   const maintenanceTimer=setInterval(() => {
     if(activeCliProcesses === 0 && downloadQueue.snapshot().active === 0 && downloadQueue.snapshot().waiting === 0 && previewRequests.size === 0 && !previewPlaying) {
       try{weeklyCacheCleanup();}catch(e){console.warn('试听缓存定期清理失败：',e.message);}
     }
   }, 60*60*1000);
   maintenanceTimer.unref?.();
-  if (protocol?.handle) protocol.handle('music-media', mediaResponse);
+  if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
   ipcMain.handle('settings:get', () => config());
   ipcMain.handle('settings:set', (_e, value) => writeConfig(value));
@@ -451,9 +518,10 @@ app.whenReady().then(() => {
     if (result.code) throw new Error('已找到 Python，但缺少 requests；请运行「安装依赖.bat」。');
     return {ok:true, version:result.stdout.trim()};
   });
-  ipcMain.handle('music:search', async (_e, query) => {
+  ipcMain.handle('music:search', async (_e, query, page=1) => {
     if (typeof query !== 'string' || !query.trim() || query.length > 120) throw new Error('请输入 1–120 字的歌名或关键词');
-    return await runCli('search', ['--query', query.trim(), '--limit','40','--page','1']);
+    if(!Number.isInteger(page)||page<1||page>500)throw new Error('页码无效');
+    return await runCli('search',['--query',query.trim(),'--limit','40','--page',String(page)]);
   });
   ipcMain.handle('music:download', async (_e, ids) => {
     const valid = songIds(ids);
@@ -474,11 +542,19 @@ app.whenReady().then(() => {
     return {ok:success===valid.length,requested_count:valid.length,success_count:success,
       failed_count:valid.length-success,results,output_dir:s.downloadDir};
   });
+  ipcMain.handle('download:history',()=>[...downloadHistory.values()].sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300));
+  ipcMain.handle('download:pause',(_e,paused)=>downloadQueue.setPaused(paused===true));
+  ipcMain.handle('download:cancel',(_e,id)=>{if(!validId(id))throw new Error('无效歌曲 ID');return downloadQueue.cancelSong(id)});
+  ipcMain.handle('download:retry',async(_e,id)=>{
+    const [sid]=songIds([id]);const s=config();fs.mkdirSync(s.downloadDir,{recursive:true});
+    return downloadTrack(sid,s.downloadDir,s.quality,'download');
+  });
   ipcMain.handle('music:playlist', async (_e, id) => {
     if (typeof id !== 'string' || id.length > 300 || !id.trim()) throw new Error('歌单链接或 ID 无效');
     return await runCli('playlist', ['--id',id]);
   });
   ipcMain.handle('music:prepare', async (_e, id) => prepareAudio(id));
+  ipcMain.handle('music:stream',async(_e,id)=>beginStream(id));
   ipcMain.handle('music:playback-state',(_e, playing)=>{previewPlaying=playing===true;return true;});
   ipcMain.handle('music:lyric', async (_e, id) => fetchLyrics(id));
   ipcMain.handle('music:cache-stats', () => statsCache());
@@ -491,6 +567,11 @@ app.whenReady().then(() => {
     return statsCache();
   });
   ipcMain.handle('favorites:list',()=>listFavorites());
+  ipcMain.handle('lyrics:open',()=>floatingLyrics.open());
+  ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
+  ipcMain.handle('lyrics:lock',(_e,lock)=>floatingLyrics.lock(!!lock));
+  ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
+  ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));
   ipcMain.handle('favorites:retry-lyrics',async(_e, id)=>{
     const [sid]=songIds([id]);return refreshFavoriteLyrics(sid);

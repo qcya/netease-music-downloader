@@ -54,3 +54,35 @@ test('changing concurrency limit affects subsequent queued tasks without interru
   await Promise.all(tasks);
   assert.equal(peak,3);
 });
+
+test('pause/resume preserves queue order',async()=>{
+  const seen=[];const pool=createDownloadQueue({limit:1});
+  pool.setPaused(true);
+  const promises=[0,1,2].map(i=>pool.enqueue('paused-'+i,{id:String(i)},async()=>{seen.push(i);return {ok:true}}));
+  assert.equal(pool.snapshot().waiting,3);
+  assert.equal(pool.snapshot().active,0);
+  pool.setPaused(false);
+  await Promise.all(promises);
+  assert.deepEqual(seen,[0,1,2]);
+});
+
+test('cancel queued task does not start it',async()=>{
+  const pool=createDownloadQueue({limit:1});
+  const first=pool.enqueue('first',{id:'1'},async()=>{await sleep(35);return {ok:true}});
+  let started=false;
+  const second=pool.enqueue('second',{id:'2'},async()=>{started=true;return {ok:true}});
+  assert.equal(pool.cancelSong('2'),1);
+  assert.equal((await second).status,'cancelled');
+  await first;
+  assert.equal(started,false);
+});
+
+test('cancel running task passes abort signal to action',async()=>{
+  const pool=createDownloadQueue({limit:1});
+  const promise=pool.enqueue('running',{id:'100'},signal=>new Promise((resolve,reject)=>{
+    signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
+  }));
+  assert.equal(pool.cancelSong('100'),1);
+  assert.equal((await promise).status,'cancelled');
+  await sleep(4);assert.equal(pool.snapshot().active,0);
+});

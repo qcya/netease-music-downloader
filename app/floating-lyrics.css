@@ -1,0 +1,13 @@
+:root{font-family:'Microsoft YaHei UI','PingFang SC',sans-serif;color:#526580}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:transparent;overflow:hidden}
+.widget{height:calc(100% - 8px);margin:4px 6px;padding:9px 18px 14px;border-radius:24px;
+background:linear-gradient(108deg,rgba(255,245,251,.92),rgba(239,248,255,.91));
+border:1px solid rgba(255,255,255,.9);box-shadow:0 5px 26px rgba(94,112,153,.23),inset 0 1px 1px rgba(255,255,255,.96);text-align:center}
+.bar{display:flex;align-items:center;gap:8px;height:23px;font-size:11px;color:#b380ae}
+.drag{-webkit-app-region:drag;user-select:none;flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drag small{font-size:10px;margin-left:8px;color:#9caebc}
+button{-webkit-app-region:no-drag;border:0;background:rgba(217,237,255,.75);border-radius:9px;color:#698bb4;cursor:pointer;padding:4px 10px}
+#close{font-size:17px;line-height:14px}
+.lyric{padding:8px 0 2px;font-size:clamp(15px,3vw,24px);font-weight:750;letter-spacing:.3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#628cb9;text-shadow:0 1px 0 #fff}
+.translate{font-size:12px;color:#b586a5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:17px}

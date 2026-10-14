@@ -1,0 +1,31 @@
+name: Build Windows Portable
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+jobs:
+  windows-portable:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Python libraries
+        run: python -m pip install -r skill/requirements.txt
+      - name: Install npm libraries
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+        run: npm install --no-audit --no-fund
+      - name: Build portable EXE
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MusicDownloader-Windows-Portable
+          path: dist/MusicDownloader-2.0.0-portable.exe
