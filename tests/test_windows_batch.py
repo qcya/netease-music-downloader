@@ -24,10 +24,10 @@ def test_build_rejects_missing_exe_and_verifies_icon():
     import json
     version = json.loads((BASE / 'package.json').read_text(encoding='utf-8'))['version']
     assert f'if not exist "dist\\MusicDownloader-{version}-portable.exe" goto :missing_exe' in data
-    assert 'check_exe_icon.ps1' in data
+    assert '验证EXE图标.ps1' in data
     assert ':icon_error' in data
     # Windows PowerShell 5.1 needs BOM for UTF-8 Chinese script filenames.
-    assert (BASE / 'check_exe_icon.ps1').read_bytes().startswith(b'\xef\xbb\xbf')
+    assert (BASE / '验证EXE图标.ps1').read_bytes().startswith(b'\xef\xbb\xbf')
 
 
 def test_install_mirror_and_binary_checks():

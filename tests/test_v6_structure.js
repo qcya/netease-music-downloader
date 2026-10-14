@@ -13,7 +13,7 @@ test('first-run setup includes independent paths, acknowledgement, and saved com
 test('independent lyric window, player controls, downloads page, and streaming fallback exist',()=>{
  for(const name of ['floating-preload.js','app/floating-lyrics.html','app/floating-lyrics.css','app/floating-lyrics.js'])assert.ok(fs.existsSync(path.join(root,name)),name);
  const html=get('app/index.html'),main=get('main.js'),renderer=get('app/renderer.js');
- for(const id of ['view-tasks','task-list','toggle-floating','unlock-floating','toggle-immersive','page-next'])assert.ok(html.includes(`id="${id}"`),id);
+ for(const id of ['local-tasks','task-list','toggle-floating','unlock-floating','toggle-immersive','page-next'])assert.ok(html.includes(`id="${id}"`),id);
  assert.match(get('floating_window.js'),/setIgnoreMouseEvents/);
  assert.match(main,/ipcMain\.handle\('music:stream'/);
  assert.match(renderer,/bridge\.prepareAudio\(id\)/);

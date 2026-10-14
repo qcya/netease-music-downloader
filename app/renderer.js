@@ -2,7 +2,7 @@
 (() => {
   const bridge = window.musicBridge;
   const $ = selector => document.querySelector(selector);
-  const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, favorites:new Set(), pendingFavorites:new Set(), downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false};
+  const state = {view:'home', localTab:'downloads', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, favorites:new Set(), pendingFavorites:new Set(), downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false};
 
   const svg = {
     home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
@@ -105,16 +105,21 @@
   function jobText(job) {
     const scope=job.purpose==='favorite'?'收藏 · ':'';
     const names={queued:'已排队',running:'下载中',completed:'已完成',failed:'失败',cancelled:'已取消'};
-    const pct=job.progress?.percent!=null?` ${job.progress.percent.toFixed(1)}%`:'';
-    const speed=job.progress?.speed ? ` · ${(job.progress.speed/1024/1024).toFixed(2)} MB/s`:'';
+    const pct=job.status==='running'&&job.progress?.percent!=null?` ${Number(job.progress.percent).toFixed(1)}%`:'';
+    const speed=job.status==='running'&&job.progress?.speed ? ` · ${(job.progress.speed/1024/1024).toFixed(2)} MB/s`:'';
     return scope+(names[job.status]||'准备中')+pct+speed+(job.error?`：${String(job.error).slice(0,100)}`:'');
+  }
+  let taskRefreshTimer=null;
+  function queueTaskRefresh(){
+    if(taskRefreshTimer!==null)return;
+    taskRefreshTimer=setTimeout(()=>{taskRefreshTimer=null;if(state.view==='local'&&state.localTab==='tasks')void renderTasks();},250);
   }
   function displayDownloadJob(job) {
     if(!job || !job.id) return;
     const id=String(job.id);
-    state.downloadJobs.set(id,{...(state.downloadJobs.get(id)||{}),...job});
+    state.downloadJobs.set(id,{...(state.downloadJobs.get(id)||{}),...job,progress:['completed','failed','cancelled'].includes(job.status)?null:(job.progress??state.downloadJobs.get(id)?.progress??null)});
     for(const el of document.querySelectorAll('.track-job-state')){
-      if(el.dataset.songId===id){el.textContent=jobText(job);el.dataset.status=job.status;}
+      if(el.dataset.songId===id){el.textContent=jobText(state.downloadJobs.get(id));el.dataset.status=job.status;}
     }
     const panel=$('#download-activity');
     if(panel){
@@ -134,7 +139,7 @@
         detail.appendChild(item);
       }
     }
-    if(state.view==='tasks')void renderTasks();
+    if(state.view==='local'&&state.localTab==='tasks')queueTaskRefresh();
   }
   const audio=()=>$('#music-audio');
   function timeLabel(seconds) {
@@ -226,7 +231,7 @@
     try {await audio().play();started=true;setStatus(`正在播放：${info.name||'音乐'}`,'ok');}
     catch(e){if(token===state.playToken)setStatus('试听源不可播放，正在尝试缓存备用音源…','error');}
     updatePlayerControls();
-    if(token===state.playToken&&started)void loadLyrics(id,token);
+    if(token===state.playToken)void loadLyrics(id,token);
     return started;
   }
   async function playSong(track){
@@ -236,13 +241,13 @@
       if(audio().paused)audio().play().catch(e=>showToast(errMessage(e),true));else audio().pause();
       return;
     }
-    if(state.preparing){showToast('正在准备上一首歌曲，请稍候。');return;}
+    // A new play request supersedes an older pending stream; do not lock song switching.
     const token=++state.playToken;
     audio().pause();state.preparing=true;
     $('#player-song').textContent=track.name||'准备播放';
     $('#player-artist').textContent=track.artists||'正在检查音源';
     clearLyrics('正在准备音频…');
-    setStatus(`正在准备「${track.name}」：首次播放先缓存较小的 MP3…`);
+    setStatus(`正在解析「${track.name}」的试听地址（首次需要请求接口）…`);
     try {
       // 流式优先，接口不支持时自动退回已验证的本地 MP3 缓存。
       let started=false;
@@ -250,12 +255,11 @@
         const info=await bridge.streamAudio(id);
         if(token!==state.playToken)return;
         started=await startAudio({...info,name:track.name,artists:track.artists},info.url,token,id);
-        if(started&&!info.fromCache){
-          // 同时后台准备完整缓存，后续再试听不必重复等待。
-          void bridge.prepareAudio(id).catch(()=>{});
-        }
+        // Progressive playback must not trigger a second full download while listening.
+        // That duplicate transfer used to compete with the live audio stream for bandwidth.
       }catch{}
       if(!started && token===state.playToken){
+        setStatus('流式音源未能播放，正在准备 MP3 缓存备用…');
         const info=await bridge.prepareAudio(id);
         if(token===state.playToken)await startAudio({...info,name:track.name||info.name,artists:track.artists||info.artists},info.url,token,id);
       }
@@ -336,7 +340,7 @@
       });
       const msg=row.lyricExists ? '收藏成功，无损音频和 LRC 歌词已保存。' : '已收藏无损音频；歌词暂时无法获取，可到收藏页重试。';
       setStatus(msg,'ok');showToast(msg,!row.lyricExists);
-      if(state.view==='favorites')await refreshFavorites();
+      if(state.view==='local'&&state.localTab==='favorites')await refreshFavorites();
     }catch(e){setStatus(`收藏失败：${errMessage(e)}`,'error');showToast(errMessage(e),true);}
     finally{state.pendingFavorites.delete(String(track.id));if(heart)heart.disabled=false;}
   }
@@ -414,14 +418,22 @@
     } catch(e) {showToast(errMessage(e),true);setStatus(`读取歌单失败：${errMessage(e)}`,'error');}
     finally {setBusy(false);}
   }
+  async function switchLocalTab(tab){
+    if(!['downloads','favorites','tasks'].includes(tab))return;
+    state.localTab=tab;
+    document.querySelectorAll('.local-tab').forEach(el=>el.classList.toggle('active',el.dataset.localTab===tab));
+    document.querySelectorAll('.local-tab-panel').forEach(el=>el.classList.toggle('active',el.id==='local-'+tab));
+    if(tab==='downloads')await refreshLocal();
+    else if(tab==='favorites')await refreshFavorites();
+    else await renderTasks();
+  }
   async function showView(view) {
     state.view=view;
     document.querySelectorAll('.nav-item').forEach(e=>e.classList.toggle('active',e.dataset.view === view));
     document.querySelectorAll('.view').forEach(e=>e.classList.toggle('active',e.id === 'view-'+view));
-    if (view === 'local') await refreshLocal();
-    if (view === 'favorites') await refreshFavorites();
+    if (view === 'local') await switchLocalTab(state.localTab);
     if (view === 'settings') renderSettings();
-    if (view === 'tasks') await renderTasks();
+
   }
   async function refreshLocal() {
     const parent=$('#local-list');parent.replaceChildren();
@@ -437,19 +449,22 @@
       }
     } catch(e) {showToast(errMessage(e),true);}
   }
+  let taskRenderVersion=0;
   async function renderTasks(){
     const root=$('#task-list');if(!root)return;
-    try{const rows=await bridge.downloadHistory();root.replaceChildren();
+    const requestVersion=++taskRenderVersion;
+    try{const rows=await bridge.downloadHistory();if(requestVersion!==taskRenderVersion)return;root.replaceChildren();
       if(!rows.length){root.appendChild(node('div','empty-simple','还没有下载任务'));return;}
       for(const entry of rows){
+        if(entry.id){const cleaned={...entry,progress:entry.status==='running'?entry.progress:null};state.downloadJobs.set(String(entry.id),cleaned);}
         const card=node('div','task-row');
         const left=node('div','task-main');
         const id=String(entry.id||'');const track=state.tracks.find(x=>String(x.id)===id);
         left.append(node('strong','',track?.name||entry.name||`歌曲 ${id}`),node('span','',jobText(entry)));
-        const bar=node('div','task-progress');const fill=node('div','task-progress-fill');fill.style.width=`${Math.max(0,Math.min(100,Number(entry.progress?.percent||0)))}%`;bar.append(fill);left.append(bar);
+        if(entry.status==='running'&&Number.isFinite(Number(entry.progress?.percent))){const bar=node('div','task-progress');const fill=node('div','task-progress-fill');fill.style.width=`${Math.max(0,Math.min(100,Number(entry.progress.percent)))}%`;bar.append(fill);left.append(bar);}
         const actions=node('div','task-actions');
         if(['queued','running'].includes(entry.status)){const btn=node('button','subtle-action','取消');btn.onclick=async()=>{await bridge.cancelDownload(id);await renderTasks()};actions.append(btn)}
-        if(['failed','cancelled'].includes(entry.status)){const btn=node('button','soft-action','重试');btn.onclick=async()=>{btn.disabled=true;try{await bridge.retryDownload(id)}catch(e){showToast(errMessage(e),true)}finally{await renderTasks()}};actions.append(btn)}
+        if(['failed','cancelled'].includes(entry.status)){const btn=node('button','soft-action','重试');btn.onclick=()=>{btn.disabled=true;showToast('已重新提交下载任务');void bridge.retryDownload(id).then(()=>renderTasks(),e=>{showToast(errMessage(e),true);void renderTasks()});};actions.append(btn)}
         card.append(left,actions);root.append(card);
       }
     }catch(e){showToast(errMessage(e),true)}
@@ -515,15 +530,16 @@
     });
     bridge.onDownloadTask(task=>displayDownloadJob(task));
     bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;$('#toggle-floating').classList.toggle('active',state.floating)});
+    bridge.onOpenLyricsSettings(()=>showView('settings'));
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
+    document.querySelectorAll('.local-tab').forEach(el=>el.addEventListener('click',()=>switchLocalTab(el.dataset.localTab)));
     $('#search-form').addEventListener('submit',search);
     $('#example-search').addEventListener('click',()=>{$('#search-input').value='我的悲伤是水做的 洛天依';search();});
     $('#download-selected').addEventListener('click',()=>downloadSongs([...state.selected]));
     $('#artist-filter').addEventListener('input',()=>{const q=$('#artist-filter').value.trim().toLowerCase();document.querySelectorAll('.song-card').forEach(card=>{card.hidden=!!q&&!card.dataset.artist.includes(q)})});
     $('#page-prev').addEventListener('click',()=>changePage(-1));
     $('#page-next').addEventListener('click',()=>changePage(1));
-    $('#pause-queue').addEventListener('click',async()=>{state.paused=!state.paused;await bridge.pauseDownloads(state.paused);$('#pause-queue').textContent=state.paused?'继续队列':'暂停队列'});
-    $('#refresh-tasks').addEventListener('click',renderTasks);
+    $('#refresh-tasks').addEventListener('click',async()=>{await renderTasks();showToast('已刷新本地任务记录；运行中的进度会自动更新。')});
     $('#playlist-toggle').addEventListener('click',()=>$('#playlist-box').classList.toggle('hidden'));
     $('#playlist-box').addEventListener('submit',playlist);
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));

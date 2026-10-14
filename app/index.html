@@ -17,8 +17,6 @@
       <nav class="main-nav" aria-label="主导航">
         <button class="nav-item active" data-view="home" type="button"><span class="nav-icon" data-icon="home"></span><span>首页</span></button>
         <button class="nav-item" data-view="local" type="button"><span class="nav-icon" data-icon="folder"></span><span>本地</span></button>
-        <button class="nav-item" data-view="favorites" type="button"><span class="nav-icon" data-icon="heart"></span><span>收藏</span></button>
-        <button class="nav-item" data-view="tasks" type="button"><span class="nav-icon" data-icon="download"></span><span>下载任务</span></button>
         <button class="nav-item" data-view="settings" type="button"><span class="nav-icon" data-icon="settings"></span><span>设置</span></button>
       </nav>
       <div class="sidebar-bottom">
@@ -75,21 +73,24 @@
       </section>
 
       <section id="view-local" class="view" aria-labelledby="local-title">
-        <div class="page-header"><div class="eyebrow">LOCAL MUSIC</div><h1 id="local-title">已下载的音乐</h1><p>保存在当前下载文件夹中的音频。点击播放可直接在软件内试听。</p></div>
-        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开文件夹</button></div>
-        <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
-      </section>
-
-      <section id="view-favorites" class="view" aria-labelledby="favorites-title">
-        <div class="page-header"><div class="eyebrow">FAVORITES</div><h1 id="favorites-title">我的收藏</h1>
-          <p>收藏时保存真实无损音频和同名 LRC 歌词；收藏目录不参与每周试听缓存清理。</p></div>
-        <div class="favorites-list" id="favorites-list"><div class="empty-simple">收藏夹还是空的。</div></div>
-      </section>
-
-      <section id="view-tasks" class="view" aria-labelledby="tasks-title">
-        <div class="page-header"><div class="eyebrow">DOWNLOAD MANAGER</div><h1 id="tasks-title">下载任务</h1><p>查看进度、队列和历史，可以暂停排队、取消或重试任务。</p></div>
-        <div class="page-actions"><button class="soft-action" id="pause-queue" type="button">暂停队列</button><button class="subtle-action" id="refresh-tasks" type="button">刷新任务</button></div>
-        <div class="task-list" id="task-list"><div class="empty-simple">暂无下载任务</div></div>
+        <div class="page-header"><div class="eyebrow">MY MUSIC</div><h1 id="local-title">我的音乐</h1><p>下载、收藏和任务进度统一放在这里。</p></div>
+        <nav class="local-tabs" aria-label="我的音乐分类">
+          <button type="button" class="local-tab active" data-local-tab="downloads">下载列表</button>
+          <button type="button" class="local-tab" data-local-tab="favorites">我的收藏</button>
+          <button type="button" class="local-tab" data-local-tab="tasks">进行中与历史</button>
+        </nav>
+        <div class="local-tab-panel active" id="local-downloads">
+          <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开文件夹</button></div>
+          <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
+        </div>
+        <div class="local-tab-panel" id="local-favorites">
+          <p class="settings-hint">收藏会保存无损音频及能获取到的 LRC 歌词，不参与试听缓存清理。</p>
+          <div class="favorites-list" id="favorites-list"><div class="empty-simple">收藏夹还是空的。</div></div>
+        </div>
+        <div class="local-tab-panel" id="local-tasks">
+          <div class="page-actions"><button class="soft-action" id="refresh-tasks" type="button">刷新下载列表</button><span class="settings-hint">运行中进度自动更新；失败任务可重试。</span></div>
+          <div class="task-list" id="task-list"><div class="empty-simple">暂无下载任务</div></div>
+        </div>
       </section>
       <section id="view-settings" class="view" aria-labelledby="settings-title">
         <div class="page-header"><div class="eyebrow">PREFERENCES</div><h1 id="settings-title">下载设置</h1><p>保存位置和音质偏好，仅影响后续下载。</p></div>

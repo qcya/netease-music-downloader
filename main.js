@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -11,7 +11,8 @@ const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
 
-const APPLICATION_ID = 'top.qcya.netease.music.desktop';
+// 开发版使用独立的 Windows 任务栏分组，避免复用旧版 EXE 的固定图标。
+const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
 let win;
 const downloadHistory=new Map();
@@ -31,6 +32,8 @@ let cachedPython = null;
 let previewPlaying = false;
 const grantedMedia = new Map();
 const remotePreview = new Map();
+const previewSourceCache=new Map();
+const previewSourcePending=new Map();
 if (protocol?.registerSchemesAsPrivileged) {
   protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 }
@@ -436,7 +439,7 @@ async function fetchLyrics(id, force=false) {
   return {...out,fromCache:false};
 }
 
-const floatingLyrics=createFloatingLyricsController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
+const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
 
 function safeAudioOrigin(value) {
   try {
@@ -469,7 +472,14 @@ async function beginStream(id){
   const [sid]=songIds([id]);
   const cached=cacheItem(sid);
   if(cached&&cached.file.toLowerCase().endsWith('.mp3'))return {ok:true,fromCache:true,url:grantMedia(cached.full),name:cached.name,artists:cached.artists,id:sid};
-  const info=await runCli('preview-source',['--id',sid],{timeoutMs:18000});
+  // A short-lived source cache avoids repeating Python startup and API calls on replay.
+  let info=previewSourceCache.get(sid);
+  if(!info||info.expiresAt<Date.now()){
+    let pending=previewSourcePending.get(sid);
+    if(!pending){pending=runCli('preview-source',['--id',sid],{timeoutMs:18000}).finally(()=>previewSourcePending.delete(sid));previewSourcePending.set(sid,pending);}
+    info=await pending;
+    previewSourceCache.set(sid,{...info,expiresAt:Date.now()+120000});
+  }
   if(!info?.url||!safeAudioOrigin(info.url))throw new Error('未找到可信的 MP3 试听地址');
   const token=randomUUID();remotePreview.set(token,info.url);
   if(remotePreview.size>100)remotePreview.delete(remotePreview.keys().next().value);
@@ -487,6 +497,8 @@ function createWindow() {
     }
   });
   if (process.platform === 'win32') {
+    // setAppDetails 提供任务栏标识；显式 setIcon 则更新当前运行窗口图标。
+    win.setIcon(appIcon());
     win.setAppDetails({appId: APPLICATION_ID, appIconPath: appIcon(), appIconIndex:0});
   }
   win.loadFile(path.join(__dirname, 'app', 'index.html'));
@@ -504,7 +516,7 @@ app.whenReady().then(() => {
   try {weeklyCacheCleanup();} catch(e) {console.warn('试听缓存定期清理失败：',e.message);}
   const oldHistory=readJSON(historyFile(),[]);if(Array.isArray(oldHistory))for(const entry of oldHistory){if(entry&&typeof entry.key==='string'){
     const status=['queued','running'].includes(entry.status)?'failed':entry.status;
-    downloadHistory.set(entry.key,{...entry,status,error:status==='failed'&&entry.status!==status?'程序上次关闭时任务未完成，可手动重试':entry.error});
+    downloadHistory.set(entry.key,{...entry,status,progress:status==='running'?entry.progress:null,error:status==='failed'&&entry.status!==status?'程序上次关闭时任务未完成，可手动重试':entry.error});
   }}
   const maintenanceTimer=setInterval(() => {
     if(activeCliProcesses === 0 && downloadQueue.snapshot().active === 0 && downloadQueue.snapshot().waiting === 0 && previewRequests.size === 0 && !previewPlaying) {
@@ -514,6 +526,11 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
+  floatingLyrics.setLockChange(locked=>{const settings=config();settings.floatingLyrics.mouseThrough=locked;writeConfig(settings);});
+  ipcMain.on?.('lyrics:drag-begin',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragBegin()});
+  ipcMain.on?.('lyrics:drag-move',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragMove()});
+  ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragEnd()});
+  ipcMain.on?.('lyrics:context-menu',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.showMenu()});
   ipcMain.handle('settings:get', () => config());
   ipcMain.handle('settings:set', (_e, value) => writeConfig(value));
   ipcMain.handle('system:choose-directory', async () => {
@@ -558,8 +575,7 @@ app.whenReady().then(() => {
     return {ok:success===valid.length,requested_count:valid.length,success_count:success,
       failed_count:valid.length-success,results,output_dir:s.downloadDir};
   });
-  ipcMain.handle('download:history',()=>[...downloadHistory.values()].sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300));
-  ipcMain.handle('download:pause',(_e,paused)=>downloadQueue.setPaused(paused===true));
+  ipcMain.handle('download:history',()=>[...downloadHistory.values()].map(row=>({...row,progress:row.status==='running'?row.progress:null})).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300));
   ipcMain.handle('download:cancel',(_e,id)=>{if(!validId(id))throw new Error('无效歌曲 ID');return downloadQueue.cancelSong(id)});
   ipcMain.handle('download:retry',async(_e,id)=>{
     const [sid]=songIds([id]);const s=config();fs.mkdirSync(s.downloadDir,{recursive:true});

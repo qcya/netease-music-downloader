@@ -7,7 +7,10 @@ function createDownloadQueue({limit=3,onState=()=>{}}={}) {
   const snapshot=()=>({active,waiting:waiting.length,limit,paused});
   const report=(task,status,more={})=>{
     task.status=status;
-    try{onState({...task.meta,status,key:task.key,...snapshot(),...more});}catch{}
+    // A completed result must not retain an earlier 1%/14% transfer snapshot.
+    const final=['completed','failed','cancelled'].includes(status);
+    if(final){task.meta.progress=null;task.meta.speed=0;}
+    try{onState({...task.meta,status,key:task.key,...snapshot(),...more,progress:final?null:(more.progress??task.meta.progress??null)});}catch{}
   };
   function finish(task) {
     active--;

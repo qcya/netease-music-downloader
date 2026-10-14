@@ -39,13 +39,13 @@ if errorlevel 1 goto :failed
 if not exist "dist\MusicDownloader-2.1.0-portable.exe" goto :missing_exe
 
 echo [INFO] Extracting actual icon from the built EXE...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0check_exe_icon.ps1" -ExePath "%~dp0dist\MusicDownloader-2.1.0-portable.exe"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0验证EXE图标.ps1" -ExePath "%~dp0dist\MusicDownloader-2.1.0-portable.exe"
 if errorlevel 1 goto :icon_error
 
 echo.
 echo [OK] Verified Windows executable was created:
 echo %~dp0dist\MusicDownloader-2.1.0-portable.exe
-echo [INFO] Open dist\EXEactualIcon.png to inspect the embedded icon.
+echo [INFO] Open dist\EXE实际图标.png to inspect the embedded icon.
 pause
 exit /b 0
 

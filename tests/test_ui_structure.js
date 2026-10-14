@@ -8,7 +8,7 @@ const html=fs.readFileSync(path.join(root,'app','index.html'),'utf8');
 const css=fs.readFileSync(path.join(root,'app','style.css'),'utf8');
 const js=fs.readFileSync(path.join(root,'app','renderer.js'),'utf8');
 test('HTML controls are present and the frontend is not Tkinter',()=>{
-  for(const id of ['search-input','search-action','songs','download-selected','playlist-input','view-home','view-local','view-settings','download-dir','quality','save-settings','local-list','open-folder','python-label','player-dock','music-audio','player-toggle','player-seek','player-volume','lyrics-panel','lyrics-scroll','toggle-lyrics','cache-limit','parallel-downloads','download-activity','cache-stats','clear-cache','view-favorites','favorites-list']){
+  for(const id of ['search-input','search-action','songs','download-selected','playlist-input','view-home','view-local','view-settings','download-dir','quality','save-settings','local-list','open-folder','python-label','player-dock','music-audio','player-toggle','player-seek','player-volume','lyrics-panel','lyrics-scroll','toggle-lyrics','cache-limit','parallel-downloads','download-activity','cache-stats','clear-cache','local-favorites','favorites-list']){
     assert.match(html,new RegExp(`id="${id}"`),id);
   }
   assert.match(html,/lang="zh-CN"/);

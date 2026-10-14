@@ -10,7 +10,7 @@ function measure(){
     measurePending=false;
     // scrollHeight is the full wrapped text height, not the current clipped viewport height.
     const content=$('widget');
-    const height=Math.ceil(content.scrollHeight+10);
+    const height=Math.ceil(content.getBoundingClientRect().height+12);
     window.floatingBridge.resize(Math.max(88,height)).catch(()=>{});
   });
 }
@@ -25,7 +25,6 @@ function paint(){
     '--text-align':x.align||'center','--panel-opacity':String((x.opacity??100)/100)
   }))root.setProperty(key,val);
   $('widget').dataset.background=x.background||'none';
-  $('name').textContent=lastInfo.title||'桌面歌词';
   const lyric=lastInfo.line||'♪ 暂无同步歌词';
   $('lyric').textContent=lyric;
   $('translate').textContent=lastInfo.translation||'';
@@ -34,11 +33,28 @@ function paint(){
   $('translate').hidden=x.showTranslation===false||!lastInfo.translation;
   measure();
 }
-$('close').onclick=()=>window.floatingBridge.close();
-$('lock').onclick=()=>window.floatingBridge.lock(true);
+// Do not use -webkit-app-region:drag: Windows suppresses right-click in draggable areas.
+// Cursor position is read by the main process, and the entire transparent overlay is draggable.
+let dragging=false;
+function endDrag(){if(!dragging)return;dragging=false;window.floatingBridge.dragEnd();}
+document.body.addEventListener('pointerdown',event=>{
+  if(event.button!==0)return;
+  dragging=true;
+  document.body.setPointerCapture?.(event.pointerId);
+  window.floatingBridge.dragBegin();
+});
+document.body.addEventListener('pointermove',event=>{
+  if(dragging&&event.buttons&1)window.floatingBridge.dragMove();
+});
+document.body.addEventListener('pointerup',endDrag);
+document.body.addEventListener('pointercancel',endDrag);
+window.addEventListener('blur',endDrag);
+document.body.addEventListener('contextmenu',event=>{
+  event.preventDefault();endDrag();window.floatingBridge.showMenu();
+});
 window.floatingBridge.onText(info=>{lastInfo=info||lastInfo;paint()});
 window.floatingBridge.onSettings(next=>{prefs=next;paint()});
-window.floatingBridge.onLocked(locked=>{$('lock').textContent=locked?'已锁定':'锁定';$('widget').dataset.locked=String(locked);measure()});
+window.floatingBridge.onLocked(locked=>{$('widget').dataset.locked=String(locked)});
 window.addEventListener('resize',measure);
 new ResizeObserver(measure).observe($('widget'));
 window.floatingBridge.getSettings().then(next=>{prefs=next;paint()}).catch(()=>paint());
