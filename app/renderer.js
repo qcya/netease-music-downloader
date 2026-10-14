@@ -2,7 +2,7 @@
 (() => {
   const bridge = window.musicBridge;
   const $ = selector => document.querySelector(selector);
-  const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, playlists:[], activePlaylistId:null, immersive:false, downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false};
+  const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, playlists:[], activePlaylistId:null, immersive:false, downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false,playQueue:null,advancingPlaylist:false,advanceSerial:0,currentLocalName:null};
 
   const svg = {
     home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
@@ -282,7 +282,7 @@
   function updateFloatingLine(){
     if(!state.floating)return;
     const row=state.lyrics[state.lyricIndex];
-    void bridge.updateFloatingLyrics({title:state.playerInfo?.name||'桌面歌词',line:row?.text||$('#player-synced-line').textContent,translation:row?.translation||''}).catch(()=>{});
+    void bridge.updateFloatingLyrics({title:state.playerInfo?.name||'桌面歌词',line:row?.text||'',translation:row?.translation||''}).catch(()=>{});
   }
   // requestAnimationFrame follows the audio playback clock, not the throttled HTMLAudioElement timeupdate event.
   let lyricFrame=0;
@@ -382,12 +382,52 @@
     updatePlayerControls();
     return started;
   }
-  async function playLocalFile(file) {
-    if(state.busy || state.preparing){showToast('请稍后再试听。');return;}
+  function stopLocalPlaybackIfRenaming(name){
+    if(state.currentLocalName!==name)return;
+    audio().pause();audio().removeAttribute('src');audio().load();
+    state.playToken++;state.advanceSerial++;state.playQueue=null;
+    state.currentLocalName=null;state.playingId=null;
+    clearLyrics('请选择歌曲');updatePlayerControls();
+  }
+  async function playLocalFile(file,queue=null,automatic=false) {
+    if(!automatic)state.advanceSerial++;
     const token=++state.playToken;
-    audio().pause();state.preparing=true;
-    try {const info=await bridge.playLocal(file.name);if(token===state.playToken)await startAudio(info,info.url,token,info.id);}
-    catch(e){if(token===state.playToken){state.preparing=false;showToast(errMessage(e),true);}}
+    audio().pause();
+    state.preparing=true;
+    state.currentLocalName=file.name;
+    state.playQueue=queue?{id:queue.id,tracks:[...queue.tracks],index:queue.index}:null;
+    try {
+      const info=await bridge.playLocal(file.name);
+      if(token!==state.playToken)return false;
+      return await startAudio(info,info.url,token,info.id)===true;
+    }catch(e){
+      if(token===state.playToken)showToast('无法播放「'+file.name+'」：'+errMessage(e),true);
+      return false;
+    }finally{
+      if(token===state.playToken)state.preparing=false;
+    }
+  }
+  async function advancePlaylist(){
+    const q=state.playQueue;
+    if(!q?.tracks.length||state.advancingPlaylist)return;
+    const serial=++state.advanceSerial;
+    state.advancingPlaylist=true;
+    let success=false;
+    try{
+      for(let step=1;step<=q.tracks.length;step++){
+        if(serial!==state.advanceSerial)return;
+        const index=(q.index+step)%q.tracks.length;
+        success=await playLocalFile({name:q.tracks[index]},{id:q.id,tracks:q.tracks,index},true);
+        if(serial!==state.advanceSerial)return;
+        if(success)return;
+      }
+    }finally{
+      state.advancingPlaylist=false;
+      if(!success&&serial===state.advanceSerial){
+        state.playQueue=null;
+        showToast('歌单没有可继续播放的歌曲，已停止。',true);
+      }
+    }
   }
   async function updateCacheStats(){
     try {const stats=await bridge.cacheStats();$('#cache-stats').textContent=`已缓存 ${stats.count} 首 · ${(stats.bytes/1024/1024).toFixed(1)} MB`;}
@@ -694,6 +734,7 @@
     });
     audio().addEventListener('loadedmetadata',()=>{$('#time-duration').textContent=timeLabel(audio().duration);$('#immersive-duration').textContent=timeLabel(audio().duration);});
     for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});});
+    audio().addEventListener('ended',()=>{void advancePlaylist()});
     audio().addEventListener('seeked',()=>syncLyrics(true));
     audio().addEventListener('error',()=>{if(audio().src)showToast('音频无法播放，可能是文件格式或缓存失效。',true);});
     $('#player-toggle').addEventListener('click',()=>{
@@ -714,7 +755,7 @@
     $('#clear-cache').addEventListener('click',async()=>{
       if(state.preparing||state.busy){showToast('有任务运行中，稍后清理缓存。');return;}
       if(!confirm('清除试听音频和歌词缓存？已下载到音乐文件夹的歌曲不会被删除。'))return;
-      audio().pause();audio().removeAttribute('src');audio().load();state.playingId=null;state.playToken++;
+      audio().pause();audio().removeAttribute('src');audio().load();state.playingId=null;state.playToken++;state.playQueue=null;state.advanceSerial++;state.currentLocalName=null;
       clearLyrics('缓存已清理');updatePlayerControls();
       try {await bridge.clearCache();await updateCacheStats();showToast('试听缓存已清理，下载目录中的音乐仍在。');}
       catch(e){showToast(errMessage(e),true);}
