@@ -72,12 +72,7 @@
     const info = node('div','track-info');
     const title = node('div','track-title',track.name || '未知歌曲'); title.title = track.name || '';
     const artist = node('div','track-meta',`歌手：${track.artists || '未知歌手'}`);
-    const album = node('div','track-meta',`专辑：${track.album || '—'}`);
-    const footer = node('div','track-footer');
-    const duration = Number(track.duration_seconds || 0);
-    const time = duration > 0 ? `${Math.floor(duration/60)}:${String(duration%60).padStart(2,'0')}` : '—';
-    footer.append(node('span','',`时长 ${time}`), node('span','',`网易云 ID ${track.id}`));
-    info.append(title,artist,album,footer);
+    info.append(title,artist);
     const ctrl = node('div','track-controls');
     const toggle = node('button','track-select');
     toggle.type = 'button';toggle.title='勾选歌曲';toggle.setAttribute('aria-label','勾选 '+(track.name||''));
@@ -540,44 +535,73 @@
   function songName(file){return file.name.replace(/\s*\[\d+\]\.[^.]+$/,'')}
   async function addLocalToPlaylist(file){
     try{
-      const all=await bridge.playlistsList();
-      const choice=all.length===1?all[0]:all.find(p=>p.id===state.activePlaylistId)||all[0];
-      if(!choice){showToast('请先新建一个歌单。');await showView('playlists');return}
-      const target=all.length>1?prompt('请输入目标歌单名称：',choice.name):choice.name;
-      if(target===null)return;
-      const selected=all.find(p=>p.name===target.trim());
-      if(!selected){showToast('歌单不存在，请从「我的歌单」创建。',true);return}
-      await bridge.playlistsAdd(selected.id,file.name);showToast('已添加到「'+selected.name+'」');
+      stopLocalPlaybackIfRenaming(file.name);
+      await bridge.playlistsAdd('default',file.name);
+      showToast('已加入我的歌单，文件名添加 [歌单] 前缀。');
+      await refreshLocal();
+      if(state.view==='playlists')await refreshPlaylists();
     }catch(e){showToast(errMessage(e),true)}
   }
-  async function refreshPlaylists(){
-    const list=await bridge.playlistsList();state.playlists=list;
-    if(!list.some(p=>p.id===state.activePlaylistId))state.activePlaylistId=list[0]?.id||null;
-    const select=$('#playlist-select');select.replaceChildren();
-    for(const p of list){const op=node('option','',p.name+` (${p.tracks.length})`);op.value=p.id;select.append(op)}
-    if(state.activePlaylistId)select.value=state.activePlaylistId;
-    const cur=list.find(p=>p.id===state.activePlaylistId),container=$('#my-playlist-tracks');container.replaceChildren();
-    if(!cur||!cur.tracks.length){container.append(node('div','empty-simple','歌单还没有歌曲。在「本地」点击“加入歌单”。'));return}
-    for(const name of cur.tracks){const row=node('div','playlist-entry');row.append(node('strong','',songName({name})));
-      const play=node('button','','播放');play.onclick=()=>playLocalFile({name});
-      const remove=node('button','','移出歌单');remove.onclick=async()=>{await bridge.playlistsRemove(cur.id,name);await refreshPlaylists()};
-      row.append(play,remove);container.append(row)}
+  async function removeLocalFromPlaylist(file){
+    try{
+      stopLocalPlaybackIfRenaming(file.name);
+      await bridge.playlistsRemove('default',file.name);
+      showToast('已移出歌单，文件名恢复原样。');
+      await refreshLocal();
+      if(state.view==='playlists')await refreshPlaylists();
+    }catch(e){showToast(errMessage(e),true)}
   }
-  async function refreshLocal() {
-    const parent=$('#local-list');parent.replaceChildren();
-    try {
-      const files=await bridge.listFiles();
-      if (!files.length){parent.appendChild(node('div','empty-simple','当前目录中还没有音乐文件。'));return;}
-      for(const file of files){
-        const row=node('div','local-item');const i=node('span');i.innerHTML=icon('music');
-        const name=node('span','local-item-name',file.name);name.title=file.name;
-        const size=node('span','local-item-size',`${(file.size/1024/1024).toFixed(1)} MB`);
-        const ops=node('div','local-ops');
-        const play=node('button','local-play','播放');play.type='button';play.addEventListener('click',()=>playLocalFile(file));
-        const add=node('button','local-play','＋ 加入歌单');add.type='button';add.addEventListener('click',()=>addLocalToPlaylist(file));
-        ops.append(play,add);row.append(i,name,size,ops);parent.appendChild(row);
+  async function deleteLocalFile(file){
+    const warning=file.inPlaylist?'【这首歌曲属于我的歌单】':'这首歌曲不在歌单中';
+    if(!confirm(warning+'\\n确定把「'+file.name+'」移入回收站吗？同名歌词文件也会一起移入回收站。'))return;
+    try{
+      stopLocalPlaybackIfRenaming(file.name);
+      await bridge.deleteLocal(file.name,true);
+      showToast('歌曲已移入回收站，可在 Windows 回收站中恢复。');
+      await refreshLocal();
+      if(state.view==='playlists')await refreshPlaylists();
+    }catch(e){showToast('删除失败：'+errMessage(e),true)}
+  }
+  async function refreshPlaylists(){
+    try{
+      const list=await bridge.playlistsList();
+      state.playlists=list;state.activePlaylistId='default';
+      const cur=list[0],container=$('#my-playlist-tracks');container.replaceChildren();
+      if(!cur?.tracks?.length){
+        container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加。'));
+        return;
       }
-    } catch(e) {showToast(errMessage(e),true);}
+      for(const [index,name] of cur.tracks.entries()){
+        const row=node('div','playlist-entry');
+        row.append(node('strong','',songName({name})));
+        const play=node('button','','播放');
+        play.onclick=()=>{void playLocalFile({name},{id:'default',tracks:cur.tracks,index})};
+        const remove=node('button','','移出歌单');
+        remove.onclick=()=>{void removeLocalFromPlaylist({name,inPlaylist:true})};
+        row.append(play,remove);container.append(row);
+      }
+    }catch(e){showToast('读取歌单失败：'+errMessage(e),true)}
+  }
+  async function refreshLocal(){
+    const parent=$('#local-list');parent.replaceChildren();
+    try{
+      const files=await bridge.listFiles();
+      if(!files.length){parent.append(node('div','empty-simple','当前目录中还没有音乐文件。'));return}
+      for(const file of files){
+        const row=node('div','local-item');
+        if(file.inPlaylist)row.classList.add('in-playlist');
+        const i=node('span');i.innerHTML=icon('music');
+        const name=node('span','local-item-name',file.name);name.title=file.name;
+        const size=node('span','local-item-size',(file.size/1024/1024).toFixed(1)+' MB');
+        const ops=node('div','local-ops');
+        const play=node('button','local-play','播放');play.type='button';play.onclick=()=>{void playLocalFile(file)};
+        const membership=node('button','local-play',file.inPlaylist?'移出歌单':'＋ 加入歌单');
+        membership.type='button';
+        membership.onclick=()=>{void(file.inPlaylist?removeLocalFromPlaylist(file):addLocalToPlaylist(file))};
+        const del=node('button','local-delete','删除');del.type='button';del.onclick=()=>{void deleteLocalFile(file)};
+        ops.append(play,membership,del);row.append(i,name,size,ops);parent.append(row);
+      }
+    }catch(e){showToast('本地列表加载失败：'+errMessage(e),true)}
   }
   let taskRenderVersion=0;
   async function renderTasks(){
@@ -680,8 +704,6 @@
     bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;updateDesktopLyricsToggle();});
     bridge.onOpenLyricsSettings(()=>showView('settings'));
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
-    $('#create-playlist').addEventListener('click',async()=>{const name=prompt('新歌单名称：','我的歌单');if(!name?.trim())return;try{const p=await bridge.playlistsCreate(name);state.activePlaylistId=p.id;await refreshPlaylists()}catch(e){showToast(errMessage(e),true)}});
-    $('#playlist-select').addEventListener('change',()=>{state.activePlaylistId=$('#playlist-select').value;void refreshPlaylists()});
     $('#search-form').addEventListener('submit',search);
     $('#example-search').addEventListener('click',()=>{$('#search-input').value='我的悲伤是水做的 洛天依';search();});
     $('#download-selected').addEventListener('click',()=>downloadSongs([...state.selected]));
