@@ -21,8 +21,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
     lock(!!safeSettings().mouseThrough);
     if(lastText?.line?.trim()){
       floating.webContents.send('lyrics:text',lastText);
-      floating.showInactive?.();
-      if(!floating.isVisible?.())floating.show();
+      if(typeof floating.showInactive==='function')floating.showInactive();else floating.show();
     }
   });
   floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
@@ -45,7 +44,9 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   if(!loaded)return true;
   floating.webContents.send('lyrics:text',lastText);
   if(lastText.line.trim()){
-    if(!floating.isVisible?.())floating.showInactive?.()||floating.show();
+    if(!floating.isVisible?.()){
+      if(typeof floating.showInactive==='function')floating.showInactive();else floating.show();
+    }
   }else floating.hide();
   return true;
  }
