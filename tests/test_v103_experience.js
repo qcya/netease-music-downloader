@@ -72,3 +72,30 @@ test('desktop caption has no native title strip and real shadow settings',()=>{
  assert.match(renderer,/x\.autoHideEmpty!==true/);
  assert.match(renderer,/x\.autoHideEmpty===true/);
 });
+
+test('mini player is closed by default, receives media state and validates control sender',()=>{
+ const {createMiniPlayerController}=require('../mini_player.js');
+ let fake,received=[],toMain=[];
+ const main={isDestroyed:()=>false,webContents:{send:(...args)=>toMain.push(args)}};
+ class Window{
+  constructor(options){this.options=options;this.destroyed=false;this.webContents={
+    id:90,once:(_event,fn)=>this.loaded=fn,send:(...a)=>received.push(a),
+    setWindowOpenHandler(){},on(){} };fake=this}
+  isDestroyed(){return this.destroyed}
+  loadFile(){this.loaded?.()}
+  show(){}
+  close(){this.destroyed=true;this.closed?.()}
+  on(ev,cb){if(ev==='closed')this.closed=cb}
+ }
+ const ctrl=createMiniPlayerController({BrowserWindow:Window,baseDir:process.cwd(),getMainWindow:()=>main});
+ assert.equal(ctrl.exists(),false,'mini player must never open automatically');
+ ctrl.open();assert.equal(fake.options.alwaysOnTop,true);
+ ctrl.update({title:'歌曲A',artist:'歌手B',playing:true});
+ assert.ok(received.some(([ev,data])=>ev==='mini:state'&&data.title==='歌曲A'&&data.playing===true));
+ assert.equal(ctrl.control({id:91},'next'),false);
+ assert.equal(ctrl.control({id:90},'erase'),false);
+ assert.equal(ctrl.control({id:90},'next'),true);
+ assert.deepEqual(toMain.at(-1),['mini:control','next']);
+ ctrl.close();assert.equal(ctrl.exists(),false);
+ assert.deepEqual(toMain.at(-1),['mini:status',{open:false}]);
+});
