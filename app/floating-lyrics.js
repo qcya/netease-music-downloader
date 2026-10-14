@@ -19,9 +19,11 @@ function paint(){
   const root=document.documentElement.style;
   for(const [key,val] of Object.entries({
     '--original':x.originalColor||'#FFFFFF','--translated':x.translationColor||'#FFFFFF',
-    '--outline':x.outlineColor||'#FFFFFF','--outline-width':`${x.outlineWidth??2}px`,
-    '--shadow':`${x.shadow??2}px`,'--glow':`${x.glow??16}px`,'--original-size':`${x.fontSize??30}px`,
-    '--translated-size':`${x.translationSize??18}px`,'--lyric-line-height':String(x.lineHeight??1.36),
+    '--outline':x.outlineColor||'#FFFFFF','--outline-width':`${x.outlineWidth??0}px`,
+    '--shadow':`${x.shadow??2}px`,'--glow':`${x.glow??14}px`,
+    '--lyric-primary-color':x.originalColor||'#FFFFFF','--lyric-secondary-color':x.translationColor||'#FFFFFF',
+    '--lyric-glow-radius':`${x.glow??14}px`,'--original-size':`${x.fontSize??30}px`,
+    '--translated-size':`${x.translationSize??18}px`,'--lyric-line-height':String(x.lineHeight??1.28),
     '--text-align':x.align||'center','--panel-opacity':String((x.opacity??100)/100)
   }))root.setProperty(key,val);
   $('widget').dataset.background=x.background||'none';
@@ -41,6 +43,7 @@ function endDrag(){if(!dragging)return;dragging=false;window.floatingBridge.drag
 document.body.addEventListener('pointerdown',event=>{
   if(event.button!==0||locked)return;
   dragging=true;
+  document.getSelection()?.removeAllRanges(); // Prevent selection highlight strips during overlay dragging.
   document.body.setPointerCapture?.(event.pointerId);
   window.floatingBridge.dragBegin();
 });
