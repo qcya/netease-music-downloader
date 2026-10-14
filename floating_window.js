@@ -2,19 +2,32 @@
 const path=require('node:path');
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
 function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,onBoundsChanged,screen}){
- let floating=null,locked=false,currentHeight=88,dragStart=null;
+ let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
  function open(){
-  if(exists()){floating.show();return {open:true};}
+  if(exists()){if(loaded&&lastText?.line?.trim())floating.show();return {open:true};}
   const s=safeSettings();
   floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
     frame:false,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:true,
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
+  // Chromium's ready-to-show is inconsistent for fully transparent windows.
+  // Wait for the actual page to load and for real lyric text before showing.
+  loaded=false;lastText=null;
+  floating.webContents.once('did-finish-load',()=>{
+    if(!exists())return;
+    loaded=true;
+    floating.webContents.send('lyrics:settings',safeSettings());
+    lock(!!safeSettings().mouseThrough);
+    if(lastText?.line?.trim()){
+      floating.webContents.send('lyrics:text',lastText);
+      floating.showInactive?.();
+      if(!floating.isVisible?.())floating.show();
+    }
+  });
   floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
-  floating.setBackgroundColor?.('#00000000'); // Maintain transparent native backing layer.
-  floating.once('ready-to-show',()=>{if(exists()){floating.show();floating.webContents.send('lyrics:settings',safeSettings());lock(!!safeSettings().mouseThrough);}});
-  floating.on('closed',()=>{dragStart=null;floating=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
+  floating.setBackgroundColor?.('#00000000');
+  floating.on('closed',()=>{dragStart=null;floating=null;loaded=false;lastText=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
   floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   floating.webContents.on('will-navigate',e=>e.preventDefault());
   return {open:true};
@@ -26,8 +39,16 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   dragStart=null;
   floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
 
- function update(info){if(!exists()||!info||typeof info!=='object')return false;
-  floating.webContents.send('lyrics:text',{title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)});return true;}
+ function update(info){
+  if(!exists()||!info||typeof info!=='object')return false;
+  lastText={title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)};
+  if(!loaded)return true;
+  floating.webContents.send('lyrics:text',lastText);
+  if(lastText.line.trim()){
+    if(!floating.isVisible?.())floating.showInactive?.()||floating.show();
+  }else floating.hide();
+  return true;
+ }
  function applySettings(s){if(!exists())return;
   floating.setAlwaysOnTop(s.alwaysOnTop!==false);
   const b=floating.getBounds(),work=screen?.getDisplayMatching?.(b)?.workArea;
