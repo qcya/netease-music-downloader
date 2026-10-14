@@ -539,6 +539,7 @@ function createWindow() {
   win.once('ready-to-show', () => {win.show();floatingLyrics.setMainFocused(true)});
   win.webContents.on('will-navigate', (event) => event.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({action:'deny'}));
+  win.on('closed',()=>miniPlayer.close()); // The mini control strip must not orphan an invisible player process.
 }
 
 app.setAppUserModelId(APPLICATION_ID);
