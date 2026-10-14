@@ -64,6 +64,7 @@ test('desktop caption has no native title strip and real shadow settings',()=>{
  assert.match(html,/<title><\/title>/);
  assert.match(native,/frame:false,title:'',titleBarStyle:'hidden'/);
  assert.match(native,/setMenuBarVisibility\?\.\(false\)/);
+ assert.match(native,/resizable:false/);
  assert.match(css,/--lyric-shadow-scale/);
  assert.match(css,/calc\(var\(--lyric-shadow-scale\) \* 9px\)/);
  assert.match(renderer,/'--lyric-shadow-scale':String\(x\.shadow\?\?2\)/);
