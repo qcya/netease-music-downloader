@@ -90,10 +90,19 @@ function createPlaylistStore({getDir,getIndexFile,readJSON,writeJSONAtomic}){
     writeJSONAtomic(getIndexFile(),single(tracks));
     return single(tracks);
   }
+  function reorder(names){
+    const existing=sourceNames()[0].tracks;
+    if(!Array.isArray(names)||names.length!==existing.length||
+       names.some(n=>typeof n!=='string'||!validName(n))||
+       new Set(names).size!==names.length||
+       !names.every(n=>existing.includes(n)))throw new Error('歌单排序内容已过期，请刷新后再试');
+    writeJSONAtomic(getIndexFile(),single([...names]));
+    return single([...names]);
+  }
   function afterDelete(name){
     const tracks=sourceNames()[0].tracks.filter(x=>x!==name);
     writeJSONAtomic(getIndexFile(),single(tracks));
   }
-  return {list,add,remove,afterDelete,localFile,tagged,clean,PREFIX};
+  return {list,add,remove,reorder,afterDelete,localFile,tagged,clean,PREFIX};
 }
 module.exports={createPlaylistStore,PREFIX,validName};

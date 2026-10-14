@@ -1,11 +1,12 @@
-/* Shared renderer for immersive (active) and desktop lyrics.
-   The player is the reference: white glyphs + blue-grey depth + gentle pink bloom. */
-:root{--lyric-primary-color:#fff;--lyric-secondary-color:#fff;--lyric-glow-radius:14px}
+/* Shared bloom: the shadow-strength slider now controls blue depth independently. */
+:root{--lyric-primary-color:#fff;--lyric-secondary-color:#fff;--lyric-glow-radius:14px;--lyric-shadow-scale:2}
 .immersive-line.active,.lyric{
   color:var(--lyric-primary-color);
-  text-shadow:0 4px 18px #20355f,0 0 var(--lyric-glow-radius) #fce5f7;
+  text-shadow:0 calc(var(--lyric-shadow-scale) * 2px) calc(var(--lyric-shadow-scale) * 9px) #20355f,
+    0 0 var(--lyric-glow-radius) #fce5f7;
 }
 .immersive-line .immersive-translation,.translate{
   color:var(--lyric-secondary-color);
-  text-shadow:0 2px 8px rgba(32,53,95,.60),0 0 calc(var(--lyric-glow-radius) * .6) rgba(252,229,247,.9);
+  text-shadow:0 calc(var(--lyric-shadow-scale) * 1px) calc(var(--lyric-shadow-scale) * 4px) rgba(32,53,95,.60),
+    0 0 calc(var(--lyric-glow-radius) * .6) rgba(252,229,247,.9);
 }

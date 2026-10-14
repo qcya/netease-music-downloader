@@ -1,0 +1,9 @@
+:root{font-family:"Microsoft YaHei UI","PingFang SC",sans-serif;color:#63748e}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;background:#fff6fb}
+.mini{height:100%;padding:12px 15px;display:flex;align-items:center;gap:8px;background:linear-gradient(100deg,#fff1fa,#ecf7ff);border:1px solid #f2dfec;border-radius:13px;-webkit-app-region:drag}
+.name{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.name strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.name span{font-size:10px;color:#99a4b5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.buttons{display:flex;align-items:center;gap:5px;-webkit-app-region:no-drag}
+button{border:0;border-radius:9px;background:#f9e0ef;color:#876c89;min-width:30px;height:30px;cursor:pointer;font-size:11px}
+button:hover{background:#efc8e0}#close{background:transparent;font-size:20px;color:#a1aabc}

@@ -48,7 +48,9 @@ test('immersive and floating lyric use shared, identical glow shadow layers',()=
  assert.match(floatHtml,/href="lyric-glow\.css"/);
  assert.match(shared,/\.immersive-line\.active,\.lyric\{/);
  assert.match(shared,/\.immersive-line \.immersive-translation,\.translate\{/);
- assert.match(shared,/0 4px 18px #20355f,0 0 var\(--lyric-glow-radius\) #fce5f7/);
+ assert.match(shared,/--lyric-shadow-scale/);
+ assert.match(shared,/calc\(var\(--lyric-shadow-scale\) \* 9px\)/);
+ assert.match(shared,/var\(--lyric-glow-radius\) #fce5f7/);
  assert.doesNotMatch(floating,/text-shadow:/);
  assert.doesNotMatch(immersive,/\.immersive-line\.active\{[^}]*text-shadow/);
  assert.equal(defaults.glow,14);

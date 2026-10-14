@@ -12,8 +12,8 @@ test('single playlist replaces broken multiple-playlist creation UI',()=>{
 });
 test('playlist playback is continuous, cyclic, and manual local playback resets it',()=>{
  const js=read('app/renderer.js');
- assert.match(js,/audio\(\)\.addEventListener\('ended',\(\)=>\{void advancePlaylist\(\)\}/);
- assert.match(js,/MusicPlaybackNavigation\.step\(queue,direction\)/);
+ assert.match(js,/audio\(\)\.addEventListener\('ended',\(\)=>\{void advancePlaylist\(1,'ended'\)\}/);
+ assert.match(js,/MusicPlaybackNavigation\.step\(queue,direction,Math\.random,source\)/);
  assert.match(js,/state\.playQueue=queue\?/);
  assert.match(js,/state\.advanceSerial\+\+/);
 });
@@ -38,5 +38,5 @@ test('floating caption does not render a fallback placeholder while empty',()=>{
  assert.match(native,/did-finish-load/);
  assert.match(native,/floating\.hide\?\.\(\)/);
  assert.match(ui,/lastInfo=\{title:'桌面歌词',line:''/);
- assert.match(ui,/\$\('widget'\)\.hidden=noLyrics/);
+ assert.match(ui,/\$\('widget'\)\.hidden=noLyrics&&\(x\.autoHideEmpty===true/);
 });
