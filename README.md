@@ -1,6 +1,6 @@
 <div align="center">
 
-# 音乐下载器 v1.0.6
+# 音乐下载器 v1.0.7
 
 **音乐下载 · 下载管理 · 本地播放 · 同步歌词**
 
@@ -20,7 +20,7 @@ Windows 桌面应用 / 单文件便携版
 
 ## 下载与运行
 
-普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.6-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
+普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.7-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
 
 开发者：使用 Node.js 20+ 与 Python 3.10+。首次运行 `安装依赖.bat`，以后使用 `启动桌面版.bat` 或 `npm start` 启动源码。需要自行生成便携版时可运行 `构建Windows_EXE.bat`。
 
@@ -33,7 +33,7 @@ Windows 桌面应用 / 单文件便携版
 | 文件名 | 中文说明 |
 |---|---|
 | `README.md` | 项目介绍、下载入口、运行方法和完整的文件说明。 |
-| `RELEASE_NOTES_v1.0.6.md` | 正式版发布内容、主要功能和 EXE 文件校验说明。 |
+| `RELEASE_NOTES_v1.0.7.md` | 正式版发布内容、主要功能和 EXE 文件校验说明。 |
 | `package.json` | 项目版本、依赖、启动命令以及 Electron 打包设置。 |
 | `main.js` | 桌面程序主进程，管理窗口、系统配置、歌曲下载与本地播放接口。 |
 | `preload.js` | 主窗口的安全通信接口，供前端调用本地功能。 |
@@ -124,6 +124,8 @@ Windows 桌面应用 / 单文件便携版
 | `tests/test_windows_batch.py` | 检查 Windows 批处理脚本的编码与命令。 |
 | `tests/test_windows_encoding.py` | 检查 Windows 字符编码及发布工作流设置。 |
 
+| `tests/test_transparent_overlay_regression.js` | 检查 Electron 的透明窗口白条修复版本，以及悬浮歌词的无边框、透明和禁止最大化参数。 |
+
 ### `.github/workflows/` — GitHub 自动化
 
 | 文件名 | 中文说明 |
@@ -192,3 +194,10 @@ python -m pytest -q tests
 - 设置页新增独立的「重置歌词位置」按钮，只有主动点击该按钮才会清除自定义坐标并移动到主屏幕上方的默认位置。
 - 多显示器环境保留副屏幕负坐标；连接的显示器被移除后保证歌词重新出现在可见屏幕内。
 - 自动测试覆盖跨次开启、样式变更、旧设置兼容以及屏幕布局变化。
+
+## v1.0.7 桌面歌词白条专项修复
+
+- 排查确认 Electron 37.2.0 存在 Windows 透明无边框窗口失焦时出现原生标题栏的已知回归问题（Electron issue #46882，官方修复 #47386）。
+- Electron 更新至官方修复已合入的 37.3.1；悬浮歌词窗口禁止最大化、最小化、系统缩放及全屏，减少原生窗口装饰状态切换。
+- 保留当前歌词的字体、发光、动态大小、位置记忆、拖动、锁定穿透与下载器原有功能。
+- 新增代码回归测试以阻止后续不小心退回受影响的 Electron 版本；Windows 便携包继续执行真正 EXE 启动和退出验收。
