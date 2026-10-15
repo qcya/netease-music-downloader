@@ -351,3 +351,11 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 .mini-player-toggle{border:1px solid #e2d2e7;border-radius:11px;padding:7px 9px;background:#fff0f8;color:#996f93;font-size:11px;white-space:nowrap;cursor:pointer}
 .mini-player-toggle[aria-pressed="true"]{background:#f0deef;color:#87658c}
 @media(max-width:1120px){.mini-player-toggle{padding:6px 5px;font-size:10px}}
+
+
+/* Lyric position is an independent action, not part of the appearance preset. */
+.lyric-position-setting{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-top:13px;padding:12px 14px;border:1px solid #e5dfe9;border-radius:12px;background:#ffffff77}
+.lyric-position-setting strong{font-size:12px;color:#5e718d}
+.lyric-position-setting .settings-hint{margin:6px 0 0;font-size:11px;line-height:1.55}
+.lyric-position-setting button{flex-shrink:0}
+@media(max-width:760px){.lyric-position-setting{flex-direction:column;align-items:stretch}}

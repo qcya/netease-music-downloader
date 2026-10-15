@@ -72,6 +72,18 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   await invoke('settings:set',{downloadDir:dl,quality:'best',apiBases:[`http://127.0.0.1:${server.address().port}`]});
   const savedSettings=await invoke('settings:get');
   assert.equal(savedSettings.setupCompleted,false);
+  // Drag coordinates are owned by the main process, not by a renderer snapshot.
+  const settingsPath=path.join(temp,'userData','settings.json');
+  fs.mkdirSync(path.dirname(settingsPath),{recursive:true});
+  fs.writeFileSync(settingsPath,JSON.stringify({...savedSettings,floatingLyricsPosition:{x:415,y:205}}));
+  assert.deepEqual((await invoke('settings:get')).floatingLyricsPosition,{x:415,y:205});
+  await invoke('settings:set',{...savedSettings,cacheLimitMB:2048});
+  assert.deepEqual((await invoke('settings:get')).floatingLyricsPosition,{x:415,y:205},
+    'saving stale settings must not restore the old lyric coordinates');
+  await invoke('lyrics:reset-position');
+  assert.equal((await invoke('settings:get')).floatingLyricsPosition,null,
+    'only explicit reset should clear the saved location');
+
   await invoke('lyrics:lock',true);
   assert.equal((await invoke('settings:get')).floatingLyrics.mouseThrough,true,'lock is persisted immediately');
   await invoke('lyrics:lock',false);

@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   retryDownload:id=>ipcRenderer.invoke('download:retry',id),
   showFloatingLyrics:()=>ipcRenderer.invoke('lyrics:open'),
   closeFloatingLyrics:()=>ipcRenderer.invoke('lyrics:close'),
+  resetFloatingLyricsPosition:()=>ipcRenderer.invoke('lyrics:reset-position'),
+  getFloatingLyricsPosition:()=>ipcRenderer.invoke('lyrics:position'),
   lockFloatingLyrics:locked=>ipcRenderer.invoke('lyrics:lock',locked),
   updateFloatingLyrics:data=>ipcRenderer.invoke('lyrics:update',data),
   floatingLyricsStatus:()=>ipcRenderer.invoke('lyrics:status'),

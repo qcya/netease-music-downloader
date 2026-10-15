@@ -906,6 +906,15 @@
     $('#desktop-lyrics-enabled').addEventListener('change',()=>{void toggleDesktopLyrics($('#desktop-lyrics-enabled').checked)});
     $('#lyr-reset').addEventListener('click',()=>{fillLyricsStyle(defaultLyricStyle());livePreviewLyricStyle();showToast('已预览默认样式，点击保存设置即可保留。')});
     $('#lyr-test').addEventListener('click',()=>{livePreviewLyricStyle();showToast('正在当前页面预览样式，不会遮挡设置控件。')});
+    $('#lyr-reset-position').addEventListener('click',async()=>{
+      const button=$('#lyr-reset-position');button.disabled=true;
+      try{
+        await bridge.resetFloatingLyricsPosition();
+        if(state.settings)state.settings.floatingLyricsPosition=null;
+        showToast('桌面歌词位置已恢复默认，之后拖动仍会自动记住新位置。');
+      }catch(e){showToast('重置歌词位置失败：'+errMessage(e),true)}
+      finally{button.disabled=false}
+    });
     $('#show-disclaimer').addEventListener('click',()=>openFirstRun(true));
     $('#agree-disclaimer').addEventListener('change',()=>{$('#first-confirm').disabled=!$('#agree-disclaimer').checked});
     $('#first-confirm').addEventListener('click',async()=>{

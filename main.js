@@ -12,6 +12,7 @@ const { createPlaylistStore } = require('./local_playlist.js');
 const { importMusic } = require('./local_import.js');
 const {createMiniPlayerController}=require('./mini_player.js');
 const {wireMainWindow}=require('./app_lifecycle.js');
+const {normalizePosition}=require('./lyric_position.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
@@ -255,7 +256,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,floatingLyricsPosition:null,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -264,12 +265,25 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,floatingLyricsPosition:normalizePosition(stored.floatingLyricsPosition),playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
 }
 function ensureData() { fs.mkdirSync(app.getPath('userData'), {recursive:true}); }
+/** Window coordinates are updated independently so an old renderer settings
+ * snapshot can never undo a freshly dragged lyric position. */
+function persistFloatingLyricsPosition(position){
+  const next=normalizePosition(position);
+  const file=configFile();
+  ensureData();
+  const existing=readJSON(file,{});
+  if(!existing||typeof existing!=='object'||Array.isArray(existing))throw new Error('桌面歌词设置无法读取');
+  const prior=normalizePosition(existing.floatingLyricsPosition);
+  if(JSON.stringify(prior)===JSON.stringify(next))return next;
+  writeJSONAtomic(file,{...existing,floatingLyricsPosition:next});
+  return next;
+}
 function writeConfig(value) {
   if (!value || typeof value !== 'object') throw new Error('设置格式无效');
   const dir = typeof value.downloadDir === 'string' ? value.downloadDir.trim() : '';
@@ -290,7 +304,7 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
@@ -474,7 +488,7 @@ async function fetchLyrics(id, force=false) {
   try{return await task;}finally{if(lyricsPending.get(sid)===task)lyricsPending.delete(sid)}
 }
 
-const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,screen:require('electron').screen});
+const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,screen:require('electron').screen});
 const miniPlayer=createMiniPlayerController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win});
 
 function safeAudioOrigin(value) {
@@ -525,7 +539,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.5', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.6', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -722,6 +736,8 @@ app.whenReady().then(() => {
   ipcMain.handle('favorites:list',()=>listFavorites());
   ipcMain.handle('lyrics:open',()=>floatingLyrics.open());
   ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
+  ipcMain.handle('lyrics:reset-position',()=>floatingLyrics.resetPosition());
+  ipcMain.handle('lyrics:position',()=>config().floatingLyricsPosition);
   ipcMain.handle('lyrics:lock',(_e,lock)=>{const s=config();s.floatingLyrics.mouseThrough=!!lock;writeConfig(s);return floatingLyrics.lock(!!lock)});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));

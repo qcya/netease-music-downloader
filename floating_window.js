@@ -1,7 +1,8 @@
 'use strict';
 const path=require('node:path');
+const {normalizePosition,resolvePosition}=require('./lyric_position.js');
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
-function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,onBoundsChanged,screen}){
+function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,getSavedPosition,onBoundsChanged,screen}){
  let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null,mainFocused=true;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
@@ -14,7 +15,10 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function open(){
   if(exists()){reconcileVisibility();return {open:true};}
   const s=safeSettings();
-  floating=new BrowserWindow({width:s.width||800,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
+  const width=Math.round(Number(s.width)||800);
+  const saved=getSavedPosition?.();
+  const location=resolvePosition(saved,screen,width,currentHeight);
+  floating=new BrowserWindow({...(location||{}),width,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
     frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:false, // Electron Windows transparent windows must not expose native resize chrome.
     
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
@@ -37,8 +41,35 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   floating.webContents.on('will-navigate',e=>e.preventDefault());
   return {open:true};
  }
- function close(){if(exists())floating.close();return {open:false}}
- function lock(value){locked=!!value;if(!exists())return {open:false};
+ function position(){
+   if(!exists()||typeof floating.getBounds!=='function')return null;
+   const {x,y}=floating.getBounds();
+   return normalizePosition({x,y});
+ }
+ function rememberPosition(){
+   const point=position();
+   if(point)onBoundsChanged?.(point);
+   return point;
+ }
+ function close(){
+   if(exists()){dragEnd();floating.close()}
+   return {open:false};
+ }
+ function resetPosition(){
+   // This is the only operation that deliberately discards saved coordinates.
+   dragStart=null;
+   const old=getSavedPosition?.();
+   if(!exists()){
+     onBoundsChanged?.(null);
+     return {reset:true,previous:normalizePosition(old)};
+   }
+   const b=floating.getBounds();
+   const target=resolvePosition(null,screen,b.width,b.height);
+   if(target)floating.setPosition(target.x,target.y,false);
+   onBoundsChanged?.(null);
+   return {reset:true,position:target};
+ }
+ function lock(value){if(dragStart)dragEnd();locked=!!value;if(!exists())return {open:false};
   // A true lock must pass BOTH mouse buttons to the underlying desktop window.
   floating.setIgnoreMouseEvents(locked,{forward:true});
   dragStart=null;
@@ -56,7 +87,11 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   floating.setAlwaysOnTop(s.alwaysOnTop!==false);
   const b=floating.getBounds(),work=screen?.getDisplayMatching?.(b)?.workArea;
   const width=work?Math.min(s.width,work.width-24):s.width;
-  if(b.width!==width)floating.setSize(width,b.height);
+  if(b.width!==width){
+    floating.setSize(width,b.height);
+    const location=resolvePosition(position(),screen,width,b.height);
+    if(location&&typeof floating.setPosition==='function')floating.setPosition(location.x,location.y,false);
+  }
   floating.webContents.send('lyrics:settings',s);
   lock(!!s.mouseThrough);
   reconcileVisibility();
@@ -76,7 +111,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
    const nextX=Math.round(b.x+cursor.x-dragStart.cursor.x),nextY=Math.round(b.y+cursor.y-dragStart.cursor.y);
    floating.setPosition(nextX,nextY,false);return true;
  }
- function dragEnd(){dragStart=null;return true;}
+ function dragEnd(){const wasDragging=!!dragStart;dragStart=null;if(wasDragging)rememberPosition();return true;}
  function showMenu(){if(!exists()||locked)return false;
    const menu=Menu.buildFromTemplate([
      {label:'锁定位置（解锁请返回软件设置）',click:()=>lockAndSave(true)},
@@ -90,6 +125,6 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function setLockChange(callback){onLockChange=callback;}
  function lockAndSave(value){const result=lock(value);if(onLockChange)onLockChange(locked);return result;}
  function owns(webContents){return exists()&&webContents?.id===floating.webContents.id;}
- return {open,close,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,dragBegin,dragMove,dragEnd,showMenu,exists,owns,setMainFocused};
+ return {open,close,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,dragBegin,dragMove,dragEnd,resetPosition,position,showMenu,exists,owns,setMainFocused};
 }
 module.exports={createFloatingLyricsController};
