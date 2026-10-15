@@ -36,15 +36,15 @@ echo [INFO] Bundling Python backend then building one Windows portable EXE...
 call npm run build:win
 if errorlevel 1 goto :failed
 
-if not exist "dist\MusicDownloader-1.0.5-portable.exe" goto :missing_exe
+if not exist "dist\MusicDownloader-1.0.6-portable.exe" goto :missing_exe
 
 echo [INFO] Extracting actual icon from the built EXE...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0验证EXE图标.ps1" -ExePath "%~dp0dist\MusicDownloader-1.0.5-portable.exe"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0验证EXE图标.ps1" -ExePath "%~dp0dist\MusicDownloader-1.0.6-portable.exe"
 if errorlevel 1 goto :icon_error
 
 echo.
 echo [OK] Verified Windows executable was created:
-echo %~dp0dist\MusicDownloader-1.0.5-portable.exe
+echo %~dp0dist\MusicDownloader-1.0.6-portable.exe
 echo [INFO] Open dist\EXE实际图标.png to inspect the embedded icon.
 pause
 exit /b 0
@@ -68,7 +68,7 @@ exit /b 1
 
 :icon_error
 echo [ERROR] EXE was built but icon extraction could not be verified.
-echo Inspect dist\MusicDownloader-1.0.5-portable.exe manually.
+echo Inspect dist\MusicDownloader-1.0.6-portable.exe manually.
 pause
 exit /b 1
 
