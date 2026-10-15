@@ -19,7 +19,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   const saved=getSavedPosition?.();
   const location=resolvePosition(saved,screen,width,currentHeight);
   floating=new BrowserWindow({...(location||{}),width,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
-    frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:false, // Electron Windows transparent windows must not expose native resize chrome.
+    frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:false,maximizable:false,minimizable:false,fullscreenable:false, // Prevent Windows DWM from creating phantom chrome on transparent frameless overlays.
     
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   // Chromium's ready-to-show is inconsistent for fully transparent windows.
