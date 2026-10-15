@@ -124,6 +124,8 @@ Windows 桌面应用 / 单文件便携版
 | `tests/test_windows_batch.py` | 检查 Windows 批处理脚本的编码与命令。 |
 | `tests/test_windows_encoding.py` | 检查 Windows 字符编码及发布工作流设置。 |
 
+| `tests/test_transparent_overlay_regression.js` | 检查 Electron 的透明窗口白条修复版本，以及悬浮歌词的无边框、透明和禁止最大化参数。 |
+
 ### `.github/workflows/` — GitHub 自动化
 
 | 文件名 | 中文说明 |
