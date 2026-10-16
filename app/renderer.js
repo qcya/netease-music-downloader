@@ -714,12 +714,12 @@
               showToast('歌单已重命名。');
             }catch(e){showToast('歌单重命名失败：'+errMessage(e),true)}
           };
-          const del=node('button','','删除分类');
-          del.title='只删除分类，不删除任何歌曲';
+          const del=node('button','','删除歌单');
+          del.title='只删除歌单分组，不删除任何歌曲';
           del.onclick=async()=>{
-            if(!confirm('只删除「'+category.name+'」分类？歌曲会移到「未分类」，音乐文件不会删除。'))return;
-            try{await bridge.playlistCategoryDelete(category.id);await refreshPlaylists();showToast('分类已删除，歌曲已移入未分类。')}
-            catch(e){showToast('删除分类失败：'+errMessage(e),true)}
+            if(!confirm('只删除「'+category.name+'」歌单？歌曲将回到默认歌单，音乐文件不会删除。'))return;
+            try{await bridge.playlistCategoryDelete(category.id);await refreshPlaylists();showToast('歌单已删除，歌曲已移回默认歌单。')}
+            catch(e){showToast('删除歌单失败：'+errMessage(e),true)}
           };
           if(category.id)header.append(rename,del);
           else header.append(rename);
@@ -953,10 +953,10 @@
     $('#playlist-toggle').addEventListener('click',()=>$('#playlist-box').classList.toggle('hidden'));
     $('#playlist-box').addEventListener('submit',playlist);
     $('#playlist-create-category').addEventListener('click',async()=>{
-      const name=prompt('新建歌单分类名称','新分类');
+      const name=prompt('新建歌单名称','新歌单');
       if(name===null||!name.trim())return;
-      try{await bridge.playlistCategoryCreate(name);await refreshPlaylists();showToast('分类已创建，可拖动歌曲到分类标题。')}
-      catch(e){showToast('新建分类失败：'+errMessage(e),true)}
+      try{await bridge.playlistCategoryCreate(name);await refreshPlaylists();showToast('歌单已创建，可拖动歌曲到歌单标题。')}
+      catch(e){showToast('新建歌单失败：'+errMessage(e),true)}
     });
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
