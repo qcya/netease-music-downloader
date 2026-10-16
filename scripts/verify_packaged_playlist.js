@@ -43,17 +43,19 @@ async function client(url) {
     socket.addEventListener('error', reject, {once:true});
   });
   return {
-    async run(expression) {
+    async command(method,params) {
       const id = ++serial;
       const resultPromise = new Promise((resolve,reject)=>pending.set(id,{resolve,reject}));
-      socket.send(JSON.stringify({id,method:'Runtime.evaluate',params:{
-        expression, awaitPromise:true, returnByValue:true
-      }}));
+      socket.send(JSON.stringify({id,method,params}));
       const result = await Promise.race([
         resultPromise,
         delay(15000).then(()=>{throw new Error('CDP Runtime.evaluate timed out: '+expression.slice(0,140));})
       ]);
       if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+      return result;
+    },
+    async run(expression) {
+      const result = await this.command('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});
       return result.result?.value;
     },
     close() { socket.close(); }
@@ -71,8 +73,23 @@ async function main() {
       }
       throw new Error(reason);
     }
+    async function realClick(selector) {
+      const point = await c.run('(()=>{let e=document.querySelector('+JSON.stringify(selector)+');if(!e)return null;e.scrollIntoView({block:"center"});let r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+      if (!point) throw new Error('Click target not found: '+selector);
+      const hit = await c.run('document.elementFromPoint('+point.x+','+point.y+')?.outerHTML?.slice(0,150)');
+      console.log('Click',selector,'hit',hit);
+      await c.command('Input.dispatchMouseEvent',{type:'mousePressed',x:point.x,y:point.y,button:'left',clickCount:1});
+      await c.command('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',clickCount:1});
+    }
     await wait('!!document.getElementById("playlist-create-category")','Playlist creation button absent');
-    await c.run('document.querySelector(".nav-item[data-view=playlists]").click()');
+    // Complete first-launch consent before any pointer testing, so a modal cannot cover controls.
+    const disclaimer = await c.run('!document.getElementById("first-run").hidden');
+    if (disclaimer) {
+      await c.run('(()=>{const box=document.getElementById("agree-disclaimer");box.checked=true;box.dispatchEvent(new Event("change",{bubbles:true}));return true})()');
+      await realClick('#first-confirm');
+      await wait('document.getElementById("first-run").hidden','First-run disclaimer could not be dismissed');
+    }
+    await realClick('.nav-item[data-view=playlists]');
     await wait('document.getElementById("view-playlists").classList.contains("active")',
       'My Playlists did not open');
 
@@ -81,21 +98,21 @@ async function main() {
       'Empty default playlist cannot be renamed');
 
     const createButton = '#playlist-create-category';
-    await c.run('document.querySelector(' + JSON.stringify(createButton) + ').click()');
+    await realClick(createButton);
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Clicking New Playlist did not open an input dialog');
     await c.run('(()=>{const input=document.getElementById("playlist-name-input");input.value="打包验收歌单";input.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("playlist-name-form").requestSubmit();return true})()');
     await wait('document.getElementById("playlist-name-dialog").hidden && [...document.querySelectorAll(".playlist-category-header strong")].some(x=>x.textContent.includes("打包验收歌单"))',
       'New playlist not saved/rendered by packaged Electron');
 
-    await c.run('(()=>{const s=[...document.querySelectorAll(".playlist-category")].find(x=>x.querySelector("strong")?.textContent.includes("打包验收歌单"));s.querySelector(".playlist-category-header button").click();return true})()');
+    await realClick('.playlist-category:not([data-category-id=uncategorized]) .playlist-category-header button');
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Clicking Rename did not open dialog');
     await c.run('(()=>{document.getElementById("playlist-name-input").value="打包验收已改名";document.getElementById("playlist-name-form").requestSubmit();return true})()');
     await wait('document.getElementById("playlist-name-dialog").hidden && [...document.querySelectorAll(".playlist-category-header strong")].some(x=>x.textContent.includes("打包验收已改名"))',
       'Named playlist rename was not persisted/displayed');
 
-    await c.run('document.querySelector(".playlist-category[data-category-id=uncategorized] button").click()');
+    await realClick('.playlist-category[data-category-id=uncategorized] button');
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Default playlist rename dialog absent');
     await c.run('(()=>{document.getElementById("playlist-name-input").value="打包验收默认歌单";document.getElementById("playlist-name-form").requestSubmit();return true})()');
