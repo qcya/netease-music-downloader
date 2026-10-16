@@ -77,7 +77,7 @@ jobs:
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
           Set-Content -Path "dist/MusicDownloader-1.0.10-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.0.10-portable.exe"
           Write-Host "Portable EXE SHA256: $hash"
-      - name: Smoke-test actual portable EXE, playlist buttons and main-window exit
+      - name: Smoke-test installed portable executable and main-window exit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
