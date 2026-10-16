@@ -3,15 +3,18 @@ const path=require('node:path');
 const {normalizePosition,resolvePosition}=require('./lyric_position.js');
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
 function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,getSavedPosition,onBoundsChanged,screen}){
- let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null,mainFocused=true;
+ let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
  function reconcileVisibility(){
   if(!exists())return;
-  if(mainFocused||!loaded||!lastText?.line?.trim()){floating.hide?.();return;}
+  if(!loaded||!lastText?.line?.trim()){floating.hide?.();return;}
+  // Do not hide just because the main player has focus. Showing repeatedly
+  // can also cause Windows compositor flashes, so only show when needed.
+  if(floating.isVisible?.())return;
   if(typeof floating.showInactive==='function')floating.showInactive();else floating.show();
  }
- function setMainFocused(value){mainFocused=!!value;reconcileVisibility()}
+ function setMainFocused(_value){reconcileVisibility()}
  function open(){
   if(exists()){reconcileVisibility();return {open:true};}
   const s=safeSettings();
