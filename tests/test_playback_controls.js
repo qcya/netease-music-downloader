@@ -43,7 +43,7 @@ test('transport controls and lyric lock exist in main and immersive player, wire
  assert.match(main,/ipcMain\.handle\('lyrics:preview-style'/);
  assert.match(pre,/previewFloatingLyricsStyle/);
 });
-test('desktop lyric never captures mouse input while main window is focused',()=>{
+test('desktop lyric remains visible while main app has focus and lock stays click-through',()=>{
  let fake,locks=[],events=[];
  class Window {
    constructor(opts){this.opts=opts;this.visible=false;this.webContents={once:(name,fn)=>{this.loaded=fn},send:(name,msg)=>events.push([name,msg]),setWindowOpenHandler(){},on(){}};fake=this}
@@ -66,7 +66,7 @@ test('desktop lyric never captures mouse input while main window is focused',()=
  assert.equal(locks.at(-1).value,true);
  assert.deepEqual(locks.at(-1).opts,{forward:true});
  ctrl.setMainFocused(true);
- assert.equal(fake.visible,false,'hide overlay over own controls');
+ assert.equal(fake.visible,true,'the user must see lyrics while adjusting settings in the main app');
  ctrl.setMainFocused(false);
  assert.equal(fake.visible,true);
  ctrl.update({line:''});
