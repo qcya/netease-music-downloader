@@ -1,8 +1,7 @@
 name: Build Windows Portable
 
 on:
-  # Release exactly once when the release workflow itself is merged.
-  # Windows-compatible Electron test mocks have been verified before this retry.
+  # Build a new Windows EXE when a versioned release workflow is merged.
   push:
     branches: [main]
     paths:
@@ -14,7 +13,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: windows-portable-v1.0.9
+  group: windows-portable-v1.0.10
   cancel-in-progress: false
 
 jobs:
@@ -33,7 +32,7 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          if ($version -ne "1.0.9") { throw "Wrong package version: $version" }
+          if ($version -ne "1.0.10") { throw "Wrong package version: $version" }
       - name: Install Python libraries
         run: python -m pip install -r skill/requirements.txt -r skill/requirements-build.txt pytest
       - name: Install npm libraries
@@ -62,7 +61,7 @@ jobs:
       - name: Validate bundled backend, wallpaper, and single-file EXE
         shell: pwsh
         run: |
-          $exe = "dist/MusicDownloader-1.0.9-portable.exe"
+          $exe = "dist/MusicDownloader-1.0.10-portable.exe"
           $backend = "backend/music_backend.exe"
           $wallpaper = "assets/immersive-background-1080p.mp4"
           $asar = "dist/win-unpacked/resources/app.asar"
@@ -76,13 +75,13 @@ jobs:
             throw "Embedded backend runtime verification failed"
           }
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "dist/MusicDownloader-1.0.9-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.0.9-portable.exe"
+          Set-Content -Path "dist/MusicDownloader-1.0.10-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.0.10-portable.exe"
           Write-Host "Portable EXE SHA256: $hash"
       - name: Smoke-test installed portable executable and main-window exit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $sample = "dist/MusicDownloader-1.0.9-portable.exe"
+          $sample = "dist/MusicDownloader-1.0.10-portable.exe"
           $smokeDir = Join-Path $env:RUNNER_TEMP ("MusicDownloader-smoke-" + $env:GITHUB_RUN_ID)
           New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $smokeDir
@@ -96,7 +95,8 @@ jobs:
           }
           '@
           Write-Host "Launching packaged EXE in a clean Windows user-data folder..."
-          $launcher = Start-Process -FilePath (Resolve-Path $sample) -PassThru
+          $debugPort = 19273
+          $launcher = Start-Process -FilePath (Resolve-Path $sample) -ArgumentList @("--remote-debugging-port=$debugPort", "--remote-allow-origins=*") -PassThru
           try {
             $ready = $false
             for ($i=0; $i -lt 120; $i++) {
@@ -111,6 +111,11 @@ jobs:
               throw "Packaged app did not reach a visible main window within 120 seconds"
             }
             Write-Host "Packaged EXE reached window_ready."
+            # Verify both actual button handlers with Chromium renderer + IPC and JSON persistence.
+            # Static JS tests alone did not catch the original unsupported prompt() bug.
+            node scripts/verify_packaged_playlist.js $debugPort $smokeDir
+            if ($LASTEXITCODE -ne 0) { throw "Packaged playlist creation or renaming failed end-to-end" }
+            Write-Host "PASS: Packaged playlist button E2E test."
             $mainWindow = $null
             for ($i=0; $i -lt 25; $i++) {
               $mainWindow = Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue |
@@ -140,18 +145,18 @@ jobs:
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MusicDownloader-Windows-Portable-v1.0.9
+          name: MusicDownloader-Windows-Portable-v1.0.10
           path: |
-            dist/MusicDownloader-1.0.9-portable.exe
-            dist/MusicDownloader-1.0.9-portable.exe.sha256
+            dist/MusicDownloader-1.0.10-portable.exe
+            dist/MusicDownloader-1.0.10-portable.exe.sha256
           if-no-files-found: error
-      - name: Publish GitHub Release v1.0.9
+      - name: Publish GitHub Release v1.0.10
         if: github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.0.9 --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Release v1.0.9 already exists. Refusing to overwrite." }
-          gh release create v1.0.9 "dist/MusicDownloader-1.0.9-portable.exe" "dist/MusicDownloader-1.0.9-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.0.9" --notes-file "RELEASE_NOTES_v1.0.9.md" --latest
+          gh release view v1.0.10 --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release v1.0.10 already exists. Refusing to overwrite." }
+          gh release create v1.0.10 "dist/MusicDownloader-1.0.10-portable.exe" "dist/MusicDownloader-1.0.10-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.0.10" --notes-file "RELEASE_NOTES_v1.0.10.md" --latest
           if ($LASTEXITCODE -ne 0) { throw "Could not publish GitHub Release" }

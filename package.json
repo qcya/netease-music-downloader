@@ -1,13 +1,13 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "description": "音乐下载器：批量下载、本地播放、歌单与同步歌词",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build:win": "npm run check && npm run build:backend && electron-builder --win portable --x64",
-    "check": "node --check main.js && node --check app_lifecycle.js && node --check local_playlist.js && node --check playlist_categories.js && node --check local_import.js && node --check mini_player.js && node --check mini-preload.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check lyric_position.js && node --check lyric_preferences.js && node --check backend_runtime.js && node --check app_logger.js && node --check app/lrc.js && node --check app/lyric_navigation.js && node --check app/playback_navigation.js && node --check app/mini-player.js && node --check app/playlist_name_dialog.js && node --check app/renderer.js && node --check app/floating-lyrics.js",
+    "check": "node --check main.js && node --check app_lifecycle.js && node --check local_playlist.js && node --check playlist_categories.js && node --check local_import.js && node --check mini_player.js && node --check mini-preload.js && node --check preload.js && node --check floating-preload.js && node --check download_queue.js && node --check floating_window.js && node --check lyric_position.js && node --check lyric_preferences.js && node --check backend_runtime.js && node --check app_logger.js && node --check app/lrc.js && node --check app/lyric_navigation.js && node --check app/playback_navigation.js && node --check app/mini-player.js && node --check app/playlist_name_dialog.js && node --check scripts/verify_packaged_playlist.js && node --check app/renderer.js && node --check app/floating-lyrics.js",
     "build:backend": "python scripts/build_backend.py"
   },
   "devDependencies": {

@@ -20,7 +20,7 @@ Windows 桌面应用 / 单文件便携版
 
 ## 下载与运行
 
-普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.8-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
+普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.10-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
 
 开发者：使用 Node.js 20+ 与 Python 3.10+。首次运行 `安装依赖.bat`，以后使用 `启动桌面版.bat` 或 `npm start` 启动源码。需要自行生成便携版时可运行 `构建Windows_EXE.bat`。
 
@@ -218,3 +218,9 @@ python -m pytest -q tests
 首次运行时桌面悬浮歌词关闭、歌词未锁定、迷你播放器关闭。**这些仅是首次安装的默认值**；之后启动必须记住用户最后一次手动设置的桌面歌词开关、锁定状态、歌词窗口位置和迷你播放器开关。退出程序只销毁子窗口和进程，不清除已保存的偏好。
 
 原固定叫「未分类」的默认歌单现在支持重命名；「我的歌单」页支持新建和管理命名歌单。歌单之间可以拖动歌曲调整归属，各歌单可分别顺序播放。命名歌单沿用原虚拟分类数据，不移动音频与歌词、不删除下载目录文件。删除歌单时歌曲进入已重命名的默认歌单。 
+
+## v1.0.10 歌单按钮修复与实际构建
+
+v1.0.9 Release 的 EXE 发布早于歌单弹窗修复，因此运行旧 EXE 时「新建歌单」和「重命名」仍然无响应。请下载 v1.0.10 便携版，运行文件名必须是 `MusicDownloader-1.0.10-portable.exe`，而不是旧 EXE。
+
+v1.0.10 包含应用内歌单名称输入框，支持新建、重命名默认歌单和其他歌单、错误提示与持久保存。Windows 自动化构建同时验证打包后的程序能够启动、完成真实 DOM 点击及 IPC 写入歌单，并在退出后不残留进程。
