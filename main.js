@@ -9,6 +9,7 @@ const { Readable } = require('node:stream');
 const { createDownloadQueue } = require('./download_queue.js');
 const { createFloatingLyricsController } = require('./floating_window.js');
 const { createPlaylistStore } = require('./local_playlist.js');
+const {createCategoryStore}=require('./playlist_categories.js');
 const { importMusic } = require('./local_import.js');
 const {createMiniPlayerController}=require('./mini_player.js');
 const {wireMainWindow}=require('./app_lifecycle.js');
@@ -60,6 +61,7 @@ function lyricDir() { return path.join(app.getPath('userData'), 'lyric-cache'); 
 function manifestFile() { return path.join(cacheDir(), 'manifest.json'); }
 function favoritesFile() { return path.join(app.getPath('userData'), 'favorites.json'); }
 function playlistsFile(){return path.join(app.getPath('userData'),'my-playlists.json')}
+function playlistCategoriesFile(){return path.join(app.getPath('userData'),'playlist-categories.json')}
 function favoritesDir() { return config().favoritesDir; }
 function historyFile(){return path.join(app.getPath('userData'),'download-history.json');}
 function cacheMaintenanceFile() { return path.join(app.getPath('userData'), 'cache-maintenance.json'); }
@@ -154,6 +156,8 @@ const localPlaylist=createPlaylistStore({
   readJSON,writeJSONAtomic
 });
 function availableLocalTrack(name){return localPlaylist.localFile(name)}
+const categoryStore=createCategoryStore({getFile:playlistCategoriesFile,
+  getTracks:()=>localPlaylist.list()[0].tracks,readJSON,writeJSONAtomic});
 function readPlaylists(){return localPlaylist.list()}
 function changeLocalPlaylist(id,name,add){
   return add?localPlaylist.add(id,name):localPlaylist.remove(id,name);
@@ -284,6 +288,13 @@ function persistFloatingLyricsPosition(position){
   writeJSONAtomic(file,{...existing,floatingLyricsPosition:next});
   return next;
 }
+function persistFloatingLyricsLock(value){
+  const s=config(),next=!!value;
+  s.floatingLyrics.mouseThrough=next;
+  ensureData();
+  writeJSONAtomic(configFile(),{...readJSON(configFile(),{}),floatingLyrics:s.floatingLyrics});
+  return next;
+}
 function writeConfig(value) {
   if (!value || typeof value !== 'object') throw new Error('设置格式无效');
   const dir = typeof value.downloadDir === 'string' ? value.downloadDir.trim() : '';
@@ -304,7 +315,7 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(value.floatingLyrics)};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
@@ -539,7 +550,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.7', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.8', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -624,7 +635,10 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
-  floatingLyrics.setLockChange(locked=>{const settings=config();settings.floatingLyrics.mouseThrough=locked;writeConfig(settings);});
+  const notifyLyricLock=locked=>{
+    if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
+  };
+  floatingLyrics.setLockChange(locked=>{persistFloatingLyricsLock(locked);notifyLyricLock(locked)});
   ipcMain.on?.('lyrics:drag-begin',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragBegin()});
   ipcMain.on?.('lyrics:drag-move',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragMove()});
   ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragEnd()});
@@ -639,6 +653,11 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
   ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
   ipcMain.handle('playlists:reorder',(_e,names)=>localPlaylist.reorder(names));
+  ipcMain.handle('playlists:categories-list',()=>categoryStore.list());
+  ipcMain.handle('playlists:categories-create',(_e,name)=>categoryStore.create(name));
+  ipcMain.handle('playlists:categories-rename',(_e,id,name)=>categoryStore.rename(id,name));
+  ipcMain.handle('playlists:categories-delete',(_e,id)=>categoryStore.remove(id));
+  ipcMain.handle('playlists:categories-move',(_e,name,id)=>categoryStore.move(name,id));
   ipcMain.handle('mini:open',()=>miniPlayer.open());
   ipcMain.handle('mini:close',()=>miniPlayer.close());
   ipcMain.handle('mini:state',(_e,state)=>miniPlayer.update(state));
@@ -734,15 +753,15 @@ app.whenReady().then(() => {
     return statsCache();
   });
   ipcMain.handle('favorites:list',()=>listFavorites());
-  ipcMain.handle('lyrics:open',()=>floatingLyrics.open());
+  ipcMain.handle('lyrics:open',()=>{const state=floatingLyrics.open();notifyLyricLock(config().floatingLyrics.mouseThrough);return state});
   ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
   ipcMain.handle('lyrics:reset-position',()=>floatingLyrics.resetPosition());
   ipcMain.handle('lyrics:position',()=>config().floatingLyricsPosition);
-  ipcMain.handle('lyrics:lock',(_e,lock)=>{const s=config();s.floatingLyrics.mouseThrough=!!lock;writeConfig(s);return floatingLyrics.lock(!!lock)});
+  ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);const state=floatingLyrics.lock(wanted);notifyLyricLock(wanted);return state});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
-  ipcMain.handle('lyrics:preview-style',(_e,style)=>{floatingLyrics.applySettings(normalizeLyrics(style));return true});
+  ipcMain.handle('lyrics:preview-style',(_e,style)=>{floatingLyrics.applySettings(normalizeLyrics({...style,mouseThrough:config().floatingLyrics.mouseThrough}));return true});
   ipcMain.handle('lyrics:resize',(event,height)=>{if(!floatingLyrics.owns(event.sender))throw new Error('仅桌面歌词窗口可调整高度');return floatingLyrics.resizeTo(height)});
   ipcMain.handle('favorites:add',async(_e, track)=>addFavorite(track));
   ipcMain.handle('favorites:retry-lyrics',async(_e, id)=>{

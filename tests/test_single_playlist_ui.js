@@ -5,8 +5,8 @@ test('single playlist replaces broken multiple-playlist creation UI',()=>{
  const html=read('app/index.html'),js=read('app/renderer.js'),backend=read('main.js');
  assert.doesNotMatch(html,/id="create-playlist"|id="playlist-select"/);
  assert.match(html,/id="my-playlist-tracks"/);
- assert.match(js,/playlistsAdd\('default',file\.name\)/);
- assert.match(js,/playlistsRemove\('default',file\.name\)/);
+ assert.match(js,/playlistsAdd\('default',oldName\)/);
+ assert.match(js,/playlistsRemove\('default',oldName\)/);
  assert.match(backend,/createPlaylistStore/);
  assert.match(backend,/localPlaylist\.add\(id,name\)/);
 });

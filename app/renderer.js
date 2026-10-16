@@ -418,7 +418,7 @@
     clearLyrics();
     updateFloatingLine();
     if(token===state.playToken)void loadLyrics(id,token,state.currentLocalName);
-    if(options.startPaused){
+    if(Number(options.resumeTime)>0){
       const position=Math.max(0,Number(options.resumeTime)||0);
       // Listen before assigning the source so fast local metadata never races us.
       audio().addEventListener('loadedmetadata',()=>{
@@ -441,11 +441,14 @@
     return started;
   }
   function stopLocalPlaybackIfRenaming(name){
-    if(state.currentLocalName!==name)return;
+    if(state.currentLocalName!==name)return null;
+    const snapshot={time:Number(audio().currentTime)||0,paused:audio().paused,
+      queue:state.playQueue?{...state.playQueue,tracks:[...state.playQueue.tracks]}:null};
     audio().pause();audio().removeAttribute('src');audio().load();
     state.playToken++;state.advanceSerial++;state.playQueue=null;
     state.currentLocalName=null;state.playingId=null;
     clearLyrics('请选择歌曲');updatePlayerControls();
+    return snapshot;
   }
   async function playLocalFile(file,queue=null,automatic=false,options={}) {
     if(!automatic)state.advanceSerial++;
@@ -627,24 +630,38 @@
     if(view==='settings')renderSettings();
   }
   function songName(file){return file.name.replace(/\s*\[\d+\]\.[^.]+$/,'')}
-  async function addLocalToPlaylist(file){
+  async function changeLocalPlaylistMembership(file,adding){
+    const oldName=file.name;
+    const resumed=stopLocalPlaybackIfRenaming(oldName);
+    const renamed=adding?('[歌单] '+oldName):(oldName.startsWith('[歌单] ')?oldName.slice('[歌单] '.length):oldName);
+    async function resume(name,restoreQueue){
+      if(!resumed)return;
+      const queue=restoreQueue?.tracks?.length?{...restoreQueue,
+        tracks:restoreQueue.tracks.map(n=>n===oldName?name:n)}:null;
+      if(queue){
+        const index=queue.tracks.indexOf(name);
+        if(index>=0)queue.index=index;
+      }
+      await playLocalFile({name},queue,false,{startPaused:resumed.paused,resumeTime:resumed.time});
+    }
     try{
-      stopLocalPlaybackIfRenaming(file.name);
-      await bridge.playlistsAdd('default',file.name);
-      showToast('已加入我的歌单，文件名添加 [歌单] 前缀。');
+      if(adding)await bridge.playlistsAdd('default',oldName);
+      else await bridge.playlistsRemove('default',oldName);
+      if(resumed)await resume(renamed,resumed.queue);
+      showToast(adding?'已加入我的歌单，文件名添加 [歌单] 前缀。':'已移出歌单，文件名恢复原样。');
       await refreshLocal();
       if(state.view==='playlists')await refreshPlaylists();
-    }catch(e){showToast(errMessage(e),true)}
+    }catch(e){
+      if(resumed){
+        // A failed rename leaves the old file in place. Resume rather than
+        // showing a permanent playback error after an unsuccessful operation.
+        try{await resume(oldName,resumed.queue)}catch{}
+      }
+      showToast('歌单文件操作失败：'+errMessage(e),true);
+    }
   }
-  async function removeLocalFromPlaylist(file){
-    try{
-      stopLocalPlaybackIfRenaming(file.name);
-      await bridge.playlistsRemove('default',file.name);
-      showToast('已移出歌单，文件名恢复原样。');
-      await refreshLocal();
-      if(state.view==='playlists')await refreshPlaylists();
-    }catch(e){showToast(errMessage(e),true)}
-  }
+  async function addLocalToPlaylist(file){return changeLocalPlaylistMembership(file,true)}
+  async function removeLocalFromPlaylist(file){return changeLocalPlaylistMembership(file,false)}
   async function deleteLocalFile(file){
     const warning=file.inPlaylist?'【这首歌曲属于我的歌单】':'这首歌曲不在歌单中';
     if(!confirm(warning+'\\n确定把「'+file.name+'」移入回收站吗？同名歌词文件也会一起移入回收站。'))return;
@@ -656,55 +673,100 @@
       if(state.view==='playlists')await refreshPlaylists();
     }catch(e){showToast('删除失败：'+errMessage(e),true)}
   }
-  let dragPlaylistIndex=null;
+  let dragPlaylistName=null;
   async function refreshPlaylists(){
+    const container=$('#my-playlist-tracks');
+    container.replaceChildren();
     try{
-      const list=await bridge.playlistsList();
+      const [list,meta]=await Promise.all([bridge.playlistsList(),bridge.playlistCategoriesList()]);
       state.playlists=list;state.activePlaylistId='default';
-      const cur=list[0],container=$('#my-playlist-tracks');container.replaceChildren();
-      if(!cur?.tracks?.length){
-        container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加。'));
+      const tracks=list[0]?.tracks||[];
+      const categories=Array.isArray(meta.categories)?meta.categories:[];
+      const assignments=meta.assignments||{};
+      const sections=[...categories.map(c=>({id:c.id,name:c.name})),{id:null,name:'未分类'}];
+      if(!tracks.length&&!categories.length){
+        container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加，或先创建分类文件夹。'));
         return;
       }
-      for(const [index,name] of cur.tracks.entries()){
-        const row=node('div','playlist-entry');
-        row.draggable=true;row.dataset.position=String(index);
-        row.title='拖动调整播放顺序';
-        const handle=node('span','playlist-drag-handle','⠿');handle.setAttribute('aria-label','拖动排序');
-        row.append(handle,node('strong','',songName({name})));
-        row.addEventListener('dragstart',event=>{
-          dragPlaylistIndex=index;
-          event.dataTransfer?.setData('text/plain',String(index));
-          if(event.dataTransfer)event.dataTransfer.effectAllowed='move';
-          row.classList.add('dragging');
+      const updatePlaylistOrder=async(updated)=>{
+        await bridge.playlistsReorder(updated);
+        if(state.playQueue?.id==='default'){
+          const selected=updated.indexOf(state.currentLocalName);
+          if(selected>=0)state.playQueue={...window.MusicPlaybackNavigation.createQueue(updated,selected,state.playMode),id:'default'};
+          savePlaybackSession(true);
+        }
+      };
+      for(const category of sections){
+        const names=tracks.filter(name=>(assignments[name]||null)===category.id);
+        const folder=node('section','playlist-category'),header=node('div','playlist-category-header');
+        folder.dataset.categoryId=category.id||'uncategorized';
+        const title=node('strong','',category.id?'📁 '+category.name:'未分类');
+        header.append(title,node('span','playlist-category-count',names.length+' 首'));
+        if(category.id){
+          const rename=node('button','','重命名');
+          rename.onclick=async()=>{
+            const value=prompt('分类新名称',category.name);
+            if(value===null||!value.trim()||value.trim()===category.name)return;
+            try{await bridge.playlistCategoryRename(category.id,value);await refreshPlaylists()}
+            catch(e){showToast('分类重命名失败：'+errMessage(e),true)}
+          };
+          const del=node('button','','删除分类');
+          del.title='只删除分类，不删除任何歌曲';
+          del.onclick=async()=>{
+            if(!confirm('只删除「'+category.name+'」分类？歌曲会移到「未分类」，音乐文件不会删除。'))return;
+            try{await bridge.playlistCategoryDelete(category.id);await refreshPlaylists();showToast('分类已删除，歌曲已移入未分类。')}
+            catch(e){showToast('删除分类失败：'+errMessage(e),true)}
+          };
+          header.append(rename,del);
+        }
+        const listRoot=node('div','playlist-category-tracks');
+        const clearHover=()=>folder.classList.remove('is-drop-target');
+        header.addEventListener('dragover',event=>{if(!dragPlaylistName)return;event.preventDefault();folder.classList.add('is-drop-target')});
+        header.addEventListener('dragleave',clearHover);
+        header.addEventListener('drop',async event=>{
+          event.preventDefault();clearHover();
+          const name=dragPlaylistName;dragPlaylistName=null;
+          if(!name||!tracks.includes(name)||(assignments[name]||null)===category.id)return;
+          try{await bridge.playlistCategoryMove(name,category.id);await refreshPlaylists();showToast('歌曲已归入「'+category.name+'」。')}
+          catch(e){showToast('移动歌曲失败：'+errMessage(e),true)}
         });
-        row.addEventListener('dragend',()=>{dragPlaylistIndex=null;row.classList.remove('dragging')});
-        row.addEventListener('dragover',event=>{event.preventDefault();if(event.dataTransfer)event.dataTransfer.dropEffect='move'});
-        row.addEventListener('drop',async event=>{
-          event.preventDefault();
-          const source=dragPlaylistIndex;dragPlaylistIndex=null;
-          if(!Number.isInteger(source)||source===index)return;
-          const tracks=[...cur.tracks],moved=tracks.splice(source,1)[0];
-          tracks.splice(index,0,moved);
-          try{
-            await bridge.playlistsReorder(tracks);
-            if(state.playQueue?.id==='default'){
-              const playing=state.currentLocalName;
-              const current=tracks.indexOf(playing);
-              if(current>=0)state.playQueue={...window.MusicPlaybackNavigation.createQueue(tracks,current,state.playMode),id:'default'};
-              savePlaybackSession(true);
-            }
-            await refreshPlaylists();
-            showToast('歌单顺序已保存。');
-          }catch(e){showToast('保存歌单顺序失败：'+errMessage(e),true);await refreshPlaylists()}
-        });
-        const play=node('button','','播放');
-        play.onclick=()=>{void playLocalFile({name},{id:'default',tracks:cur.tracks,index})};
-        const remove=node('button','','移出歌单');
-        remove.onclick=()=>{void removeLocalFromPlaylist({name,inPlaylist:true})};
-        row.append(play,remove);container.append(row);
+        for(const name of names){
+          const row=node('div','playlist-entry');row.draggable=true;row.dataset.trackName=name;
+          row.title='拖动调整顺序，或拖到分类标题归类';
+          const handle=node('span','playlist-drag-handle','⠿');
+          handle.setAttribute('aria-label','拖动调整歌曲排序');
+          row.append(handle,node('strong','',songName({name})));
+          row.addEventListener('dragstart',event=>{
+            dragPlaylistName=name;
+            event.dataTransfer?.setData('text/plain',name);
+            if(event.dataTransfer)event.dataTransfer.effectAllowed='move';
+            row.classList.add('dragging');
+          });
+          row.addEventListener('dragend',()=>{dragPlaylistName=null;row.classList.remove('dragging');clearHover()});
+          row.addEventListener('dragover',event=>{if(dragPlaylistName){event.preventDefault();folder.classList.add('is-drop-target')}});
+          row.addEventListener('drop',async event=>{
+            event.preventDefault();clearHover();
+            const source=dragPlaylistName;dragPlaylistName=null;
+            if(!source||source===name||!tracks.includes(source))return;
+            const reordered=[...tracks];
+            reordered.splice(reordered.indexOf(source),1);
+            reordered.splice(reordered.indexOf(name),0,source);
+            try{
+              await updatePlaylistOrder(reordered);
+              if((assignments[source]||null)!==category.id)await bridge.playlistCategoryMove(source,category.id);
+              await refreshPlaylists();showToast('歌单顺序与分类已保存。');
+            }catch(e){showToast('歌单排序失败：'+errMessage(e),true);await refreshPlaylists()}
+          });
+          const play=node('button','','播放');
+          play.onclick=()=>{void playLocalFile({name},{id:'default',tracks,index:tracks.indexOf(name)})};
+          const remove=node('button','','移出歌单');
+          remove.onclick=()=>{void removeLocalFromPlaylist({name,inPlaylist:true})};
+          row.append(play,remove);listRoot.append(row);
+        }
+        if(!names.length)listRoot.append(node('div','playlist-category-empty','把歌曲拖到上方分类标题，即可放入这里。'));
+        folder.append(header,listRoot);container.append(folder);
       }
-    }catch(e){showToast('读取歌单失败：'+errMessage(e),true)}
+    }catch(e){showToast('读取歌单或分类失败：'+errMessage(e),true)}
   }
   async function refreshLocal(){
     const parent=$('#local-list');parent.replaceChildren();
@@ -870,6 +932,11 @@
     $('#player-mode').value=state.playMode;$('#immersive-mode').value=state.playMode;
     bridge.onDownloadTask(task=>displayDownloadJob(task));
     bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;updateDesktopLyricsToggle();});
+    bridge.onFloatingLyricsLockStatus(info=>{
+      state.lyricsLocked=info?.locked===true;
+      if(state.settings?.floatingLyrics)state.settings.floatingLyrics.mouseThrough=state.lyricsLocked;
+      updateDesktopLyricsToggle();
+    });
     bridge.onOpenLyricsSettings(()=>showView('settings'));
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
     $('#search-form').addEventListener('submit',search);
@@ -880,6 +947,12 @@
     $('#page-next').addEventListener('click',()=>changePage(1));
     $('#playlist-toggle').addEventListener('click',()=>$('#playlist-box').classList.toggle('hidden'));
     $('#playlist-box').addEventListener('submit',playlist);
+    $('#playlist-create-category').addEventListener('click',async()=>{
+      const name=prompt('新建歌单分类名称','新分类');
+      if(name===null||!name.trim())return;
+      try{await bridge.playlistCategoryCreate(name);await refreshPlaylists();showToast('分类已创建，可拖动歌曲到分类标题。')}
+      catch(e){showToast('新建分类失败：'+errMessage(e),true)}
+    });
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     for(const [id,kind] of [['import-local-files','files'],['import-local-folder','folder']]){
