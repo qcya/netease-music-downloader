@@ -260,7 +260,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,floatingLyricsPosition:null,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,miniPlayerEnabled:false,floatingLyricsPosition:null,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -269,7 +269,7 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,floatingLyricsPosition:normalizePosition(stored.floatingLyricsPosition),playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,miniPlayerEnabled:stored.miniPlayerEnabled===true,floatingLyricsPosition:normalizePosition(stored.floatingLyricsPosition),playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -287,6 +287,13 @@ function persistFloatingLyricsPosition(position){
   if(JSON.stringify(prior)===JSON.stringify(next))return next;
   writeJSONAtomic(file,{...existing,floatingLyricsPosition:next});
   return next;
+}
+function persistMiniPlayerEnabled(value){
+  const enabled=value===true;
+  ensureData();
+  const stored=readJSON(configFile(),{});
+  writeJSONAtomic(configFile(),{...stored,miniPlayerEnabled:enabled});
+  return enabled;
 }
 function persistFloatingLyricsLock(value){
   const s=config(),next=!!value;
@@ -315,7 +322,7 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,miniPlayerEnabled:config().miniPlayerEnabled,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
   ensureData();
   fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
   fs.renameSync(configFile() + '.tmp', configFile());
@@ -550,7 +557,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.8', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.0.9', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -656,10 +663,11 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:categories-list',()=>categoryStore.list());
   ipcMain.handle('playlists:categories-create',(_e,name)=>categoryStore.create(name));
   ipcMain.handle('playlists:categories-rename',(_e,id,name)=>categoryStore.rename(id,name));
+  ipcMain.handle('playlists:rename-default',(_e,name)=>categoryStore.renameDefault(name));
   ipcMain.handle('playlists:categories-delete',(_e,id)=>categoryStore.remove(id));
   ipcMain.handle('playlists:categories-move',(_e,name,id)=>categoryStore.move(name,id));
-  ipcMain.handle('mini:open',()=>miniPlayer.open());
-  ipcMain.handle('mini:close',()=>miniPlayer.close());
+  ipcMain.handle('mini:open',()=>{const state=miniPlayer.open();persistMiniPlayerEnabled(true);return state});
+  ipcMain.handle('mini:close',()=>{const state=miniPlayer.close();persistMiniPlayerEnabled(false);return state});
   ipcMain.handle('mini:state',(_e,state)=>miniPlayer.update(state));
   ipcMain.on?.('mini:control',(event,action)=>miniPlayer.control(event.sender,action));
   ipcMain.handle('background:choose',async()=>{

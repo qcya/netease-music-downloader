@@ -36,7 +36,7 @@ echo [INFO] Bundling Python backend then building one Windows portable EXE...
 call npm run build:win
 if errorlevel 1 goto :failed
 
-if not exist "dist\MusicDownloader-1.0.8-portable.exe" goto :missing_exe
+if not exist "dist\MusicDownloader-1.0.9-portable.exe" goto :missing_exe
 
 echo [INFO] Extracting actual icon from the built EXE...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0验证EXE图标.ps1" -ExePath "%~dp0dist\MusicDownloader-1.0.8-portable.exe"

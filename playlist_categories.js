@@ -21,7 +21,10 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
     for(const [name,id] of Object.entries(raw?.assignments||{})){
       if(tracks.has(name)&&ids.has(id))assignments[name]=id;
     }
-    const data={categories,assignments};
+    // The legacy unclassified bucket becomes a user-renamable default list.
+    const defaultName=typeof raw?.defaultName==='string'?raw.defaultName:'未分类';
+    let safeDefaultName='未分类';try{safeDefaultName=tidyName(defaultName)}catch{}
+    const data={categories,assignments,defaultName:safeDefaultName};
     if(JSON.stringify(data)!==JSON.stringify(raw))writeJSONAtomic(getFile(),data);
     return data;
   }
@@ -29,13 +32,13 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
   function list(){return read()}
   function create(name){
     const label=tidyName(name),data=read();
-    if(data.categories.some(c=>c.name===label))throw new Error('该分类名称已存在');
+    if(data.categories.some(c=>c.name===label)||data.defaultName===label)throw new Error('该歌单名称已存在');
     data.categories.push({id:randomUUID(),name:label});return persist(data);
   }
   function rename(id,name){
     const label=tidyName(name),data=read(),item=data.categories.find(c=>c.id===id);
     if(!item)throw new Error('分类不存在');
-    if(data.categories.some(c=>c.id!==id&&c.name===label))throw new Error('分类名称重复');
+    if(data.categories.some(c=>c.id!==id&&c.name===label)||data.defaultName===label)throw new Error('歌单名称重复');
     item.name=label;return persist(data);
   }
   function remove(id){
@@ -45,6 +48,11 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
     for(const [name,cat] of Object.entries(data.assignments))if(cat===id)delete data.assignments[name];
     return persist(data);
   }
+  function renameDefault(name){
+    const label=tidyName(name),data=read();
+    if(data.categories.some(c=>c.name===label))throw new Error('歌单名称已存在');
+    data.defaultName=label;return persist(data);
+  }
   function move(name,id){
     const data=read();
     if(!getTracks().includes(name))throw new Error('歌曲不在我的歌单中');
@@ -52,6 +60,6 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
     if(id===null)delete data.assignments[name];else data.assignments[name]=id;
     return persist(data);
   }
-  return {list,create,rename,remove,move};
+  return {list,create,rename,renameDefault,remove,move};
 }
 module.exports={createCategoryStore};
