@@ -69,3 +69,34 @@ test('lyric visibility not gated by main focus, while settings save keeps the pe
  assert.match(main,/mouseThrough:config\(\)\.floatingLyrics\.mouseThrough/);
  assert.match(main,/ipcMain\.handle\('lyrics:lock'/);
 });
+
+test('original unclassified playlist is renamable, persists across reloads, and keeps tracks',t=>{
+ const f=fixture();t.after(f.cleanup);
+ assert.equal(f.store.list().defaultName,'未分类','legacy settings keep original default name');
+ f.store.renameDefault('学习时听');
+ assert.equal(f.store.list().defaultName,'学习时听');
+ assert.equal(f.store.list().assignments[f.tracks[0]],undefined);
+ assert.throws(()=>f.store.create('学习时听'),/已存在/);
+ const storeAgain=createCategoryStore({getFile:()=>f.file,getTracks:()=>f.tracks,
+   readJSON:(file,v)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'))}catch{return v}},
+   writeJSONAtomic:(file,v)=>fs.writeFileSync(file,JSON.stringify(v))});
+ assert.equal(storeAgain.list().defaultName,'学习时听','rename survives process restart');
+ storeAgain.create('运动歌单');
+ const newId=storeAgain.list().categories[0].id;
+ storeAgain.move(f.tracks[0],newId);
+ assert.equal(storeAgain.list().assignments[f.tracks[0]],newId,'track belongs to new named playlist');
+ assert.equal(fs.existsSync(path.join(f.tmp,f.tracks[0])),true,'playlist changes cannot remove physical tracks');
+ storeAgain.remove(newId);
+ assert.equal(storeAgain.list().defaultName,'学习时听','deleting a playlist never resets default name');
+ assert.equal(storeAgain.list().assignments[f.tracks[0]],undefined,'songs fall back to renamed default');
+});
+test('playlist UI has actual New Playlist affordance, rename for default group and independent play queues',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'..','app/index.html'),'utf8');
+ const ui=fs.readFileSync(path.join(__dirname,'..','app/renderer.js'),'utf8');
+ const main=fs.readFileSync(path.join(__dirname,'..','main.js'),'utf8');
+ assert.match(html,/＋ 新建歌单/);
+ assert.match(ui,/await bridge\.playlistRenameDefault\(value\)/);
+ assert.match(ui,/name:meta\.defaultName\|\|'未分类'/);
+ assert.match(ui,/tracks:names,index:names\.indexOf\(name\)/);
+ assert.match(main,/ipcMain\.handle\('playlists:rename-default'/);
+});
