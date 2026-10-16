@@ -683,7 +683,7 @@
       const tracks=list[0]?.tracks||[];
       const categories=Array.isArray(meta.categories)?meta.categories:[];
       const assignments=meta.assignments||{};
-      const sections=[...categories.map(c=>({id:c.id,name:c.name})),{id:null,name:'未分类'}];
+      const sections=[...categories.map(c=>({id:c.id,name:c.name})),{id:null,name:meta.defaultName||'未分类'}];
       if(!tracks.length&&!categories.length){
         container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加，或先创建分类文件夹。'));
         return;
@@ -700,15 +700,19 @@
         const names=tracks.filter(name=>(assignments[name]||null)===category.id);
         const folder=node('section','playlist-category'),header=node('div','playlist-category-header');
         folder.dataset.categoryId=category.id||'uncategorized';
-        const title=node('strong','',category.id?'📁 '+category.name:'未分类');
+        const title=node('strong','',category.id?'📁 '+category.name:'📁 '+category.name);
         header.append(title,node('span','playlist-category-count',names.length+' 首'));
-        if(category.id){
+        {
           const rename=node('button','','重命名');
           rename.onclick=async()=>{
-            const value=prompt('分类新名称',category.name);
+            const value=prompt('歌单新名称',category.name);
             if(value===null||!value.trim()||value.trim()===category.name)return;
-            try{await bridge.playlistCategoryRename(category.id,value);await refreshPlaylists()}
-            catch(e){showToast('分类重命名失败：'+errMessage(e),true)}
+            try{
+              if(category.id)await bridge.playlistCategoryRename(category.id,value);
+              else await bridge.playlistRenameDefault(value);
+              await refreshPlaylists();
+              showToast('歌单已重命名。');
+            }catch(e){showToast('歌单重命名失败：'+errMessage(e),true)}
           };
           const del=node('button','','删除分类');
           del.title='只删除分类，不删除任何歌曲';
@@ -717,7 +721,8 @@
             try{await bridge.playlistCategoryDelete(category.id);await refreshPlaylists();showToast('分类已删除，歌曲已移入未分类。')}
             catch(e){showToast('删除分类失败：'+errMessage(e),true)}
           };
-          header.append(rename,del);
+          if(category.id)header.append(rename,del);
+          else header.append(rename);
         }
         const listRoot=node('div','playlist-category-tracks');
         const clearHover=()=>folder.classList.remove('is-drop-target');
@@ -758,7 +763,7 @@
             }catch(e){showToast('歌单排序失败：'+errMessage(e),true);await refreshPlaylists()}
           });
           const play=node('button','','播放');
-          play.onclick=()=>{void playLocalFile({name},{id:'default',tracks,index:tracks.indexOf(name)})};
+          play.onclick=()=>{void playLocalFile({name},{id:category.id||'default',tracks:names,index:names.indexOf(name)})};
           const remove=node('button','','移出歌单');
           remove.onclick=()=>{void removeLocalFromPlaylist({name,inPlaylist:true})};
           row.append(play,remove);listRoot.append(row);
@@ -820,7 +825,7 @@
     opacity:'lyr-opacity',shadow:'lyr-shadow',glow:'lyr-glow',showOriginal:'lyr-show-original',showTranslation:'lyr-show-translation',
     alwaysOnTop:'lyr-always-on-top',autoHideEmpty:'lyr-auto-hide-empty',mouseThrough:'lyr-mouse-through'};
   function fillLyricsStyle(style){
-    const s={...defaultLyricStyle(),...style};
+    const s={...defaultLyricStyle(),...style,mouseThrough:state.lyricsLocked};
     for(const [key,id] of Object.entries(lyricInputs)){
       const el=$('#'+id);if(el.type==='checkbox')el.checked=!!s[key];else el.value=String(s[key]);
     }
@@ -828,7 +833,7 @@
   function readLyricsStyle(){
     const s={};
     for(const [key,id] of Object.entries(lyricInputs)){
-      const el=$('#'+id);s[key]=el.type==='checkbox'?el.checked:el.type==='range'||el.type==='number'?Number(el.value):el.value;
+      const el=$('#'+id);s[key]=key==='mouseThrough'?state.lyricsLocked:el.type==='checkbox'?el.checked:el.type==='range'||el.type==='number'?Number(el.value):el.value;
     }
     return s;
   }
@@ -1081,14 +1086,21 @@
       catch(e){showToast(errMessage(e),true);}
     });
     try {
-      // Desktop lyrics is manually opt-in for each application session.
-      // Do not reopen an overlay merely because a past session persisted 'enabled'.
-      state.settings={...await bridge.getSettings(),desktopLyricsEnabled:false};
-      state.floating=false;
+      // First installation defaults to off. Subsequent launches restore
+      // the saved preferences; never force desktop lyrics or mini player off.
+      state.settings=await bridge.getSettings();
+      state.lyricsLocked=state.settings.floatingLyrics?.mouseThrough===true;
       renderSettings();
       if(!state.settings.disclaimerAcceptedVersion)openFirstRun(false);
-      updateDesktopLyricsToggle();
       await restorePlaybackSession();
+      if(state.settings.desktopLyricsEnabled===true){
+        try{await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine()}
+        catch(e){showToast('恢复桌面歌词失败：'+errMessage(e),true)}
+      }
+      if(state.settings.miniPlayerEnabled===true){
+        await toggleMiniPlayer(true);
+      }
+      updateDesktopLyricsToggle();
     }
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
