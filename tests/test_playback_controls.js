@@ -59,7 +59,7 @@ test('desktop lyric remains visible while main app has focus and lock stays clic
  const ctrl=createFloatingLyricsController({BrowserWindow:Window,Menu:{},baseDir:process.cwd(),getMainWindow:()=>null,getSettings:()=>({width:800,mouseThrough:false,alwaysOnTop:true})});
  ctrl.open();
  ctrl.update({line:'今夜的星光',translation:'星の光'});
- assert.equal(fake.visible,false,'must not obscure application settings');
+ assert.equal(fake.visible,true,'lyrics should remain visible while the main player has focus');
  ctrl.setMainFocused(false);
  assert.equal(fake.visible,true,'appears over other apps when main window loses focus');
  ctrl.lock(true);
