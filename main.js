@@ -635,7 +635,10 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
-  floatingLyrics.setLockChange(locked=>{persistFloatingLyricsLock(locked);});
+  const notifyLyricLock=locked=>{
+    if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
+  };
+  floatingLyrics.setLockChange(locked=>{persistFloatingLyricsLock(locked);notifyLyricLock(locked)});
   ipcMain.on?.('lyrics:drag-begin',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragBegin()});
   ipcMain.on?.('lyrics:drag-move',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragMove()});
   ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragEnd()});
@@ -750,11 +753,11 @@ app.whenReady().then(() => {
     return statsCache();
   });
   ipcMain.handle('favorites:list',()=>listFavorites());
-  ipcMain.handle('lyrics:open',()=>floatingLyrics.open());
+  ipcMain.handle('lyrics:open',()=>{const state=floatingLyrics.open();notifyLyricLock(config().floatingLyrics.mouseThrough);return state});
   ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
   ipcMain.handle('lyrics:reset-position',()=>floatingLyrics.resetPosition());
   ipcMain.handle('lyrics:position',()=>config().floatingLyricsPosition);
-  ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);return floatingLyrics.lock(wanted)});
+  ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);const state=floatingLyrics.lock(wanted);notifyLyricLock(wanted);return state});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>({open:floatingLyrics.exists()}));
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);
