@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   playlistCategoriesList:()=>ipcRenderer.invoke('playlists:categories-list'),
   playlistCategoryCreate:name=>ipcRenderer.invoke('playlists:categories-create',name),
   playlistCategoryRename:(id,name)=>ipcRenderer.invoke('playlists:categories-rename',id,name),
+  playlistRenameDefault:name=>ipcRenderer.invoke('playlists:rename-default',name),
   playlistCategoryDelete:id=>ipcRenderer.invoke('playlists:categories-delete',id),
   playlistCategoryMove:(name,id)=>ipcRenderer.invoke('playlists:categories-move',name,id),
   importLocal:kind=>ipcRenderer.invoke('local:import',kind),
