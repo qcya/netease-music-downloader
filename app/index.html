@@ -193,10 +193,24 @@
       </div>
     </main>
   </div>
+  <div class="playlist-name-backdrop" id="playlist-name-dialog" hidden role="dialog" aria-modal="true" aria-labelledby="playlist-name-title" aria-describedby="playlist-name-hint">
+    <form class="playlist-name-card" id="playlist-name-form" novalidate>
+      <h2 id="playlist-name-title">编辑歌单名称</h2>
+      <label for="playlist-name-input">歌单名称</label>
+      <input type="text" id="playlist-name-input" maxlength="32" autocomplete="off" spellcheck="false" required>
+      <p class="playlist-name-hint" id="playlist-name-hint">1—32 个字符。更改名称不会移动或删除音乐文件。</p>
+      <p class="playlist-name-error" id="playlist-name-error" role="alert" aria-live="assertive"></p>
+      <div class="playlist-name-actions">
+        <button type="button" id="playlist-name-cancel">取消</button>
+        <button type="submit" id="playlist-name-save">保存</button>
+      </div>
+    </form>
+  </div>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
   <script src="lrc.js"></script>
   <script src="lyric_navigation.js"></script>
   <script src="playback_navigation.js"></script>
+  <script src="playlist_name_dialog.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

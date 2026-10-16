@@ -375,3 +375,18 @@ input[type="range"]{accent-color:#b6cdec;height:4px;cursor:pointer}
 .playlist-category .playlist-entry{margin:4px 8px;border-radius:9px}
 .playlist-category-empty{padding:18px 16px;color:#a6a1b3;font-size:12px}
 @media(max-width:700px){.toast-container{top:42px;right:12px;max-width:calc(100vw - 24px)}.playlist-category-header{flex-wrap:wrap}}
+
+/* Native prompt() is unavailable in Electron; provide an accessible name editor. */
+.playlist-name-backdrop[hidden]{display:none}
+.playlist-name-backdrop{position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(67,75,98,.36);backdrop-filter:blur(4px)}
+.playlist-name-card{width:min(410px,100%);display:flex;flex-direction:column;gap:12px;padding:25px;border:1px solid #fff;border-radius:22px;background:linear-gradient(140deg,#fff8fc,#fff,#f2f9ff);box-shadow:0 20px 65px rgba(68,80,112,.25)}
+.playlist-name-card h2{margin:0 0 6px;color:#536079;font-size:19px}
+.playlist-name-card label{color:#65758e;font-weight:700;font-size:12px}
+.playlist-name-card input{width:100%;height:43px;padding:0 13px;background:#fff;color:#4c586c;border:1px solid #dfe5f2;border-radius:12px;outline:none}
+.playlist-name-card input:focus{border-color:#a9cdef;box-shadow:0 0 0 3px #e5f1ff}
+.playlist-name-hint{margin:0;font-size:11px;color:#909eae;line-height:1.5}
+.playlist-name-error{margin:0;min-height:18px;font-size:11px;color:#b45370;overflow-wrap:anywhere}
+.playlist-name-actions{display:flex;justify-content:flex-end;gap:10px}
+.playlist-name-actions button{border:0;border-radius:10px;padding:9px 18px;background:#e9edf6;color:#63728c}
+.playlist-name-actions button[type=submit]{background:#f4cfe6;color:#7d5c76;font-weight:700}
+.playlist-name-actions button:hover:not(:disabled){filter:brightness(.97)}

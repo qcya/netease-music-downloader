@@ -2,6 +2,7 @@
 (() => {
   const bridge = window.musicBridge;
   const $ = selector => document.querySelector(selector);
+  const playlistNameDialog = window.PlaylistNameDialog.create(document);
   const state = {view:'home', tracks:[], selected:new Set(), busy:false, settings:null, playlist:false, playingId:null, playToken:0, preparing:false, lyrics:[], lyricIndex:-1, playerInfo:null, playlists:[], activePlaylistId:null, immersive:false, downloadJobs:new Map(), activeDownloadBatches:0,query:'',page:1,total:0,paused:false,floating:false,playQueue:null,advancingPlaylist:false,advanceSerial:0,currentLocalName:null,playMode:'sequence',lyricsLocked:false,miniOpen:false};
 
   const svg = {
@@ -674,6 +675,16 @@
     }catch(e){showToast('删除失败：'+errMessage(e),true)}
   }
   let dragPlaylistName=null;
+  async function openPlaylistNameEditor({title,initialName='',confirmText='保存',onSubmit,successText}){
+    try {
+      const savedName=await playlistNameDialog.open({title,initialName,confirmText,onSubmit});
+      if(savedName===null)return;
+      await refreshPlaylists();
+      showToast(successText);
+    } catch(e) {
+      showToast('歌单操作失败：'+errMessage(e),true);
+    }
+  }
   async function refreshPlaylists(){
     const container=$('#my-playlist-tracks');
     container.replaceChildren();
@@ -685,8 +696,7 @@
       const assignments=meta.assignments||{};
       const sections=[...categories.map(c=>({id:c.id,name:c.name})),{id:null,name:meta.defaultName||'未分类'}];
       if(!tracks.length&&!categories.length){
-        container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加，或先创建分类文件夹。'));
-        return;
+        container.append(node('div','empty-simple','歌单还没有歌曲。请从「本地音乐」添加，或先创建歌单。'));
       }
       const updatePlaylistOrder=async(updated)=>{
         await bridge.playlistsReorder(updated);
@@ -704,15 +714,19 @@
         header.append(title,node('span','playlist-category-count',names.length+' 首'));
         {
           const rename=node('button','','重命名');
-          rename.onclick=async()=>{
-            const value=prompt('歌单新名称',category.name);
-            if(value===null||!value.trim()||value.trim()===category.name)return;
-            try{
-              if(category.id)await bridge.playlistCategoryRename(category.id,value);
-              else await bridge.playlistRenameDefault(value);
-              await refreshPlaylists();
-              showToast('歌单已重命名。');
-            }catch(e){showToast('歌单重命名失败：'+errMessage(e),true)}
+          rename.type='button';
+          rename.onclick=()=>{
+            void openPlaylistNameEditor({
+              title:category.id?'重命名歌单':'重命名默认歌单',
+              initialName:category.name,
+              confirmText:'保存名称',
+              onSubmit:async value=>{
+                if(value===category.name)return;
+                if(category.id)await bridge.playlistCategoryRename(category.id,value);
+                else await bridge.playlistRenameDefault(value);
+              },
+              successText:'歌单已重命名。'
+            });
           };
           const del=node('button','','删除歌单');
           del.title='只删除歌单分组，不删除任何歌曲';
@@ -952,11 +966,14 @@
     $('#page-next').addEventListener('click',()=>changePage(1));
     $('#playlist-toggle').addEventListener('click',()=>$('#playlist-box').classList.toggle('hidden'));
     $('#playlist-box').addEventListener('submit',playlist);
-    $('#playlist-create-category').addEventListener('click',async()=>{
-      const name=prompt('新建歌单名称','新歌单');
-      if(name===null||!name.trim())return;
-      try{await bridge.playlistCategoryCreate(name);await refreshPlaylists();showToast('歌单已创建，可拖动歌曲到歌单标题。')}
-      catch(e){showToast('新建歌单失败：'+errMessage(e),true)}
+    $('#playlist-create-category').addEventListener('click',()=>{
+      void openPlaylistNameEditor({
+        title:'新建歌单',
+        initialName:'',
+        confirmText:'创建歌单',
+        onSubmit:async name=>{await bridge.playlistCategoryCreate(name);},
+        successText:'歌单已创建，可拖动歌曲到歌单标题。'
+      });
     });
     $('#open-folder').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
     $('#local-open').addEventListener('click',()=>bridge.openDirectory().catch(e=>showToast(errMessage(e),true)));
