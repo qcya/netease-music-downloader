@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   previewFloatingLyricsStyle:style=>ipcRenderer.invoke('lyrics:preview-style',style),
   onOpenLyricsSettings:cb=>{const listener=()=>cb();ipcRenderer.on('lyrics:open-settings',listener);return()=>ipcRenderer.removeListener('lyrics:open-settings',listener)},
   onFloatingLyricsStatus:cb=>{const listener=(_e,data)=>cb(data);ipcRenderer.on('lyrics:status',listener);return()=>ipcRenderer.removeListener('lyrics:status',listener)},
+  onFloatingLyricsLockStatus:cb=>{const listener=(_e,data)=>cb(data);ipcRenderer.on('lyrics:lock-status',listener);return()=>ipcRenderer.removeListener('lyrics:lock-status',listener)},
   listFavorites:()=>ipcRenderer.invoke('favorites:list'),
   addFavorite:track=>ipcRenderer.invoke('favorites:add',track),
   playFavorite:id=>ipcRenderer.invoke('favorites:play',id),
