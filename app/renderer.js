@@ -932,6 +932,11 @@
     $('#player-mode').value=state.playMode;$('#immersive-mode').value=state.playMode;
     bridge.onDownloadTask(task=>displayDownloadJob(task));
     bridge.onFloatingLyricsStatus(info=>{state.floating=!!info.open;updateDesktopLyricsToggle();});
+    bridge.onFloatingLyricsLockStatus(info=>{
+      state.lyricsLocked=info?.locked===true;
+      if(state.settings?.floatingLyrics)state.settings.floatingLyrics.mouseThrough=state.lyricsLocked;
+      updateDesktopLyricsToggle();
+    });
     bridge.onOpenLyricsSettings(()=>showView('settings'));
     document.querySelectorAll('.nav-item').forEach(el=>el.addEventListener('click',()=>showView(el.dataset.view)));
     $('#search-form').addEventListener('submit',search);
