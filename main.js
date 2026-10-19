@@ -21,7 +21,7 @@ const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
 const {readJSON,writeJSONAtomic}=require('./durable_json.js');
 const {createLibraryRoots}=require('./library_roots.js');
-const {createDiscoveryService}=require('./discovery_service.js');
+const {createTasteDiscoveryService}=require('./taste_discovery.js');
 
 // 开发版使用独立的 Windows 任务栏分组，避免复用旧版 EXE 的固定图标。
 const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
@@ -160,7 +160,7 @@ function availableLocalTrack(name){return localPlaylist.localFile(name)}
 const categoryStore=createCategoryStore({getFile:playlistCategoriesFile,
   getTracks:()=>localPlaylist.list()[0].tracks,readJSON,writeJSONAtomic});
 function readPlaylists(){return localPlaylist.list()}
-const discovery=createDiscoveryService({
+const discovery=createTasteDiscoveryService({
   getFile:()=>path.join(app.getPath('userData'),'discovery-cache.json'),
   getBases:()=>config().apiBases,
   fetchJSON:async(url,options)=>{
@@ -277,7 +277,7 @@ function pruneCache(limitMB=1024, excludeId=null) {
 
 
 function config() {
-  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:false,miniPlayerEnabled:false,floatingLyricsPosition:null,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
+  const defaultSettings = { downloadDir: getDefaultDir(), favoritesDir:path.join(getDefaultDir(),'收藏'), setupCompleted:false, disclaimerAcceptedVersion:0,desktopLyricsEnabled:true,miniPlayerEnabled:false,floatingLyricsPosition:null,playerBackgroundPath:'', quality: 'best', apiBases: [], cacheLimitMB: 1024, parallelDownloads: 3, floatingLyrics:normalizeLyrics() };
   try {
     const stored = JSON.parse(fs.readFileSync(configFile(), 'utf8'));
     if (stored && typeof stored === 'object') {
@@ -286,7 +286,7 @@ function config() {
       const bases = Array.isArray(stored.apiBases) ? stored.apiBases.filter(x => typeof x === 'string') : [];
       const cacheLimitMB = [512,1024,2048,5120].includes(stored.cacheLimitMB) ? stored.cacheLimitMB : 1024;
       const parallelDownloads = [1,2,3,4,6].includes(stored.parallelDownloads) ? stored.parallelDownloads : 3;
-      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:stored.desktopLyricsEnabled===true,miniPlayerEnabled:stored.miniPlayerEnabled===true,floatingLyricsPosition:normalizePosition(stored.floatingLyricsPosition),playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
+      return {downloadDir:dir, favoritesDir:typeof stored.favoritesDir==='string'&&path.isAbsolute(stored.favoritesDir)?stored.favoritesDir:path.join(dir,'收藏'),setupCompleted:stored.setupCompleted===true,disclaimerAcceptedVersion:Number(stored.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:typeof stored.desktopLyricsEnabled==='boolean'?stored.desktopLyricsEnabled:true,miniPlayerEnabled:stored.miniPlayerEnabled===true,floatingLyricsPosition:normalizePosition(stored.floatingLyricsPosition),playerBackgroundPath:typeof stored.playerBackgroundPath==='string'&&path.isAbsolute(stored.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(stored.playerBackgroundPath).toLowerCase())?stored.playerBackgroundPath:'',quality,apiBases:bases,cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics(stored.floatingLyrics)};
     }
   } catch { /* first run */ }
   return defaultSettings;
@@ -346,7 +346,7 @@ function writeConfig(value) {
   });
   const cacheLimitMB = [512,1024,2048,5120].includes(value.cacheLimitMB) ? value.cacheLimitMB : 1024;
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
-  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,miniPlayerEnabled:config().miniPlayerEnabled,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
+  const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:typeof value.desktopLyricsEnabled==='boolean'?value.desktopLyricsEnabled:config().desktopLyricsEnabled,miniPlayerEnabled:config().miniPlayerEnabled,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
   ensureData();
   if(path.resolve(config().downloadDir)!==path.resolve(dir))libraryRoots.remember(config().downloadDir,dir);
   writeJSONAtomic(configFile(),result);
@@ -545,7 +545,7 @@ async function beginStream(id){return onlineMedia.open(id);}
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.1.1', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.1.2', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -642,6 +642,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
+  ipcMain.handle('music:availability',(_e,ids,options)=>{assertMainSender(_e);return onlineMedia.availability(ids,{force:options?.force===true});});
   ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return discovery.get(options||{})});
   ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('system:choose-directory', async () => {

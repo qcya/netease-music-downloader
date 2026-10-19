@@ -2,9 +2,10 @@
 // Audio passes directly from the network reader to Chromium. This module has no
 // filesystem dependency, full-file buffer, download fallback or durable URL cache.
 const {randomUUID}=require('node:crypto');
+const {createSourceAvailability}=require('./source_availability');
 const OFFICIAL='https://music.163.com';
 const idOf=value=>{const id=String(value);if(!/^\d{1,20}$/.test(id))throw Error('无效歌曲 ID');return id;};
-function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs=12000}={}){
+function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs=12000,now=Date.now}={}){
  let revision=0,current=null,resolving=null;
  const lyricCache=new Map(),lyricPending=new Map();
  const bases=()=>getBases().filter(v=>{try{const u=new URL(v);return !u.username&&!u.password&&(u.protocol==='https:'||(u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)));}catch{return false;}}).slice(0,4);
@@ -23,24 +24,14 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>2*1024*1024)throw Error('元数据响应过大');chunks.push(value);}return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
   finally{void reader.cancel().catch(()=>{});}
  }
+ const sources=createSourceAvailability({json,getBases:bases,trusted,now});
  async function open(id){
   const sid=idOf(id);stop();const serial=revision,control=new AbortController();resolving=control;
-  const configured=bases();
-  const endpoints=configured.length?configured.map(b=>b.replace(/\/$/,'')+'/song/url/v1?id='+sid+'&level=standard'):[OFFICIAL+'/api/song/enhance/player/url?ids='+encodeURIComponent('['+sid+']')+'&br=128000'];
-  let chosen=null;
   try{
-   for(const endpoint of endpoints){
-    if(control.signal.aborted)throw Error('已切换歌曲');
-    try{const data=await json(endpoint,control.signal),row=data?.data?.find(x=>x&&(!x.id||String(x.id)===sid));
-     if(row?.freeTrialInfo||row?.freeTrialPrivilege?.resConsumable===true&&row?.freeTrialPrivilege?.userConsumable===false)continue;
-     let uri=row?.url;
-     if(typeof uri==='string'&&uri.startsWith('http://')&&/(^|\.)music\.126\.net$/.test(new URL(uri).hostname))uri=uri.replace(/^http:/,'https:');
-     if(trusted(uri)){chosen={url:uri,id:sid};break;}
-    }catch(e){if(control.signal.aborted)throw e;}
-   }
+   const chosen=await sources.resolve(sid,control.signal);
    if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
-   if(!chosen)throw Error('这首歌暂无可用的完整在线播放音源（可能需要权限或接口不可用），不会自动下载或缓存。');
-   const token=randomUUID();current={...chosen,token,controllers:new Set()};
+   if(chosen.state!=='available')throw Error(chosen.reason+'；不会自动下载或缓存。');
+   const token=randomUUID();current={url:chosen.url,id:sid,token,controllers:new Set()};
    return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false};
   }finally{if(resolving===control)resolving=null;}
  }
@@ -107,6 +98,6 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
    return {id:sid,found:false,lrc:'',translated_lrc:'',fromMemory:true};
   })();lyricPending.set(key,task);try{return await task;}finally{lyricPending.delete(key);}
  }
- return {open,handle,lyrics,stop,close(){stop();lyricCache.clear();},currentURL:()=>current?'music-preview://audio/'+current.token:null};
+ return {open,handle,lyrics,stop,availability:(ids,options)=>sources.check(ids,options),close(){stop();lyricCache.clear();sources.clear();},currentURL:()=>current?'music-preview://audio/'+current.token:null};
 }
 module.exports={createOnlineMedia};

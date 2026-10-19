@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   appInfo:()=>ipcRenderer.invoke('app:info'),
   openReleasePage:()=>ipcRenderer.invoke('app:release-page'),
+  mediaAvailability:(ids,options)=>ipcRenderer.invoke('music:availability',ids,options),
   discovery:options=>ipcRenderer.invoke('discovery:get',options),
   discoveryPlaylist:id=>ipcRenderer.invoke('discovery:playlist',id),
   playlistOrganize:(order,name=null,id=null)=>ipcRenderer.invoke('playlists:organize',order,name,id),

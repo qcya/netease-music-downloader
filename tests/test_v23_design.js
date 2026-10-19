@@ -20,7 +20,7 @@ test('immersive player centers the lyrics without vinyl artwork',()=>{
 });
 test('desktop lyrics stays manually controlled without registering global shortcuts',()=>{
  const main=read('main.js'),html=read('app/index.html');
- assert.match(main,/desktopLyricsEnabled:false/);assert.doesNotMatch(main,/globalShortcut/);
+ assert.match(main,/desktopLyricsEnabled:true/);assert.doesNotMatch(main,/globalShortcut/);
  assert.doesNotMatch(html,/id="lyrics-shortcut"/);
  assert.ok(!read('app/floating-lyrics.html').includes('title="左键拖动'));
 });

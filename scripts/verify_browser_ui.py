@@ -17,6 +17,7 @@ const tracks=Array.from({length:1205},(_,i)=>({name:'本地测试 '+String(i).pa
 let meta={categories:[],assignments:{},defaultName:'未分类'};
 window.musicBridge=new Proxy({
  getSettings:async()=>({downloadDir:'/music',disclaimerAcceptedVersion:1,quality:'best',apiBases:[],floatingLyrics:{},desktopLyricsEnabled:false,miniPlayerEnabled:false}),
+ mediaAvailability:async ids=>ids.map(id=>({id,state:String(id).endsWith('1')?'unavailable':String(id).endsWith('2')?'unknown':'available',reason:'界面测试状态'})),
  cacheStats:async()=>({count:0,bytes:0}), checkPython:async()=>({version:'测试环境'}),
  playlistsList:async()=>[{id:'default',tracks:tracks.slice(0,3).map(x=>x.name)}],
  playlistCategoriesList:async()=>meta,
@@ -62,6 +63,17 @@ with sync_playwright() as p:
     page.locator('.discovery-song').first.wait_for(timeout=6000)
     assert page.locator('.discovery-song').count()==8
     assert page.evaluate('window.__calls.filter(x=>x[0]==="download"||x[0]==="playLocal").length')==0
+    page.locator('.discovery-song').first.scroll_into_view_if_needed()
+    page.locator('.discovery-play').first.wait_for()
+    blocked=page.locator('.discovery-song[data-song-id="10001"]')
+    assert blocked.locator('.discovery-play').count()==0
+    assert blocked.locator('.stream-status').inner_text()=='暂不可播'
+    uncertain=page.locator('.discovery-song[data-song-id="10002"]')
+    uncertain.scroll_into_view_if_needed()
+    uncertain.locator('.stream-retry').wait_for()
+    assert uncertain.locator('.discovery-play').count()==0
+    uncertain.locator('.stream-retry').click()
+    print('UI: unavailable and unknown songs have no play button',flush=True)
     print('UI: homepage loaded',flush=True)
     page.screenshot(path=str(OUT/'homepage-fixture.png'),timeout=5000)
     old=page.locator('.discovery-song').first.get_attribute('data-song-id')
@@ -71,6 +83,7 @@ with sync_playwright() as p:
     page.locator('#search-panel').wait_for(state='visible')
     assert page.locator('.song-card').count()==1
     page.locator('#home-discover-tab').click()
+    page.locator('.discovery-song').first.scroll_into_view_if_needed()
     page.locator('.discovery-play').first.click()
     page.wait_for_function('window.__calls.some(x=>x[0]==="stream")')
     assert page.evaluate('window.__calls.filter(x=>x[0]==="download").length')==0
