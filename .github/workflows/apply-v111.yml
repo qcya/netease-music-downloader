@@ -1,0 +1,59 @@
+name: Verify Memory Stream Repair
+on:
+  push:
+    branches: ['fix/lyrics-stream-v1.1.1']
+    paths: ['.github/workflows/apply-v111.yml']
+permissions:
+  contents: write
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r skill/requirements.txt pytest
+      - name: Decode tested patch and verify SHA256
+        shell: python
+        run: |
+          import pathlib, base64, lzma, hashlib, os, subprocess
+          data=''.join(pathlib.Path(f'.repair-transfer/part{i}.txt').read_text().strip() for i in range(1,4))
+          patch=lzma.decompress(base64.b64decode(data,validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='d7b8c16d23d1bd53412898e16b819d537435c79604e7796095695a2ed5ad486f'
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'memory-repair.patch'
+          p.write_bytes(patch)
+          subprocess.run(['git','apply','--unidiff-zero','--check',str(p)],check=True)
+          subprocess.run(['git','apply','--stat',str(p)],check=True)
+          subprocess.run(['git','apply','--unidiff-zero',str(p)],check=True)
+      - name: Full JavaScript and Python regression
+        env:
+          PYTHONPATH: skill/scripts
+          MUSIC_PYTHON_EXE: python
+        run: |
+          npm run check
+          node --test tests/test_*.js
+          python -m pytest -q tests
+      - name: Live anonymous media availability probe
+        continue-on-error: true
+        run: node scripts/probe_online_stream.js
+      - name: Commit tested implementation on isolated branch
+        run: |
+          git rm -r .repair-transfer
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add --all
+          git diff --cached --stat
+          git commit -m 'fix: restore visible desktop lyrics and stream audio without disk cache'
+          git push origin HEAD:fix/lyrics-stream-v1.1.1
+      - name: Archive verified implementation
+        run: git archive --format=zip --output=verified-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: memory-stream-source
+          path: verified-source.zip
+          retention-days: 7
