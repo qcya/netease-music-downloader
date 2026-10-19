@@ -1,18 +1,22 @@
 name: Build Windows Portable
 
 on:
-  # Rebuild v1.1.1 with isolated lyric settings and progressive-stream verification.
+  # Rebuild v1.1.2 with isolated lyric settings and progressive-stream verification.
   push:
     branches: [main]
     paths:
       - '.github/workflows/windows-build.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-build.yml"
   workflow_dispatch:
 
 permissions:
   contents: write
 
 concurrency:
-  group: windows-portable-v1.1.1
+  group: windows-portable-v1.1.2-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +35,7 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          if ($version -ne "1.1.1") { throw "Wrong package version: $version" }
+          if ($version -ne "1.1.2") { throw "Wrong package version: $version" }
       - name: Install Python libraries
         run: python -m pip install -r skill/requirements.txt -r skill/requirements-build.txt pytest
       - name: Install npm libraries
@@ -51,9 +55,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Node tests failed" }
           python -m pytest -q tests
           if ($LASTEXITCODE -ne 0) { throw "Python tests failed" }
-      - name: Probe current public recommendation API (informational)
+      - name: Verify live taste metadata (informational)
         continue-on-error: true
-        run: node scripts/check_discovery_online.js
+        env:
+          MUSIC_TASTE_EVIDENCE: packaged-taste-online.json
+        run: node scripts/check_taste_online.js
       - name: Probe anonymous online audio and lyric availability (informational)
         continue-on-error: true
         run: node scripts/probe_online_stream.js
@@ -66,7 +72,7 @@ jobs:
       - name: Validate bundled backend, wallpaper, and single-file EXE
         shell: pwsh
         run: |
-          $exe = "dist/MusicDownloader-1.1.1-portable.exe"
+          $exe = "dist/MusicDownloader-1.1.2-portable.exe"
           $backend = "backend/music_backend.exe"
           $wallpaper = "assets/immersive-background-1080p.mp4"
           $asar = "dist/win-unpacked/resources/app.asar"
@@ -80,13 +86,13 @@ jobs:
             throw "Embedded backend runtime verification failed"
           }
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "dist/MusicDownloader-1.1.1-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.1.1-portable.exe"
+          Set-Content -Path "dist/MusicDownloader-1.1.2-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.1.2-portable.exe"
           Write-Host "Portable EXE SHA256: $hash"
       - name: Smoke-test installed portable executable and main-window exit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $sample = "dist/MusicDownloader-1.1.1-portable.exe"
+          $sample = "dist/MusicDownloader-1.1.2-portable.exe"
           $smokeDir = Join-Path $env:RUNNER_TEMP ("MusicDownloader-smoke-" + $env:GITHUB_RUN_ID)
           New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $smokeDir
@@ -119,19 +125,8 @@ jobs:
             node scripts/verify_packaged_playlist.js $debugPort $smokeDir 2>&1 | Tee-Object packaged-e2e.log
             if ($LASTEXITCODE -ne 0) { throw "Packaged lyrics, memory streaming or playlist test failed end-to-end" }
             Write-Host "PASS: Packaged playlist button E2E test."
-            $mainWindow = $null
-            for ($i=0; $i -lt 25; $i++) {
-              $mainWindow = Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue |
-                Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } |
-                Select-Object -First 1
-              if ($mainWindow) { break }
-              Start-Sleep -Seconds 1
-            }
-            if (!$mainWindow) { throw "Packaged EXE has no discoverable main window handle" }
-            Write-Host "Sending WM_CLOSE to actual main window PID $($mainWindow.Id)"
-            if (![NativeClose]::PostMessage($mainWindow.MainWindowHandle,0x0010,[IntPtr]::Zero,[IntPtr]::Zero)) {
-              throw "Could not send WM_CLOSE to main window"
-            }
+            node -e "require('./scripts/native_test_window').setWindowState('MusicDownloader',16)"
+            if ($LASTEXITCODE -ne 0) { throw "Could not send WM_CLOSE to actual main window" }
             $exited = $false
             for ($i=0; $i -lt 30; $i++) {
               Start-Sleep -Seconds 1
@@ -140,6 +135,18 @@ jobs:
             }
             if (!$exited) { throw "Closing main window left MusicDownloader in background" }
             Write-Host "PASS: packaged app launched, displayed its window, and fully exited on close."
+            Write-Host "Relaunching the same EXE and saved user-data directory..."
+            $launcher = Start-Process -FilePath (Resolve-Path $sample) -ArgumentList @("--remote-debugging-port=$debugPort", "--remote-allow-origins=*") -PassThru
+            node scripts/verify_packaged_playlist.js $debugPort $smokeDir restart 2>&1 | Tee-Object -Append packaged-e2e.log
+            if ($LASTEXITCODE -ne 0) { throw "Restart lost the user's lyric lock or position" }
+            node -e "require('./scripts/native_test_window').setWindowState('MusicDownloader',16)"
+            if ($LASTEXITCODE -ne 0) { throw "Could not close restarted main window" }
+            $exited = $false
+            for ($i=0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              if (@(Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue).Count -eq 0) { $exited = $true; break }
+            }
+            if (!$exited) { throw "Restarted player left background processes" }
           } finally {
             Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue |
               Stop-Process -Force -ErrorAction SilentlyContinue
@@ -152,27 +159,28 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Packaged-Lyrics-Stream-Evidence-v1.1.1
+          name: Packaged-Lyrics-Stream-Evidence-v1.1.2
           path: |
             packaged-*.log
             packaged-*.png
+            packaged-*.json
           retention-days: 14
           if-no-files-found: ignore
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MusicDownloader-Windows-Portable-v1.1.1
+          name: MusicDownloader-Windows-Portable-v1.1.2
           path: |
-            dist/MusicDownloader-1.1.1-portable.exe
-            dist/MusicDownloader-1.1.1-portable.exe.sha256
+            dist/MusicDownloader-1.1.2-portable.exe
+            dist/MusicDownloader-1.1.2-portable.exe.sha256
           if-no-files-found: error
-      - name: Publish GitHub Release v1.1.1
+      - name: Publish GitHub Release v1.1.2
         if: success() && github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.1.1 --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Release v1.1.1 already exists. Refusing to overwrite." }
-          gh release create v1.1.1 "dist/MusicDownloader-1.1.1-portable.exe" "dist/MusicDownloader-1.1.1-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.1.1" --notes-file "RELEASE_NOTES_v1.1.1.md" --latest
+          gh release view v1.1.2 --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release v1.1.2 already exists. Refusing to overwrite." }
+          gh release create v1.1.2 "dist/MusicDownloader-1.1.2-portable.exe" "dist/MusicDownloader-1.1.2-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.1.2" --notes-file "RELEASE_NOTES_v1.1.2.md" --latest
           if ($LASTEXITCODE -ne 0) { throw "Could not publish GitHub Release" }
