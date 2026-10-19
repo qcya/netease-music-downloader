@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: windows-portable-v1.1.0
+  group: windows-portable-v1.1.1
   cancel-in-progress: false
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
         shell: pwsh
         run: |
           $version = node -p "require('./package.json').version"
-          if ($version -ne "1.1.0") { throw "Wrong package version: $version" }
+          if ($version -ne "1.1.1") { throw "Wrong package version: $version" }
       - name: Install Python libraries
         run: python -m pip install -r skill/requirements.txt -r skill/requirements-build.txt pytest
       - name: Install npm libraries
@@ -54,6 +54,9 @@ jobs:
       - name: Probe current public recommendation API (informational)
         continue-on-error: true
         run: node scripts/check_discovery_online.js
+      - name: Probe anonymous online audio and lyric availability (informational)
+        continue-on-error: true
+        run: node scripts/probe_online_stream.js
       - name: Build standalone portable EXE
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
@@ -63,7 +66,7 @@ jobs:
       - name: Validate bundled backend, wallpaper, and single-file EXE
         shell: pwsh
         run: |
-          $exe = "dist/MusicDownloader-1.1.0-portable.exe"
+          $exe = "dist/MusicDownloader-1.1.1-portable.exe"
           $backend = "backend/music_backend.exe"
           $wallpaper = "assets/immersive-background-1080p.mp4"
           $asar = "dist/win-unpacked/resources/app.asar"
@@ -77,13 +80,13 @@ jobs:
             throw "Embedded backend runtime verification failed"
           }
           $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "dist/MusicDownloader-1.1.0-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.1.0-portable.exe"
+          Set-Content -Path "dist/MusicDownloader-1.1.1-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.1.1-portable.exe"
           Write-Host "Portable EXE SHA256: $hash"
       - name: Smoke-test installed portable executable and main-window exit
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $sample = "dist/MusicDownloader-1.1.0-portable.exe"
+          $sample = "dist/MusicDownloader-1.1.1-portable.exe"
           $smokeDir = Join-Path $env:RUNNER_TEMP ("MusicDownloader-smoke-" + $env:GITHUB_RUN_ID)
           New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $smokeDir
@@ -114,7 +117,7 @@ jobs:
             }
             Write-Host "Packaged EXE reached window_ready."
             node scripts/verify_packaged_playlist.js $debugPort $smokeDir
-            if ($LASTEXITCODE -ne 0) { throw "Packaged playlist or discovery playback failed end-to-end" }
+            if ($LASTEXITCODE -ne 0) { throw "Packaged lyrics, memory streaming or playlist test failed end-to-end" }
             Write-Host "PASS: Packaged playlist button E2E test."
             $mainWindow = $null
             for ($i=0; $i -lt 25; $i++) {
@@ -145,18 +148,18 @@ jobs:
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MusicDownloader-Windows-Portable-v1.1.0
+          name: MusicDownloader-Windows-Portable-v1.1.1
           path: |
-            dist/MusicDownloader-1.1.0-portable.exe
-            dist/MusicDownloader-1.1.0-portable.exe.sha256
+            dist/MusicDownloader-1.1.1-portable.exe
+            dist/MusicDownloader-1.1.1-portable.exe.sha256
           if-no-files-found: error
-      - name: Publish GitHub Release v1.1.0
+      - name: Publish GitHub Release v1.1.1
         if: github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view v1.1.0 --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { throw "Release v1.1.0 already exists. Refusing to overwrite." }
-          gh release create v1.1.0 "dist/MusicDownloader-1.1.0-portable.exe" "dist/MusicDownloader-1.1.0-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.1.0" --notes-file "RELEASE_NOTES_v1.1.0.md" --latest
+          gh release view v1.1.1 --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw "Release v1.1.1 already exists. Refusing to overwrite." }
+          gh release create v1.1.1 "dist/MusicDownloader-1.1.1-portable.exe" "dist/MusicDownloader-1.1.1-portable.exe.sha256" --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "音乐下载器 v1.1.1" --notes-file "RELEASE_NOTES_v1.1.1.md" --latest
           if ($LASTEXITCODE -ne 0) { throw "Could not publish GitHub Release" }
