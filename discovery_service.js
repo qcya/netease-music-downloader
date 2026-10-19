@@ -2,10 +2,15 @@
 const {createHash} = require('node:crypto');
 const {readJSON, writeJSONAtomic} = require('./durable_json');
 const CATEGORIES = Object.freeze({all:'全部',chinese:'华语',japanese:'日语',acg:'ACG',instrumental:'轻音乐'});
-const DEFAULT_BASES = ['https://musicapi.qijieya.cn', 'https://api.qijieya.cn'];
+const DEFAULT_BASES = ['https://music.163.com/api'];
+const isPublicBase = base => base.replace(/\/+$/,'')==='https://music.163.com/api';
 const text = (value, limit=160) => typeof value === 'string' ? value.trim().slice(0,limit) : '';
 function cover(value) {
-  try { const u=new URL(value); return u.protocol==='https:'&&/(^|\.)music\.(126|163)\.net$/.test(u.hostname)?u.href:''; } catch { return ''; }
+  try {
+    const u=new URL(value);
+    if(!['https:','http:'].includes(u.protocol)||u.username||u.password||!/(^|\.)music\.(126|163)\.net$/.test(u.hostname))return '';
+    u.protocol='https:';return u.href;
+  } catch { return ''; }
 }
 function normalizeSong(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -43,29 +48,30 @@ function createDiscoveryService({getFile,getBases=()=>DEFAULT_BASES,fetchJSON,no
         const url=new URL(base.replace(/\/+$/,'')+endpoint);
         if(!['http:','https:'].includes(url.protocol))return null;
         for(const [key,value] of Object.entries(params))url.searchParams.set(key,String(value));
-        const result=await fetchJSON(url.href,{signal:AbortSignal.timeout(Math.max(1,Math.min(6500,deadline-Date.now())))});
+        const result=await fetchJSON(url.href,{credentials:'omit',signal:AbortSignal.timeout(Math.max(1,Math.min(6500,deadline-Date.now())))});
         return result&&typeof result==='object'&&(!result.code||result.code===200)?result:null;
       }catch{return null;}
     }
     let playlists=[],songs=[];
     for(const base of bases){
-      const data=await request(base,'/top/playlist',{cat:CATEGORIES[category],order:'hot',limit:48});
+      const direct=isPublicBase(base);
+      const data=await request(base,direct?'/playlist/list':'/top/playlist',{cat:CATEGORIES[category],order:'hot',limit:48,offset:0});
       playlists=unique(Array.isArray(data?.playlists)?data.playlists:[],normalizePlaylist);
       if(!playlists.length&&category==='all'){
-        const fallback=await request(base,'/personalized',{limit:48});
+        const fallback=await request(base,direct?'/personalized/playlist':'/personalized',{limit:48});
         playlists=unique(Array.isArray(fallback?.result)?fallback.result:[],normalizePlaylist);
       }
       if(playlists.length){
         const selected=ranked(playlists,day+'|'+category).slice(0,2);
         for(const list of selected){
-          const data=await request(base,'/playlist/track/all',{id:list.id,limit:60,offset:0});
+          const data=direct?null:await request(base,'/playlist/track/all',{id:list.id,limit:60,offset:0});
           let rows=Array.isArray(data?.songs)?data.songs:[];
-          if(!rows.length){const detail=await request(base,'/playlist/detail',{id:list.id});rows=Array.isArray(detail?.playlist?.tracks)?detail.playlist.tracks:[];}
+          if(!rows.length){const detail=await request(base,'/playlist/detail',{id:list.id});const result=direct?detail?.result:detail?.playlist;rows=Array.isArray(result?.tracks)?result.tracks.slice(0,60):[];}
           songs.push(...rows);
         }
         if(songs.length)break;
       }
-      if(category==='all'&&!songs.length){
+      if(!direct&&category==='all'&&!songs.length){
         const fresh=await request(base,'/personalized/newsong',{limit:60});
         songs.push(...(Array.isArray(fresh?.result)?fresh.result:[]));
       }
@@ -98,7 +104,6 @@ function createDiscoveryService({getFile,getBases=()=>DEFAULT_BASES,fetchJSON,no
     const base={ok:!!data,category,label:CATEGORIES[category],personalized:false,requestedDay,offline};
     if(!data)return {...base,day:requestedDay,songs:[],playlists:[],poolSize:0,message:'暂时连不上推荐接口。可重试、搜索，或随机播放本地音乐。'};
     const excluded=new Set(excludeIds.map(String));
-    // Validate disk cache too: cached external text is never trusted as HTML or URLs.
     const tracks=unique(data.songs,s=>normalizeSong({...s,al:{name:s.album,picUrl:s.cover_url}})).filter(s=>!excluded.has(s.id));
     const lists=unique(data.playlists,p=>normalizePlaylist({...p,picUrl:p.cover_url}));
     return {...base,day:data.day,fetchedAt:data.fetchedAt,poolSize:tracks.length,
@@ -106,6 +111,25 @@ function createDiscoveryService({getFile,getBases=()=>DEFAULT_BASES,fetchJSON,no
       playlists:page(ranked(lists,data.day+'|'+category+'|lists'),6,batch),
       message:offline?`当前展示 ${data.day} 的缓存推荐，不是今天的在线结果。`:'来自公开精选歌单；不是网易云账号的私人日推。音源能否完整下载以实际结果为准。'};
   }
-  return {get};
+  async function playlist(id) {
+    if(typeof id!=='string'||!/^\d{1,20}$/.test(id))throw new Error('歌单 ID 无效');
+    const bases=(getBases()?.length?getBases():DEFAULT_BASES).slice(0,3);
+    for(const base of bases){
+      try{
+        const url=new URL(base.replace(/\/+$/,'')+'/playlist/detail');
+        if(!['http:','https:'].includes(url.protocol))continue;
+        url.searchParams.set('id',id);
+        const data=await fetchJSON(url.href,{credentials:'omit',signal:AbortSignal.timeout(6500)});
+        if(data?.code&&data.code!==200)continue;
+        const detail=isPublicBase(base)?data?.result:data?.playlist;
+        const tracks=unique(Array.isArray(detail?.tracks)?detail.tracks:[],normalizeSong).slice(0,1000);
+        if(!tracks.length)continue;
+        const total=Math.max(tracks.length,Number(detail.trackCount)||0);
+        return {tracks,total,source:url.origin+url.pathname,possibly_incomplete:tracks.length<total};
+      }catch{/* Try the next explicitly configured provider, never a hidden account endpoint. */}
+    }
+    throw new Error('公开歌单详情暂时不可用，请稍后重试；不会自动下载整份歌单。');
+  }
+  return {get,playlist};
 }
 module.exports={createDiscoveryService,normalizeSong,normalizePlaylist,dayStamp,CATEGORIES};
