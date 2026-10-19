@@ -66,7 +66,7 @@ test('mixed discovery covers five expressed tastes and favors identifiable title
  assert.ok(r.playlists.length>=5);assert.ok(r.playlists.every(p=>p.reason));
  assert.ok(!f.calls.some(u=>u.includes('/playlist/list')),'cannot fall back to generic top playlists');
  const calls=f.calls.length;const repeat=await f.service.get({});assert.deepEqual(repeat.songs,r.songs);assert.equal(f.calls.length,calls);
- const next=await f.service.get({batch:1});assert.ok(next.songs.some(s=>!r.songs.some(a=>a.id===s.id)),'change batch fetches different seed titles');
+ const next=await f.service.get({batch:1});assert.ok(next.songs.every(s=>!r.songs.some(a=>a.id===s.id)),'a new batch never repeats displayed seed titles');assert.equal(next.exhausted,true,'the seed-only fixture has no new candidate catalog');
 });
 test('exclusions, stale cache labeling and API failures never invent recommendation tracks',async t=>{
  const f=tasteFixture(t),a=await f.service.get({category:'vocaloid'});

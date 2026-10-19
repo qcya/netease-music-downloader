@@ -111,25 +111,8 @@ function createDiscoveryService({getFile,getBases=()=>DEFAULT_BASES,fetchJSON,no
       playlists:page(ranked(lists,data.day+'|'+category+'|lists'),6,batch),
       message:offline?`当前展示 ${data.day} 的缓存推荐，不是今天的在线结果。`:'来自公开精选歌单；不是网易云账号的私人日推。音源能否完整下载以实际结果为准。'};
   }
-  async function playlist(id) {
-    if(typeof id!=='string'||!/^\d{1,20}$/.test(id))throw new Error('歌单 ID 无效');
-    const bases=(getBases()?.length?getBases():DEFAULT_BASES).slice(0,3);
-    for(const base of bases){
-      try{
-        const url=new URL(base.replace(/\/+$/,'')+'/playlist/detail');
-        if(!['http:','https:'].includes(url.protocol))continue;
-        url.searchParams.set('id',id);
-        const data=await fetchJSON(url.href,{credentials:'omit',signal:AbortSignal.timeout(6500)});
-        if(data?.code&&data.code!==200)continue;
-        const detail=isPublicBase(base)?data?.result:data?.playlist;
-        const tracks=unique(Array.isArray(detail?.tracks)?detail.tracks:[],normalizeSong).slice(0,1000);
-        if(!tracks.length)continue;
-        const total=Math.max(tracks.length,Number(detail.trackCount)||0);
-        return {tracks,total,source:url.origin+url.pathname,possibly_incomplete:tracks.length<total};
-      }catch{/* Try the next explicitly configured provider, never a hidden account endpoint. */}
-    }
-    throw new Error('公开歌单详情暂时不可用，请稍后重试；不会自动下载整份歌单。');
-  }
+  const playlistReader=require('./playlist_reader').createPlaylistReader({getBases,fetchJSON,normalizeSong,now});
+  const playlist=(id,options)=>playlistReader.read(id,options);
   return {get,playlist};
 }
 module.exports={createDiscoveryService,normalizeSong,normalizePlaylist,dayStamp,CATEGORIES};

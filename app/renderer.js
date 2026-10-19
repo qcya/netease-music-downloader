@@ -936,7 +936,7 @@
         if(entry.status==='running'&&Number.isFinite(Number(entry.progress?.percent))){const bar=node('div','task-progress');const fill=node('div','task-progress-fill');fill.style.width=`${Math.max(0,Math.min(100,Number(entry.progress.percent)))}%`;bar.append(fill);left.append(bar);}
         const actions=node('div','task-actions');
         if(['queued','running'].includes(entry.status)){const btn=node('button','subtle-action','取消');btn.onclick=async()=>{await bridge.cancelDownload(id);await renderTasks()};actions.append(btn)}
-        if(['failed','cancelled'].includes(entry.status)){const btn=node('button','soft-action','重试');btn.onclick=()=>{btn.disabled=true;showToast('已重新提交下载任务');void bridge.retryDownload(id).then(()=>renderTasks(),e=>{showToast(errMessage(e),true);void renderTasks()});};actions.append(btn)}
+        if(['failed','cancelled'].includes(entry.status)){const btn=node('button','soft-action','重试');btn.onclick=()=>{btn.disabled=true;btn.textContent='重试中…';void bridge.retryDownload(id).then(result=>{if(result?.ok===false)showToast(result.error||'下载失败',true);else showToast('下载完成');void renderTasks();},e=>{showToast(errMessage(e),true);void renderTasks()});};actions.append(btn)}
         card.append(left,actions);root.append(card);
       }
     }catch(e){showToast(errMessage(e),true)}
@@ -1243,6 +1243,7 @@
       updateDesktopLyricsToggle();
     }
     catch(e){showToast(`设置读取失败：${errMessage(e)}`,true);}
+    bridge.onBackendStatus?.(value=>{if(value?.ok===false){$('#python-label').textContent='内置后端不可用';setStatus(value.message,'error');}});
     try {const p=await bridge.checkPython();$('#python-label').textContent=`Python ${p.version} · 就绪`;}
     catch(e){$('#python-label').textContent='Python 环境未就绪';setStatus(errMessage(e),'error');showToast(errMessage(e),true);}
   }
