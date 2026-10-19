@@ -142,8 +142,10 @@ async function main() {
     }
     await wait('!!document.getElementById("playlist-create-category")','Playlist creation button absent');
     await wait(initialized,'Renderer initialization did not finish before input',150);
+    if(process.argv[4]!=='restart'){
     await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded&&!s.locked;})()','First launch must show unlocked desktop lyrics');
     console.log('PASS: clean installation starts with visible unlocked desktop lyrics.');
+    }
     // Complete first-launch consent before any pointer testing, so a modal cannot cover controls.
     if(process.argv[4]==='restart'){
       const expected=JSON.parse(fs.readFileSync(path.join(userData,'restart-expected.json'),'utf8'));
@@ -288,6 +290,12 @@ async function main() {
     console.log('PASS: persisted playlist names and first-run preferences survive renderer reload.');
     await realClick('#toggle-desktop-lyrics');
     await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded;})()','Lyrics did not reopen for restart test');
+    const restartPages=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json();
+    const restartOverlay=restartPages.find(p=>/floating-lyrics\.html/.test(p.url));
+    const positionClient=await client(restartOverlay.webSocketDebuggerUrl);
+    try{await positionClient.run('floatingBridge.dragBegin();floatingBridge.dragEnd();true');}
+    finally{positionClient.close();}
+    await wait('(async()=>!!(await musicBridge.getSettings()).floatingLyricsPosition)()','Lyric drag-end did not save coordinates');
     if(!(await c.run('musicBridge.floatingLyricsStatus()')).locked)await realClick('#toggle-desktop-lock');
     const expected=await c.run('musicBridge.floatingLyricsStatus()');assert.equal(expected.locked,true);
     fs.writeFileSync(path.join(userData,'restart-expected.json'),JSON.stringify({position:expected.position}));
