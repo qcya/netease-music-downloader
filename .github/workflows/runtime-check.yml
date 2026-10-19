@@ -3,7 +3,7 @@ on:
   push:
     branches: ['fix/stream-runtime-v111']
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: runtime-${{ github.ref }}
   cancel-in-progress: true
@@ -23,29 +23,56 @@ jobs:
       - run: npm install --no-audit --no-fund
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-      - name: Verify isolated regression
-        run: node --test tests/test_lyric_toggle_isolation.js tests/test_online_memory.js
-      - name: Keep comparison process alive between windows
-        shell: python
-        run: |
-          from pathlib import Path
-          p=Path('scripts/probe_stream_buffer.js')
-          p.write_text(p.read_text(encoding='utf8').replace('let base,media,server;',"app.on('window-all-closed',()=>{});let base,media,server;"),encoding='utf8')
-      - name: Compare Chromium demux startup with direct HTTP control
+      - name: Apply evidence-based fixture correction
+        run: python scripts/adjust_runtime_verifier.py
+      - name: Complete regression suite
         shell: pwsh
+        env:
+          MUSIC_PYTHON_EXE: python
+          PYTHONPATH: skill/scripts
         run: |
-          $p=Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('scripts/probe_stream_buffer.js') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
+          npm run check
+          if($LASTEXITCODE -ne 0){throw 'Syntax failed'}
+          $files=@(Get-ChildItem tests -Filter 'test_*.js' | ForEach-Object {$_.FullName})
+          node --test @files
+          if($LASTEXITCODE -ne 0){throw 'Node regression failed'}
+          python -m pytest -q tests
+          if($LASTEXITCODE -ne 0){throw 'Python regression failed'}
+      - name: Real runtime playback and desktop lyrics
+        shell: pwsh
+        env:
+          MUSIC_PYTHON_EXE: python
+          MUSIC_DOWNLOADER_TEST_PROCESS: electron
+        run: |
+          $env:MUSIC_DOWNLOADER_TEST_USER_DATA = Join-Path $env:RUNNER_TEMP 'runtime-user'
+          New-Item -ItemType Directory -Force $env:MUSIC_DOWNLOADER_TEST_USER_DATA | Out-Null
+          $p=Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('.', '--remote-debugging-port=19273','--remote-allow-origins=*','--enable-logging') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
           try {
-            if(!$p.WaitForExit(90000)){throw 'Transport comparison timed out'}
-            if($p.ExitCode -ne 0){throw 'Transport comparison failed'}
+            node scripts/verify_packaged_playlist.js 19273 $env:MUSIC_DOWNLOADER_TEST_USER_DATA 2>&1 | Tee-Object runtime-e2e.log
+            if($LASTEXITCODE -ne 0){throw 'Runtime verification failed'}
           } finally {
             Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-            Get-Content runtime-stdout.log -ErrorAction SilentlyContinue
+            Get-Content runtime-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 30
             Get-Content runtime-stderr.log -ErrorAction SilentlyContinue | Select-Object -Last 30
+            Get-Content "$env:MUSIC_DOWNLOADER_TEST_USER_DATA/logs/application.log" -ErrorAction SilentlyContinue | Select-Object -Last 30
+            $shot=Join-Path $env:MUSIC_DOWNLOADER_TEST_USER_DATA 'desktop-lyrics-minimized.png'
+            if(Test-Path $shot){Copy-Item $shot runtime-desktop-lyrics.png}
           }
+      - name: Commit only successfully verified test changes
+        shell: pwsh
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add scripts/verify_packaged_playlist.js
+          git rm scripts/adjust_runtime_verifier.py
+          git commit -m 'test: verify pre-completion audio and visible minimized lyrics with progressive WAV input'
+          git push origin HEAD:fix/stream-runtime-v111
+          if($LASTEXITCODE -ne 0){throw 'Verified test push failed'}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: runtime-diagnostics
-          path: 'runtime-*.log'
+          path: |
+            runtime-*.log
+            runtime-*.png
           retention-days: 7
