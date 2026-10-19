@@ -2,7 +2,7 @@
 // Windows-only test helper. Process.MainWindowHandle may select the lyric overlay.
 const {execFileSync}=require('node:child_process');
 function setWindowState(processName,state){
- if(!['electron','MusicDownloader'].includes(processName)||![6,9].includes(state))throw Error('Invalid test window selector');
+ if(!['electron','MusicDownloader'].includes(processName)||![6,9,16].includes(state))throw Error('Invalid test window selector');
  const script=`
 $ErrorActionPreference='Stop'
 $ProgressPreference='SilentlyContinue'
@@ -18,6 +18,7 @@ public static class MusicWindowTest {
   [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint process);
   [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr h, int state);
   [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint message, IntPtr w, IntPtr l);
   public static IntPtr Find(int[] ids, string prefix) {
     var allowed=new HashSet<int>(ids); var result=IntPtr.Zero;
     EnumWindows(delegate(IntPtr h, IntPtr p) {
@@ -34,6 +35,11 @@ public static class MusicWindowTest {
 $ids=[int[]]@(Get-Process -Name ${processName} -ErrorAction Stop | ForEach-Object {$_.Id})
 $h=[MusicWindowTest]::Find($ids,'音乐下载器')
 if($h -eq [IntPtr]::Zero){throw 'Native player window not found among process windows'}
+if(${state} -eq 16){
+  if(![MusicWindowTest]::PostMessage($h,16,[IntPtr]::Zero,[IntPtr]::Zero)){throw 'WM_CLOSE failed'}
+  @{handle=$h.ToString();closed=$true} | ConvertTo-Json -Compress
+  exit
+}
 [void][MusicWindowTest]::ShowWindowAsync($h,${state})
 $wanted=${state===6?'$true':'$false'}
 for($i=0;$i -lt 60;$i++){

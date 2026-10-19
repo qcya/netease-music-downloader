@@ -55,9 +55,9 @@ test('immersive and floating lyric use shared, identical glow shadow layers',()=
  assert.doesNotMatch(immersive,/\.immersive-line\.active\{[^}]*text-shadow/);
  assert.equal(defaults.glow,14);
 });
-test('desktop lyric defaults off on first installation but restores its user-saved state on later launches',()=>{
+test('desktop lyric defaults on and unlocked on first installation but restores its user-saved state on later launches',()=>{
  const renderer=read('app/renderer.js'),main=read('main.js');
- assert.match(main,/desktopLyricsEnabled:false/);
+ assert.match(main,/desktopLyricsEnabled:true/);
  assert.match(renderer,/state\.settings=await bridge\.getSettings\(\)/);
  assert.match(renderer,/if\(state\.settings\.desktopLyricsEnabled===true\)/);
  assert.match(renderer,/await bridge\.showFloatingLyrics\(\)/);

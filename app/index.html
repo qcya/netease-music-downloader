@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: music-media: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview: file:; object-src 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>音乐下载器 v1.1.1</title>
+  <title>音乐下载器 v1.1.2</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="immersive.css">
   <link rel="stylesheet" href="lyric-glow.css">
@@ -49,21 +49,21 @@
         <div class="home-tabs" role="tablist" aria-label="首页内容">
           <button id="home-discover-tab" type="button" role="tab" aria-controls="discovery-panel" aria-selected="true">为你发现</button>
           <button id="home-search-tab" type="button" role="tab" aria-controls="search-panel" aria-selected="false">搜索与导入</button>
-          <span class="home-tab-note">公开精选 · 无需登录</span>
+          <span class="home-tab-note">按你的口味 · 无需登录</span>
         </div>
         <section id="discovery-panel" class="discovery-panel" role="tabpanel" aria-labelledby="home-discover-tab">
           <div class="discovery-welcome">
-            <div><div class="discovery-eyebrow">今日发现 <span id="discovery-date"></span></div><h2>今天，换点新声音。</h2></div>
+            <div><div class="discovery-eyebrow">今日发现 <span id="discovery-date"></span></div><h2>先听合口味的，再发现新喜欢。</h2></div>
             <div class="discovery-welcome-actions"><button type="button" class="primary" id="discovery-local">随机听一首本地音乐</button><button type="button" id="discovery-refresh">重新获取推荐</button></div>
           </div>
           <div class="discovery-categories" id="discovery-categories" aria-label="推荐分类">
-            <button type="button" data-category="all" aria-pressed="true">全部</button><button type="button" data-category="chinese" aria-pressed="false">华语</button><button type="button" data-category="japanese" aria-pressed="false">日语</button><button type="button" data-category="acg" aria-pressed="false">动漫</button><button type="button" data-category="instrumental" aria-pressed="false">轻音乐</button>
+            <button type="button" data-category="all" aria-pressed="true">合口味</button><button type="button" data-category="vocaloid" aria-pressed="false">术力口 / 虚拟歌手</button><button type="button" data-category="bilibili" aria-pressed="false">B站 / 二创小曲</button><button type="button" data-category="cantonese" aria-pressed="false">粤语</button><button type="button" data-category="electronic" aria-pressed="false">欧美 / 电音</button><button type="button" data-category="chinese" aria-pressed="false">华语流行</button>
           </div>
           <p id="discovery-state" class="discovery-state" aria-live="polite">确认首次使用说明后，即可获取公开推荐。</p>
+          <div class="discovery-section-heading"><h3>熟悉的歌，也来点同口味的</h3><span id="discovery-pool"></span><button type="button" id="discovery-next">换一批 ↻</button></div>
+          <div id="discovery-songs" class="discovery-songs"></div>
           <div class="discovery-section-heading"><h3>精选歌单</h3><span>点开查看，在线播放或单独下载</span></div>
           <div id="discovery-playlists" class="discovery-playlists"></div>
-          <div class="discovery-section-heading"><h3>今天听点不一样的</h3><span id="discovery-pool"></span><button type="button" id="discovery-next">换一批 ↻</button></div>
-          <div id="discovery-songs" class="discovery-songs"></div>
           <button id="discovery-reset" class="discovery-reset" type="button">清除“不感兴趣”记录</button>
         </section>
         <div id="search-panel" class="search-panel" role="tabpanel" aria-labelledby="home-search-tab" hidden>
@@ -129,7 +129,7 @@
           <textarea id="api-bases" rows="3" placeholder="留空使用 Skill 内置接口"></textarea>
           <p class="settings-hint">接口返回的最高音质不代表一定拥有下载权限；程序会验证实际下载到的音频格式。</p>
           <div class="lyrics-customize">
-            <div class="lyrics-customize-heading"><strong>桌面悬浮歌词 · 外观与显示</strong><span>默认无背景 · 白色柔光字体</span></div>
+            <div class="lyrics-customize-heading"><strong>桌面悬浮歌词 · 外观与显示</strong><span>首次开启且未锁定 · 记住锁定和位置</span></div>
             <p class="settings-hint">调整样式立即预览，点击「保存设置」可永久保存。文字长度不再被省略号截断。</p>
             <div class="lyrics-settings-grid">
               <label for="lyr-background">背景模式<select id="lyr-background"><option value="none">无背景（默认）</option><option value="glass">粉蓝半透明背景</option><option value="solid">实色背景</option></select></label>
@@ -239,6 +239,7 @@
   <script src="playback_navigation.js"></script>
   <script src="playlist_name_dialog.js"></script>
   <script src="playlist_queue.js"></script>
+  <script src="availability.js"></script>
   <script src="discovery.js"></script>
   <script src="lyric_state.js"></script>
   <script src="renderer.js"></script>

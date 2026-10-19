@@ -3,10 +3,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path');
 const root=path.resolve(__dirname,'..');
 const read=file=>fs.readFileSync(path.join(root,file),'utf8');
-test('first-install defaults are disabled, saved user toggles reopen after restart',()=>{
+test('first-install lyrics are enabled, mini is disabled, and saved toggles reopen after restart',()=>{
  const main=read('main.js'),ui=read('app/renderer.js');
- assert.match(main,/desktopLyricsEnabled:false,miniPlayerEnabled:false/);
- assert.match(main,/desktopLyricsEnabled:stored\.desktopLyricsEnabled===true,miniPlayerEnabled:stored\.miniPlayerEnabled===true/);
+ assert.match(main,/desktopLyricsEnabled:true,miniPlayerEnabled:false/);
+ assert.match(main,/desktopLyricsEnabled:typeof stored\.desktopLyricsEnabled==='boolean'\?stored\.desktopLyricsEnabled:true,miniPlayerEnabled:stored\.miniPlayerEnabled===true/);
  assert.match(ui,/state\.settings=await bridge\.getSettings\(\)/);
  assert.match(ui,/if\(state\.settings\.desktopLyricsEnabled===true\)/);
  assert.match(ui,/if\(state\.settings\.miniPlayerEnabled===true\)/);

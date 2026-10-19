@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const bridge = window.musicBridge;
+  const availabilityUI=window.MusicAvailability.create({document,bridge,notify:(message,error)=>showToast(message,error)});
   let onlinePlaying=false,lyricStatus='idle',onlineMetadata=new Map();
   const $ = selector => document.querySelector(selector);
   const playlistNameDialog = window.PlaylistNameDialog.create(document);
@@ -83,7 +84,8 @@
     const actions=node('div','track-actions');
     const download=node('button','track-action download');download.type='button';download.title='下载这首歌曲';download.setAttribute('aria-label','下载 '+(track.name||''));download.innerHTML=icon('download');
     download.addEventListener('click',()=>downloadSongs([String(track.id)]));
-    const play=node('button','track-action online-play');play.type='button';play.title='在线播放（不保存音频）';play.setAttribute('aria-label','在线播放 '+(track.name||''));play.innerHTML=icon('play');play.onclick=()=>{void playOnlineSong(track);};
+    const play=node('span','');
+    availabilityUI.bind(play,track,{className:'track-action online-play',onPlay:()=>playOnlineSong(track)});
     actions.append(play);actions.append(download);ctrl.append(toggle,actions);
     const job=node('div','track-job-state'); job.dataset.songId=String(track.id);
     const existing=state.downloadJobs.get(String(track.id));
@@ -516,7 +518,7 @@
         state.advancingPlaylist=false;
         if(!success&&!noCandidate){
           state.playQueue=null;
-          showToast('歌单里没有可继续播放的本地歌曲。',true);
+          showToast(initial.kind==='online'?'当前队列没有可继续播放的在线音源。':'歌单里没有可继续播放的本地歌曲。',true);
           updatePlayerControls();
         }
       }
@@ -648,7 +650,7 @@
   }
   function startDiscovery(){
     if(!discoveryUI){
-      discoveryUI=window.MusicDiscovery.create({document,bridge,notify:showToast,onSong:(song,pool)=>playOnlineSong(song,null,false,pool),onDownload:song=>downloadSongs([song.id]),
+      discoveryUI=window.MusicDiscovery.create({document,bridge,availability:availabilityUI,notify:showToast,onSong:(song,pool)=>playOnlineSong(song,null,false,pool),onDownload:song=>downloadSongs([song.id]),
         onLocalRandom:playRandomLocal,onPlaylist:async list=>{
           if(state.busy){showToast('正在读取歌曲，请等当前操作结束。');return;}
           showHomeContent('search');$('#playlist-input').value=list.id;
@@ -673,7 +675,7 @@
     audio().pause();audio().removeAttribute('src');audio().load();
     onlinePlaying=true;state.currentLocalName=null;state.preparing=true;state.playerInfo=song;
     const sid=String(song.id);onlineMetadata.set(sid,song);
-    const candidates=queue?[]:(Array.isArray(pool)?pool:(state.tracks.some(t=>String(t.id)===sid)?state.tracks:[song]));
+    const candidates=queue?[]:(Array.isArray(pool)?pool:(state.tracks.some(t=>String(t.id)===sid)?state.tracks:[song])).filter(t=>String(t.id)===sid||availabilityUI.state(t.id)!=='unavailable');
     for(const item of candidates)onlineMetadata.set(String(item.id),item);
     if(onlineMetadata.size>600){const keep=new Map(candidates.map(t=>[String(t.id),t]));keep.set(sid,song);onlineMetadata=keep;}
     state.playQueue=queue?(automatic?queue:{...window.MusicPlaybackNavigation.createQueue(queue.tracks,queue.index,state.playMode),id:'online',kind:'online'})
@@ -1147,7 +1149,7 @@
         if(state.settings.desktopLyricsEnabled&&!state.floating){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine()}
         if(!state.settings.desktopLyricsEnabled&&state.floating){await bridge.closeFloatingLyrics();state.floating=false}
         updateDesktopLyricsToggle();
-        setStatus('已保存下载设置。','ok');showToast('设置已保存。');
+        setStatus('已保存下载设置。','ok');availabilityUI.refresh();showToast('设置已保存。');
       } catch(e) {showToast(errMessage(e),true);}
     });
     // 原生 audio 元素负责播放、进度和音量。歌词按 timeupdate 同步。
@@ -1165,7 +1167,7 @@
     for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});savePlaybackSession(true)});
     audio().addEventListener('ended',()=>{void advancePlaylist(1,'ended')});
     audio().addEventListener('seeked',()=>syncLyrics(true));
-    audio().addEventListener('error',()=>{if(audio().src)showToast('音频无法播放，可能是文件格式或缓存失效。',true);});
+    audio().addEventListener('error',()=>{if(!audio().src)return;if(onlinePlaying)availabilityUI.failed(state.playingId);showToast(onlinePlaying?'当前在线音源播放失败，可重新检测。':'本地音频无法播放，请检查文件。',true);});
     $('#player-toggle').addEventListener('click',()=>{
       if(!audio().src || state.preparing)return;
       if(audio().paused)audio().play().catch(e=>showToast(errMessage(e),true));else audio().pause();
@@ -1223,8 +1225,8 @@
       catch(e){showToast(errMessage(e),true);}
     });
     try {
-      // First installation defaults to off. Subsequent launches restore
-      // the saved preferences; never force desktop lyrics or mini player off.
+      // First installation shows unlocked lyrics. Later launches restore the
+      // explicit switch, lock and coordinates; the mini player stays opt-in.
       state.settings=await bridge.getSettings();
       state.lyricsLocked=state.settings.floatingLyrics?.mouseThrough===true;
       renderSettings();

@@ -69,16 +69,26 @@ async function startFixture() {
   pcm.writeUInt32LE(16,16);pcm.writeUInt16LE(1,20);pcm.writeUInt16LE(1,22);
   pcm.writeUInt32LE(rate,24);pcm.writeUInt32LE(rate*2,28);pcm.writeUInt16LE(2,32);pcm.writeUInt16LE(16,34);
   pcm.write('data',36);pcm.writeUInt32LE(frames*2,40);
-  const songs=Array.from({length:32},(_,i)=>({id:700001+i,name:'验收音频 '+i,dt:45000,ar:[{name:'自动验收'}],al:{name:'合成静音测试'}}));
+  const {PROFILES}=require('../taste_discovery');
+  const catalog=new Map();let nextID=700001;
+  for(const profile of Object.values(PROFILES))for(const seed of profile.seeds){
+    if(!catalog.has(seed.query))catalog.set(seed.query,{id:nextID++,name:seed.title,dt:45000,ar:[{name:seed.artist||'自动验收'}],al:{name:'合成静音测试'}});
+  }
+  const songs=[...catalog.values()];
   const playlists=Array.from({length:14},(_,i)=>({id:800001+i,name:'验收精选 '+i,trackCount:songs.length}));
   const server=http.createServer((req,res)=>{
     const u=new URL(req.url,base);let payload={code:200};
     if(failed){res.writeHead(503,{'Content-Type':'application/json'});res.end('{"code":503}');return;}
-    if(u.pathname==='/top/playlist'||u.pathname==='/personalized')payload={code:200,playlists,result:playlists};
+    if(u.pathname==='/search'){
+      const term=u.searchParams.get('keywords')||'';
+      if(u.searchParams.get('type')==='1000')payload={code:200,result:{playlists:[{id:800000+[...term].reduce((n,c)=>n+c.codePointAt(0),0),name:term+' 验收精选',trackCount:songs.length}]}};
+      else payload={code:200,result:{songs:catalog.has(term)?[catalog.get(term)]:songs.filter(s=>s.ar.some(a=>a.name.includes(term))).slice(0,8)}};
+    }
+    else if(u.pathname==='/top/playlist'||u.pathname==='/personalized')payload={code:200,playlists,result:playlists};
     else if(u.pathname==='/playlist/track/all')payload={code:200,songs,total:songs.length};
     else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs,trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
     else if(u.pathname==='/song/detail')payload={code:200,songs:songs.filter(x=>(u.searchParams.get('ids')||'').split(',').includes(String(x.id)))};
-    else if(u.pathname==='/song/url/v1')payload={code:200,data:[{id:Number(u.searchParams.get('id')),url:base+'/audio.wav',type:'wav',level:'lossless',br:128000}]};
+    else if(u.pathname==='/song/url/v1')payload={code:200,data:(u.searchParams.get('id')||'').split(',').filter(id=>id!=='700003').map(id=>({id:Number(id),url:id==='700002'?null:base+'/audio.wav',type:'wav',level:'lossless',br:128000}))};
     else if(u.pathname==='/lyric/new'||u.pathname==='/lyric')payload={code:200,lrc:{lyric:'[00:00.00]自动验收音频\n[00:03.00]第二行验收文字'},tlyric:{lyric:'[00:00.00]翻译验收一\n[00:03.00]翻译验收二'}};
     else if(u.pathname==='/audio.wav'){
       downloads++;const m=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range||'');
@@ -105,7 +115,7 @@ async function startFixture() {
     const body=Buffer.from(JSON.stringify(payload));res.writeHead(200,{'Content-Type':'application/json','Content-Length':body.length});res.end(body);
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
-  return {base,downloads:()=>downloads,completed:()=>completed,offline:()=>{failed=true;},close:async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}};
+  return {base,songCount:songs.length,downloads:()=>downloads,completed:()=>completed,offline:()=>{failed=true;},close:async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}};
 }
 
 async function main() {
@@ -132,7 +142,21 @@ async function main() {
     }
     await wait('!!document.getElementById("playlist-create-category")','Playlist creation button absent');
     await wait(initialized,'Renderer initialization did not finish before input',150);
+    if(process.argv[4]!=='restart'){
+    await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded&&!s.locked;})()','First launch must show unlocked desktop lyrics');
+    console.log('PASS: clean installation starts with visible unlocked desktop lyrics.');
+    }
     // Complete first-launch consent before any pointer testing, so a modal cannot cover controls.
+    if(process.argv[4]==='restart'){
+      const expected=JSON.parse(fs.readFileSync(path.join(userData,'restart-expected.json'),'utf8'));
+      await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded&&s.locked;})()','Restart must restore the enabled and locked desktop lyric window');
+      const status=await c.run('musicBridge.floatingLyricsStatus()');
+      assert.deepEqual(status.position,expected.position,'restart must preserve lyric coordinates');
+      const prefs=await c.run('musicBridge.getSettings()');assert.equal(prefs.desktopLyricsEnabled,true);assert.equal(prefs.floatingLyrics.mouseThrough,true);
+      console.log('PASS: full process restart restores enabled lyrics, user-selected lock and exact coordinates.',JSON.stringify(status));
+      await realClick('#toggle-desktop-lyrics');
+      return;
+    }
     const disclaimer = await c.run('!document.getElementById("first-run").hidden');
     if (disclaimer) {
       await c.run('(()=>{const box=document.getElementById("agree-disclaimer");box.checked=true;box.dispatchEvent(new Event("change",{bubbles:true}));return true})()');
@@ -186,18 +210,24 @@ async function main() {
     await realClick('#home-discover-tab');
     await wait('!document.getElementById("discovery-refresh").disabled','Initial discovery request never settled',200);
     await realClick('#discovery-refresh');
-    await wait('document.querySelectorAll(".discovery-song").length===8 && document.querySelector(".discovery-song")?.textContent.includes("验收音频")','Real recommendation IPC did not render fixture songs');
-    assert.equal(await c.run('document.querySelectorAll(".discovery-playlist").length'),6);
+    await wait('document.querySelectorAll(".discovery-song").length===8 && document.querySelector(".discovery-song")?.dataset.songId.startsWith("700")','Real recommendation IPC did not render fixture songs');
+    assert.equal(await c.run('document.querySelectorAll(".discovery-playlist").length'),5);
     assert.equal(fixture.downloads(),0,'opening recommendations must never download or autoplay');
+    await c.run(`document.querySelector('.discovery-song[data-song-id="700002"]').scrollIntoView({block:"center"})`);
+    await wait(`document.querySelector('.discovery-song[data-song-id="700002"] [data-availability="unavailable"]')!==null`,'Known unavailable source did not settle');
+    assert.equal(await c.run(`document.querySelector('.discovery-song[data-song-id="700002"] .discovery-play')!==null`),false,'unavailable songs must not advertise Play');
+    console.log('PASS: public metadata check hides unavailable play controls without fetching audio.');
     const first=await c.run('document.querySelector(".discovery-song").dataset.songId');
     await realClick('#discovery-next');
     await wait('document.querySelector(".discovery-song")?.dataset.songId!=='+JSON.stringify(first),'Next batch did not change selection');
     await realClick('.discovery-playlist');
-    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length===32','Recommended playlist did not reach the public metadata service',200);
+    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length==='+fixture.songCount,'Recommended playlist did not reach the public metadata service',200);
     await realClick('#home-discover-tab');
     // Online playback must start while the synthetic response is still unfinished.
-    await realClick('#toggle-desktop-lyrics');
+    if(!(await c.run('musicBridge.floatingLyricsStatus()')).open)await realClick('#toggle-desktop-lyrics');
     await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded;})()','Desktop lyrics did not become visible on explicit enable');
+    await c.run('document.querySelector(".discovery-song").scrollIntoView({block:"center"})');
+    await wait('!!document.querySelector(".discovery-play")','A verified playable control did not appear');
     const streamingClickAt=Date.now();
     await realClick('.discovery-play');
     await wait('document.getElementById("music-audio").currentSrc.startsWith("music-preview:") && !document.getElementById("music-audio").paused && document.getElementById("music-audio").currentTime>0','Online playback did not start',140);
@@ -230,8 +260,10 @@ async function main() {
       await realClick('#toggle-desktop-lock');
     } finally{lyricClient.close();}
     await realClick('#toggle-desktop-lyrics');
+    const expectedQueueSize=await c.run('[...document.querySelectorAll(".discovery-song")].filter(e=>!e.querySelector("[data-availability=unavailable]")).length');
     await realClick('#toggle-queue');
-    await wait('!document.getElementById("queue-panel").hidden && document.querySelectorAll(".queue-item").length===8','Online recommendation queue missing');
+    await wait('!document.getElementById("queue-panel").hidden && document.querySelectorAll(".queue-item").length>0','Online recommendation queue missing');
+    assert.equal(await c.run('document.querySelectorAll(".queue-item").length'),expectedQueueSize);
     await realClick('#queue-close');
     await c.run('document.getElementById("music-audio").pause()');await c.run('musicBridge.stopOnlinePlayback()');
     console.log('PASS: streaming starts before complete body, zero audio files/HTTP cache, memory lyrics, native overlay visibility and minimized bilingual synchronization, lock preserves position.');
@@ -242,9 +274,9 @@ async function main() {
     console.log('PASS: explicit Download remains independent of online Play.');
     fixture.offline();
     await realClick('#discovery-refresh');
-    await wait('document.getElementById("discovery-state").textContent.includes("缓存推荐") && !document.getElementById("discovery-refresh").disabled','Offline homepage did not show dated cache',200);
+    await wait('document.getElementById("discovery-state").textContent.includes("缓存选曲") && !document.getElementById("discovery-refresh").disabled','Offline homepage did not show dated cache',200);
     const runtimeInfo=await c.run('musicBridge.appInfo()');
-    assert.equal(runtimeInfo.version,'1.1.1');
+    assert.equal(runtimeInfo.version,'1.1.2');
     console.log('PASS: packaged offline cache fallback retains cards and shows actual cache date; build version',runtimeInfo.version);
     await c.run('document.getElementById("music-audio").pause()');
     // Reload the renderer after writes and verify persisted groups and disabled first-run preferences.
@@ -256,6 +288,19 @@ async function main() {
     const prefs=await c.run('musicBridge.getSettings()');
     assert.equal(prefs.desktopLyricsEnabled,false);assert.equal(prefs.miniPlayerEnabled,false);
     console.log('PASS: persisted playlist names and first-run preferences survive renderer reload.');
+    await realClick('#toggle-desktop-lyrics');
+    await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded;})()','Lyrics did not reopen for restart test');
+    const restartPages=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json();
+    const restartOverlay=restartPages.find(p=>/floating-lyrics\.html/.test(p.url));
+    const positionClient=await client(restartOverlay.webSocketDebuggerUrl);
+    try{await positionClient.run('floatingBridge.dragBegin();floatingBridge.dragEnd();true');}
+    finally{positionClient.close();}
+    await wait('(async()=>!!(await musicBridge.getSettings()).floatingLyricsPosition)()','Lyric drag-end did not save coordinates');
+    if(!(await c.run('musicBridge.floatingLyricsStatus()')).locked)await realClick('#toggle-desktop-lock');
+    const expected=await c.run('musicBridge.floatingLyricsStatus()');assert.equal(expected.locked,true);
+    fs.writeFileSync(path.join(userData,'restart-expected.json'),JSON.stringify({position:expected.position}));
+    console.log('RESTART EXPECTATION',JSON.stringify(expected));
+
 
   } finally {if(fixture)await fixture.close();c.close(); }
 }
