@@ -1,0 +1,31 @@
+name: Public Metadata Diagnostics
+on:
+  push:
+    branches: ['feat/discovery-stability-v1.1.0']
+    paths: ['.github/workflows/provider-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Read only public playlist metadata
+        run: |
+          node <<'JS'
+          const urls=[
+            'https://musicapi.qijieya.cn/top/playlist?limit=3&order=hot',
+            'https://musicapi.qijieya.cn/personalized?limit=3',
+            'https://api.qijieya.cn/top/playlist?limit=3',
+            'https://music.163.com/api/playlist/list?cat=%E5%85%A8%E9%83%A8&order=hot&limit=3&offset=0',
+            'https://music.163.com/api/personalized/playlist',
+            'https://music.163.com/api/playlist/detail?id=3778678'
+          ];
+          Promise.all(urls.map(async url=>{
+            try {const r=await fetch(url,{signal:AbortSignal.timeout(10000),credentials:'omit',headers:{'User-Agent':'MusicDownloader-Discovery/1.1.0'}});const text=await r.text();let data;try{data=JSON.parse(text)}catch{};console.log(JSON.stringify({url,status:r.status,code:data?.code,keys:data?Object.keys(data):[],playlists:data?.playlists?.length,tracks:data?.result?.tracks?.length,sample:text.slice(0,600)}));}
+            catch(e){console.log(JSON.stringify({url,error:e.message,cause:e.cause?.message}));}
+          }));
+          JS
