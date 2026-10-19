@@ -358,7 +358,9 @@ function writeConfig(value) {
 function invokeProcess(executable, args, timeoutMs, environment = process.env, progress = null, signal = null) {
   return new Promise((resolve, reject) => {
     if(signal?.aborted)return reject(new Error('任务已取消'));
-    const child = spawn(executable, args, { windowsHide:true, env:environment, cwd: path.dirname(backendFile()) });
+    const cwd = app.isPackaged ? app.getPath('userData') : path.dirname(backendFile());
+    if(app.isPackaged)fs.mkdirSync(cwd,{recursive:true});
+    const child = spawn(executable, args, { windowsHide:true, env:environment, cwd });
     activeBackendChildren.add(child);
     // setEncoding uses StringDecoder to preserve multibyte UTF-8 across chunks.
     child.stdout?.setEncoding('utf8');
@@ -380,7 +382,15 @@ function invokeProcess(executable, args, timeoutMs, environment = process.env, p
       if (error) reject(error);
       else resolve(result);
     }
-    child.on('error', err => finalize(new Error(`无法启动 Python：${err.message}`)));
+    child.on('error', err => {
+      cachedPython=null;
+      const message=err.code==='ENOENT'
+        ? '内置后端或工作目录已丢失，请完全退出旧进程后重新打开新版 EXE。无需重装 Python。'
+        : `后端启动失败：${err.message}`;
+      console.error('backend_start_failed',{code:err.code,executable,cwd,executableExists:fs.existsSync(executable),cwdExists:fs.existsSync(cwd)});
+      if(win&&!win.isDestroyed())win.webContents.send('backend:status',{ok:false,message});
+      finalize(new Error(message));
+    });
     child.stdout.on('data', chunk => {
       stdout += chunk;
       if (stdout.length > 8_000_000) { child.kill(); finalize(new Error('接口结果过大')); }
@@ -408,9 +418,9 @@ function pythonCandidates() {
   return candidates;
 }
 async function findPython() {
-  if (cachedPython) return cachedPython;
   const embedded=embeddedBackend(process.resourcesPath,app.isPackaged);
-  if(embedded){cachedPython=embedded;return embedded;}
+  if(embedded)return embedded; // Portable resources may disappear; never reuse an unchecked path.
+  if (cachedPython) return cachedPython;
   for (const [exe, prefix] of pythonCandidates()) {
     try {
       const result = await invokeProcess(exe, [...prefix,'-c','import sys;print(sys.version_info.major,sys.version_info.minor)'], 7000);
@@ -447,6 +457,9 @@ async function runCli(cmd, args = [], opts = {}) {
       throw new Error(data?.error || result.stderr.trim() || '操作失败');
     }
     return data;
+  } catch(e) {
+    if(/内置.*后端|后端.*启动|ENOENT/.test(e.message||'')){cachedPython=null;if(win&&!win.isDestroyed())win.webContents.send('backend:status',{ok:false,message:e.message});}
+    throw e;
   } finally {
     activeCliProcesses--;
   }
@@ -545,7 +558,7 @@ async function beginStream(id){return onlineMedia.open(id);}
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.1.2', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.1.3', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

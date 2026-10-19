@@ -20,7 +20,7 @@
       get('discovery-date').textContent=data.day||'';
       get('discovery-state').textContent=data.message||'推荐暂时不可用';
       get('discovery-state').classList.toggle('is-offline',!!data.offline);
-      get('discovery-pool').textContent=`熟悉优先 · 第 ${batch+1} 批`; 
+      get('discovery-pool').textContent=`候选 ${data.poolSize||0} 首 · 最近已展示 ${data.seenCount||0} 首 · 第 ${batch+1} 批`; 
       for(const song of data.songs||[]){
         const card=el('article','discovery-song');card.dataset.songId=song.id;
         const info=el('div','discovery-song-info'),name=el('strong','',song.name);name.title=song.name;
@@ -53,7 +53,7 @@
       }catch(e){if(request===serial)render({offline:true,message:'推荐暂不可用：'+(e.message||String(e)),songs:[],playlists:[]});}
       finally{if(request===serial){get('discovery-refresh').disabled=false;get('discovery-next').disabled=false;get('discovery-panel').setAttribute('aria-busy','false');}}
     }
-    get('discovery-refresh').onclick=()=>{void load(true);};
+    get('discovery-refresh').onclick=()=>{batch=(batch+1)%10000;void load(true);};
     get('discovery-next').onclick=()=>{batch=(batch+1)%10000;void load();};
     get('discovery-local').onclick=()=>{void onLocalRandom();};
     get('discovery-reset').onclick=()=>{excluded=[];save('discovery-excluded',[]);batch=0;void load();};

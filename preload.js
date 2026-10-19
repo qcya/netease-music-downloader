@@ -1,6 +1,7 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
+  onBackendStatus:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('backend:status',listener);return ()=>ipcRenderer.removeListener('backend:status',listener);},
   appInfo:()=>ipcRenderer.invoke('app:info'),
   openReleasePage:()=>ipcRenderer.invoke('app:release-page'),
   mediaAvailability:(ids,options)=>ipcRenderer.invoke('music:availability',ids,options),

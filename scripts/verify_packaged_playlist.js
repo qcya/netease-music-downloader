@@ -75,6 +75,8 @@ async function startFixture() {
     if(!catalog.has(seed.query))catalog.set(seed.query,{id:nextID++,name:seed.title,dt:45000,ar:[{name:seed.artist||'自动验收'}],al:{name:'合成静音测试'}});
   }
   const songs=[...catalog.values()];
+  const related=Object.values(PROFILES).map(p=>p.related);
+  while(songs.length<237){const i=songs.length;songs.push({id:nextID++,name:'扩展验收曲目 '+i,dt:45000,ar:[{name:related[i%related.length]}],al:{name:'合成测试曲库'}});}
   const playlists=Array.from({length:14},(_,i)=>({id:800001+i,name:'验收精选 '+i,trackCount:songs.length}));
   const server=http.createServer((req,res)=>{
     const u=new URL(req.url,base);let payload={code:200};
@@ -82,11 +84,11 @@ async function startFixture() {
     if(u.pathname==='/search'){
       const term=u.searchParams.get('keywords')||'';
       if(u.searchParams.get('type')==='1000')payload={code:200,result:{playlists:[{id:800000+[...term].reduce((n,c)=>n+c.codePointAt(0),0),name:term+' 验收精选',trackCount:songs.length}]}};
-      else payload={code:200,result:{songs:catalog.has(term)?[catalog.get(term)]:songs.filter(s=>s.ar.some(a=>a.name.includes(term))).slice(0,8)}};
+      else payload={code:200,result:{songs:catalog.has(term)?[catalog.get(term)]:songs.filter(s=>s.ar.some(a=>a.name.includes(term))).slice(Number(u.searchParams.get('offset')||0),Number(u.searchParams.get('offset')||0)+60)}};
     }
     else if(u.pathname==='/top/playlist'||u.pathname==='/personalized')payload={code:200,playlists,result:playlists};
-    else if(u.pathname==='/playlist/track/all')payload={code:200,songs,total:songs.length};
-    else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs,trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
+    else if(u.pathname==='/playlist/track/all')payload={code:200,songs:songs.slice(Number(u.searchParams.get('offset')||0),Number(u.searchParams.get('offset')||0)+Number(u.searchParams.get('limit')||200)),total:songs.length};
+    else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs.slice(0,10),trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
     else if(u.pathname==='/song/detail')payload={code:200,songs:songs.filter(x=>(u.searchParams.get('ids')||'').split(',').includes(String(x.id)))};
     else if(u.pathname==='/song/url/v1')payload={code:200,data:(u.searchParams.get('id')||'').split(',').filter(id=>id!=='700003').map(id=>({id:Number(id),url:id==='700002'?null:base+'/audio.wav',type:'wav',level:'lossless',br:128000}))};
     else if(u.pathname==='/lyric/new'||u.pathname==='/lyric')payload={code:200,lrc:{lyric:'[00:00.00]自动验收音频\n[00:03.00]第二行验收文字'},tlyric:{lyric:'[00:00.00]翻译验收一\n[00:03.00]翻译验收二'}};
@@ -142,6 +144,8 @@ async function main() {
     }
     await wait('!!document.getElementById("playlist-create-category")','Playlist creation button absent');
     await wait(initialized,'Renderer initialization did not finish before input',150);
+    assert.equal((await c.run('musicBridge.checkPython()')).ok,true,'backend must still work after repeated portable launch');
+    console.log('PASS: backend health check after repeated portable launch.');
     if(process.argv[4]!=='restart'){
     await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded&&!s.locked;})()','First launch must show unlocked desktop lyrics');
     console.log('PASS: clean installation starts with visible unlocked desktop lyrics.');
@@ -220,8 +224,19 @@ async function main() {
     const first=await c.run('document.querySelector(".discovery-song").dataset.songId');
     await realClick('#discovery-next');
     await wait('document.querySelector(".discovery-song")?.dataset.songId!=='+JSON.stringify(first),'Next batch did not change selection');
+    const seenIDs=new Set(await c.run('[...document.querySelectorAll(".discovery-song")].map(x=>x.dataset.songId)'));
+    for(let batch=0;batch<11;batch++){
+      await wait('!document.getElementById("discovery-refresh").disabled','Refresh still pending');
+      const previous=await c.run('document.querySelector(".discovery-song")?.dataset.songId');
+      await realClick(batch%2?'#discovery-next':'#discovery-refresh');
+      await wait('!document.getElementById("discovery-refresh").disabled && document.querySelector(".discovery-song")?.dataset.songId!=='+JSON.stringify(previous),'Refresh did not obtain different songs');
+      const ids=await c.run('[...document.querySelectorAll(".discovery-song")].map(x=>x.dataset.songId)');
+      assert.equal(ids.length,8);for(const id of ids){assert.ok(!seenIDs.has(id),'homepage repeated '+id);seenIDs.add(id);}
+    }
+    assert.equal(seenIDs.size,96);console.log('PASS: 12 batches / 96 unique songs through both actual refresh controls.');
     await realClick('.discovery-playlist');
-    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length==='+fixture.songCount,'Recommended playlist did not reach the public metadata service',200);
+    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length==='+fixture.songCount,'Recommended playlist did not resolve past ten-track preview',200);
+    console.log('PASS: playlist preview 10 resolves and renders all 237 songs in order.');
     await realClick('#home-discover-tab');
     // Online playback must start while the synthetic response is still unfinished.
     if(!(await c.run('musicBridge.floatingLyricsStatus()')).open)await realClick('#toggle-desktop-lyrics');

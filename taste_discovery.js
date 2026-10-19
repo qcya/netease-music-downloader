@@ -33,92 +33,120 @@ function familiarRows(raw,anchor,taste){
     .slice(0,2).map(s=>({...s,taste,familiar:true,reason:PROFILES[taste].label+' · '+anchor.title}));
 }
 function createTasteDiscoveryService({getFile,getBases=()=>[],fetchJSON,now=Date.now}){
-  let saved;const queries=new Map(),queryPending=new Map(),pending=new Map();
+  const legacy=createDiscoveryService({getFile,getBases,fetchJSON,now});
+  const memo=new Map(),pending=new Map();let saved,serial=Promise.resolve();
+  const extra={vocaloid:['DECO*27','ピノキオピー','稲葉曇','いよわ','重音テト','洛天依','Magens','サツキ'],bilibili:['Magens','残像音阶','TheFatRat','鬼畜 remix','二创 小曲'],cantonese:['陈奕迅','李克勤','张国荣','陈慧娴','许冠杰'],electronic:['TheFatRat','Avicii','K-391','Marshmello','Martin Garrix'],chinese:['陈粒','周杰伦','张芸京','许嵩','薛之谦']};
   const actualBases=()=>{const v=getBases();return Array.isArray(v)&&v.length?v.slice(0,3):DEFAULT_BASES;};
-  const context=()=>({bases:actualBases(),key:JSON.stringify(actualBases())});
   function read(){if(saved)return saved;try{const v=readJSON(getFile(),{});saved=v&&typeof v==='object'&&!Array.isArray(v)?v:{};}catch{saved={};}return saved;}
-  async function search(term,type,ctx,day,force,deadline){
-    const key=ctx.key+'|'+day+'|'+type+'|'+term;
-    if(!force&&queries.has(key))return queries.get(key);
-    if(queryPending.has(key))return queryPending.get(key);
-    const task=(async()=>{
-      for(const base of ctx.bases){
-        if(Date.now()>=deadline)break;
-        try{
-          const direct=base.replace(/\/+$/,'')==='https://music.163.com/api';
-          const args=new URLSearchParams({[direct?'s':'keywords']:term,type:String(type),limit:type===1?'12':'8',offset:'0'});
-          const url=base.replace(/\/+$/,'')+(direct?(type===1?'/cloudsearch/pc':'/search/get'):'/search')+(direct?'':'?'+args);
-          const options={credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(Math.max(1,Math.min(6000,deadline-Date.now()))),
-            ...(direct?{method:'POST',body:args.toString(),headers:{'Content-Type':'application/x-www-form-urlencoded','Referer':'https://music.163.com/'}}:{})};
-          const data=await fetchJSON(url,options);
-          if(data?.code&&data.code!==200)continue;
-          const rows=data?.result?.[type===1?'songs':'playlists'];
-          if(!Array.isArray(rows))continue;
-          queries.set(key,rows.slice(0,12));while(queries.size>160)queries.delete(queries.keys().next().value);
-          return rows;
-        }catch{/* Do not substitute unrelated global recommendations. */}
-      }
-      return null;
-    })();queryPending.set(key,task);try{return await task;}finally{queryPending.delete(key);}
+  function store(ctx){
+    const root=read();const old=root.tastePoolV2;
+    if(old?.version===2&&old.key===ctx.key&&old.pools&&typeof old.pools==='object')return old;
+    return {version:2,key:ctx.key,pools:{},recent:[],last:{}};
   }
-  async function build(category,batch,day,ctx,force){
-    const lanes=category==='all'?Object.keys(PROFILES):[category],jobs=[],groups=new Map(),deadline=Date.now()+26000;
-    for(const taste of lanes){
-      const p=PROFILES[taste],count=category==='all'?({vocaloid:3,bilibili:2}[taste]||1):6;
-      const group={familiar:[],related:[],lists:[],received:false};groups.set(taste,group);
-      for(let i=0;i<count;i++){
-        const anchor=p.seeds[(batch*count+i)%p.seeds.length];
-        jobs.push(async()=>{const rows=await search(anchor.query,1,ctx,day,force,deadline);if(rows!==null)group.received=true;group.familiar[i]=familiarRows(rows||[],anchor,taste);});
+  function persist(data,ctx){if(JSON.stringify(actualBases())!==ctx.key)return;read().tastePoolV2=data;try{writeJSONAtomic(getFile(),saved);}catch{}}
+  async function search(term,type,offset,ctx,deadline){
+    const key=JSON.stringify([ctx.key,term,type,offset]),old=memo.get(key);
+    if(old&&now()-old.time<300000)return old.rows;
+    for(const base of ctx.bases){
+      if(Date.now()>=deadline)break;
+      try{
+        const direct=base.replace(/\/+$/,'')==='https://music.163.com/api';
+        const args=new URLSearchParams({[direct?'s':'keywords']:term,type:String(type),limit:type===1?'60':'8',offset:String(offset)});
+        const url=base.replace(/\/+$/,'')+(direct?(type===1?'/cloudsearch/pc':'/search/get'):'/search')+(direct?'':'?'+args);
+        const options={credentials:'omit',cache:'no-store',signal:AbortSignal.timeout(Math.max(1,Math.min(5000,deadline-Date.now()))),
+          ...(direct?{method:'POST',body:args.toString(),headers:{'Content-Type':'application/x-www-form-urlencoded','Referer':'https://music.163.com/'}}:{})};
+        const d=await fetchJSON(url,options);if(d?.code&&d.code!==200)continue;
+        const rows=d?.result?.[type===1?'songs':'playlists'];if(!Array.isArray(rows))continue;
+        memo.set(key,{time:now(),rows:rows.slice(0,type===1?60:8)});while(memo.size>160)memo.delete(memo.keys().next().value);
+        return rows;
+      }catch{/* A failed search cannot manufacture candidates. */}
+    }
+    return null;
+  }
+  async function expand(pool,taste,ctx,deadline){
+    const p=PROFILES[taste],round=pool.round||0,terms=[p.related,...extra[taste]],rows=[],lists=[];let received=false;
+    const jobs=[];
+    // Seed titles only bootstrap the first page. They are not the recommendation catalog.
+    if(!pool.seeded){
+      const count={vocaloid:3,bilibili:2}[taste]||1;
+      for(const anchor of p.seeds.slice(0,count))jobs.push(async()=>{const found=await search(anchor.query,1,0,ctx,deadline);if(found!==null)received=true;rows.push(...familiarRows(found||[],anchor,taste).slice(0,1));});
+    }
+    const term=terms[round%terms.length],offset=Math.floor(round/terms.length)*60;
+    jobs.push(async()=>{const found=await search(term,1,offset,ctx,deadline);if(found!==null)received=true;
+      rows.push(...(found||[]).map(normalizeSong).filter(s=>s&&!unwanted(s.name)).map(s=>({...s,taste,familiar:false,sourceRank:2,reason:p.label+' · '+term+' 相关'})));});
+    jobs.push(async()=>{const term=p.lists[round%p.lists.length],found=await search(term,1000,Math.floor(round/p.lists.length)*8,ctx,deadline);if(found!==null)received=true;
+      lists.push(...(found||[]).map(raw=>({raw,list:normalizePlaylist(raw)})).filter(x=>x.list)
+        .sort((a,b)=>(Number(b.raw.playCount)||0)-(Number(a.raw.playCount)||0)).map(x=>({...x.list,taste,reason:p.label+' · '+term})));});
+    // Limit global network pressure: lanes run two at a time and each uses two requests at once.
+    let index=0;await Promise.all(Array.from({length:Math.min(2,jobs.length)},async()=>{while(index<jobs.length)await jobs[index++]();}));
+    const candidates=[...pool.lists,...lists];
+    if(candidates.length&&Date.now()<deadline){
+      const list=candidates[round%candidates.length],pages=Math.max(1,Math.ceil(list.trackCount/120));
+      try{const data=await legacy.playlist(list.id,{limit:120,offset:(Math.floor(round/candidates.length)%pages)*120});
+        received=true;rows.push(...data.tracks.filter(s=>!unwanted(s.name)).map(s=>({...s,taste,familiar:false,sourceRank:1,reason:p.label+' · 来自「'+list.name+'」'})));
+      }catch{/* Preserve unseen candidates already available in memory. */}
+    }
+    const seen=new Set(pool.songs.map(s=>s.id)),signatures=new Set(pool.songs.map(signature));
+    rows.sort((a,b)=>Number(b.familiar)-Number(a.familiar));
+    for(const row of rows){if(seen.has(row.id)||signatures.has(signature(row)))continue;seen.add(row.id);signatures.add(signature(row));pool.songs.push(row);}
+    const listIDs=new Set(pool.lists.map(l=>l.id));for(const list of lists)if(!listIDs.has(list.id)){listIDs.add(list.id);pool.lists.push(list);}
+    pool.songs.sort((a,b)=>Number(b.familiar)-Number(a.familiar)||(a.sourceRank||0)-(b.sourceRank||0));
+    pool.songs=pool.songs.slice(-1600);pool.lists=pool.lists.slice(-48);
+    if(received){pool.round=round+1;pool.seeded=true;pool.day=dayStamp(now());}
+    return received;
+  }
+  async function choose(options,ctx){
+    const {category='all',batch=0,force=false,excludeIds=[]}=options,day=dayStamp(now()),data=store(ctx),last=data.last[category];
+    const excluded=new Set(excludeIds.map(String));
+    if(!force&&last?.day===day&&last.batch===batch)return {...last,songs:last.songs.filter(s=>!excluded.has(s.id)),fromPool:true};
+    data.recent=Array.isArray(data.recent)?data.recent.slice(-2000):[];
+    const seen=new Set(data.recent.map(x=>x.id)),seenNames=new Set(data.recent.map(x=>x.signature));
+    const lanes=category==='all'?Object.keys(PROFILES):[category],quota=taste=>category==='all'?({vocaloid:3,bilibili:2}[taste]||1):8;
+    const fresh=s=>!seen.has(s.id)&&!excluded.has(s.id)&&!seenNames.has(signature(s));
+    let tried=false,received=false;
+    const jobs=lanes.map(taste=>async()=>{
+      const pool=data.pools[taste]??={songs:[],lists:[],round:0,seeded:false};
+      if(pool.songs.filter(fresh).length<quota(taste)||pool.day!==day){
+        tried=true;const deadline=Date.now()+20000;
+        // At most two expansions per refresh. Exhaustion is visible, never a hidden seed loop.
+        for(let attempt=0;attempt<2;attempt++){
+          const ok=await expand(pool,taste,ctx,deadline);received=received||ok;
+          if(!ok||pool.songs.filter(fresh).length>=quota(taste)||Date.now()>=deadline)break;
+        }
       }
-      if(category!=='all'||['vocaloid','bilibili'].includes(taste))jobs.push(async()=>{
-        const rows=await search(p.related,1,ctx,day,force,deadline);if(rows!==null)group.received=true;
-        group.related=(rows||[]).map(normalizeSong).filter(s=>s&&!unwanted(s.name)).map(s=>({...s,taste,familiar:false,reason:p.label+' · '+p.related+' 相关'}));
-      });
-      jobs.push(async()=>{
-        const term=p.lists[batch%p.lists.length],rows=await search(term,1000,ctx,day,force,deadline);if(rows!==null)group.received=true;
-        group.lists=(rows||[]).map(raw=>({raw,list:normalizePlaylist(raw)})).filter(x=>x.list)
-          .sort((a,b)=>(Number(b.raw.playCount)||0)-(Number(a.raw.playCount)||0)).map(({list})=>({...list,taste,reason:p.label+' · '+term}));
-      });
+    });
+    let index=0;await Promise.all(Array.from({length:Math.min(2,jobs.length)},async()=>{while(index<jobs.length)await jobs[index++]();}));
+    if(tried&&!received&&last?.day!==day){
+      if(last)return {...last,offline:true,requestedDay:day,message:`当前展示 ${last.day} 的缓存选曲；新一批未取得。`};
+      return {ok:false,category,day,requestedDay:day,offline:true,songs:[],playlists:[],poolSize:0,message:'暂时连不上匹配口味的曲库。请重试或听本地音乐。'};
     }
-    let index=0;
-    await Promise.all(Array.from({length:Math.min(4,jobs.length)},async()=>{while(index<jobs.length){const job=jobs[index++];await job();}}));
-    const songs=[],playlists=[],seen=new Set(),fingerprints=new Set(),listIDs=new Set();
-    function add(song){if(!song||seen.has(song.id)||fingerprints.has(signature(song)))return false;seen.add(song.id);fingerprints.add(signature(song));songs.push(song);return true;}
+    const songs=[],playlists=[],listIDs=new Set();
+    function add(s){if(!fresh(s))return false;songs.push(s);seen.add(s.id);seenNames.add(signature(s));return true;}
     for(const taste of lanes){
-      const group=groups.get(taste),quota=category==='all'?({vocaloid:3,bilibili:2}[taste]||1):8;
-      // First take a different seed title from each search, not many covers of one song.
-      const anchors=group.familiar.map(rows=>rows?.[0]).filter(Boolean),related=group.related.filter(s=>!anchors.some(a=>compact(a.name)===compact(s.name)));
-      let added=0;const familiarQuota=quota>2?quota-1:quota;
-      for(const song of anchors){if(added>=familiarQuota)break;if(add(song))added++;}
-      for(const song of related){if(added>=quota)break;if(add(song))added++;}
-      for(const song of anchors){if(added>=quota)break;if(add(song))added++;}
-      for(const list of group.lists){if(!listIDs.has(list.id)){listIDs.add(list.id);playlists.push(list);break;}}
+      const pool=data.pools[taste];let added=0;
+      for(const s of pool.songs){if(added>=quota(taste))break;if(add(s))added++;}
+      const start=(batch%Math.max(1,pool.lists.length));
+      const list=pool.lists[start];if(list&&!listIDs.has(list.id)){listIDs.add(list.id);playlists.push(list);}
     }
-    if(!songs.length&&!playlists.length)throw Error('暂未取得匹配口味的歌曲');
-    return {version:VERSION,settingsKey:ctx.key,day,batch,songs,playlists,fetchedAt:now(),partial:[...groups.values()].some(g=>!g.received)};
+    // Fill a temporarily short lane from other expressed tastes, never unrelated global charts.
+    for(const taste of lanes)for(const s of data.pools[taste].songs){if(songs.length>=8)break;add(s);}
+    const poolSize=new Set(lanes.flatMap(t=>data.pools[t].songs.map(s=>s.id))).size;
+    const result={ok:!!(songs.length||playlists.length),category,label:CATEGORIES[category],personalized:false,tasteBased:true,day,requestedDay:day,batch,
+      songs,playlists,poolSize,seenCount:data.recent.length+songs.length,fetchedAt:now(),offline:tried&&!received,exhausted:songs.length<8,
+      message:songs.length<8?'当前没有更多未展示的匹配歌曲；不会把看过的歌换个顺序冒充新推荐。可稍后重试或切换分类。':'从匹配歌手与相关歌单扩充候选池，本批避开最近展示的歌曲。不是私人日推或实时B站榜。'};
+    if(result.offline)result.message='曲库暂时连接失败；本批来自之前保存的候选池。';
+    data.recent.push(...songs.map(s=>({id:s.id,signature:signature(s)})));data.recent=data.recent.slice(-2000);
+    data.last[category]=result;persist(data,ctx);return result;
   }
   async function get(options={}){
-    const {category='all',batch=0,force=false,excludeIds=[]}=options;
+    const {category='all',batch=0,excludeIds=[]}=options;
     if(!Object.hasOwn(CATEGORIES,category))throw Error('推荐分类无效');
     if(!Number.isInteger(batch)||batch<0||batch>10000)throw Error('推荐批次无效');
     if(!Array.isArray(excludeIds)||excludeIds.length>1000||excludeIds.some(id=>!/^\d{1,20}$/.test(String(id))))throw Error('忽略歌曲列表无效');
-    const day=dayStamp(now()),ctx=context(),stored=read()['taste:'+category];
-    let data=stored?.version===VERSION&&stored.settingsKey===ctx.key&&Array.isArray(stored.songs)&&Array.isArray(stored.playlists)?stored:null,offline=false;
-    if(force||!data||data.day!==day||data.batch!==batch){
-      const key=ctx.key+'|'+day+'|'+category+'|'+batch;
-      if(!pending.has(key))pending.set(key,build(category,batch,day,ctx,force).then(value=>{
-        if(context().key===ctx.key){read()['taste:'+category]=value;try{writeJSONAtomic(getFile(),saved);}catch{}}
-        return value;
-      }).finally(()=>pending.delete(key)));
-      try{data=await pending.get(key);}catch{offline=true;}
-    }
-    const excluded=new Set(excludeIds.map(String));
-    return {ok:!!data,category,label:CATEGORIES[category],personalized:false,tasteBased:true,requestedDay:day,day:data?.day||day,offline,partial:!!data?.partial,
-      songs:(data?.songs||[]).filter(s=>!excluded.has(s.id)),playlists:data?.playlists||[],poolSize:data?.songs?.length||0,fetchedAt:data?.fetchedAt,
-      message:offline?(data?`当前展示 ${data.day} 的缓存选曲；新一批暂未取得。`:'暂时找不到匹配口味的歌曲，请重试或搜索；不会用陌生大类歌单凑数。'):
-        '按术力口、二创、粤语、电音与华语口味选曲，熟悉优先，搭配少量相关探索。不是平台私人日推或实时B站榜单。'+(data?.partial?' 部分分类暂未取得。':'')};
+    const bases=actualBases(),ctx={bases,key:JSON.stringify(bases)},key=JSON.stringify([ctx.key,options]);
+    if(pending.has(key))return pending.get(key);
+    const task=serial.then(()=>choose(options,ctx)).finally(()=>pending.delete(key));serial=task.catch(()=>{});pending.set(key,task);return task;
   }
-  const legacy=createDiscoveryService({getFile,getBases,fetchJSON,now});
   return {get,playlist:legacy.playlist};
 }
 module.exports={createTasteDiscoveryService,PROFILES,CATEGORIES,familiarRows};

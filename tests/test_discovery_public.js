@@ -24,7 +24,7 @@ test('recommended playlist detail works without the separate download API and re
  const {service,calls}=officialFixture(t);assert.equal(typeof service.playlist,'function');
  const data=await service.playlist('42');assert.equal(data.tracks.length,40);assert.equal(data.total,45);assert.equal(data.possibly_incomplete,true);
  assert.ok(data.source.startsWith('https://music.163.com/api/'));
- await assert.rejects(service.playlist('../42'),/ID/);assert.equal(calls.length,1);
+ await assert.rejects(service.playlist('../42'),/ID/);assert.ok(calls.length>=1,'partial preview also tries public ID-catalog endpoints');
 });
 test('only official CDN http cover URLs can be upgraded to https',()=>{
  assert.equal(normalizePlaylist({id:1,name:'封面',picUrl:'http://p1.music.126.net/a.jpg'}).cover_url,'https://p1.music.126.net/a.jpg');

@@ -1,0 +1,707 @@
+{
+  "playlists": [
+    {
+      "id": "5017390341",
+      "total": 10,
+      "loaded": 10,
+      "incomplete": false,
+      "first": "リラルラドリーミング (REBOOT ver.)",
+      "last": "9999"
+    },
+    {
+      "id": "95073804",
+      "total": 10,
+      "loaded": 10,
+      "incomplete": false,
+      "first": "Хоп",
+      "last": "同道殊途(魔道祖师)"
+    }
+  ],
+  "batches": [
+    {
+      "batch": 0,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "26096272",
+          "name": "千本桜",
+          "artists": "黒うさP / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 千本桜"
+        },
+        {
+          "id": "2156450569",
+          "name": "メズマライザー",
+          "artists": "初音ミク / 重音テト / サツキ",
+          "reason": "术力口 / 虚拟歌手 · メズマライザー"
+        },
+        {
+          "id": "31140522",
+          "name": "普通DISCO",
+          "artists": "ilem / 洛天依Official / 言和",
+          "reason": "术力口 / 虚拟歌手 · 普通DISCO"
+        },
+        {
+          "id": "3374558377",
+          "name": "unhappy（69岁牢二次元 remix）",
+          "artists": "69岁牢二次元",
+          "reason": "B站 / 二创小曲 · unhappy"
+        },
+        {
+          "id": "3381504830",
+          "name": "感官过载",
+          "artists": "残像音阶 / M3mo",
+          "reason": "B站 / 二创小曲 · 感官过载"
+        },
+        {
+          "id": "1357375695",
+          "name": "海阔天空",
+          "artists": "Beyond",
+          "reason": "粤语 · 海阔天空"
+        },
+        {
+          "id": "36990266",
+          "name": "Faded",
+          "artists": "Alan Walker",
+          "reason": "欧美 / 电音 · Faded"
+        },
+        {
+          "id": "534542079",
+          "name": "侧脸",
+          "artists": "于果",
+          "reason": "华语流行 · 侧脸"
+        }
+      ]
+    },
+    {
+      "batch": 1,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "1864341174",
+          "name": "リラルラドリーミング (REBOOT ver.)",
+          "artists": "かいりきベア / 初音ミク / 鏡音リン",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "3439736331",
+          "name": "えねみぃ (feat. 初音ミク & 重音テト)",
+          "artists": "ピノキオピー / 初音ミク / 重音テト",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "2676709884",
+          "name": "エム",
+          "artists": "内緒のピアス",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "518088613",
+          "name": "Хоп",
+          "artists": "Azis",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "411907897",
+          "name": "極楽浄土",
+          "artists": "GARNiDELiA",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "186436",
+          "name": "玻璃之情",
+          "artists": "张国荣",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "2129143802",
+          "name": "Who I Am",
+          "artists": "Alan Walker / Putri Ariani / Peder Elias",
+          "reason": "欧美 / 电音 · 来自「Alan Walker 热门电音精选」"
+        },
+        {
+          "id": "2041026502",
+          "name": "愿与愁",
+          "artists": "林俊杰",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 2,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "3322638372",
+          "name": "タイムイズマイン (feat. 重音テト&初音ミク)",
+          "artists": "真島ゆろ / 重音テト / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "3397516495",
+          "name": "カプチーノ",
+          "artists": "柿崎ユウタ / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "3408839790",
+          "name": "Restart Refine",
+          "artists": "d0tc0mmie / GUMI",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "512542357",
+          "name": "病名为爱（Cover 鏡音リン,鏡音レン）",
+          "artists": "东京塔子",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "510697890",
+          "name": "病名为爱（病名は愛だった）（Cover リン&レン）",
+          "artists": "Hanser / YUKIri",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "191232",
+          "name": "遥远的她",
+          "artists": "张学友",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "1938248779",
+          "name": "The Drum",
+          "artists": "Alan Walker",
+          "reason": "欧美 / 电音 · 来自「Alan Walker 热门电音精选」"
+        },
+        {
+          "id": "28403111",
+          "name": "特别的人",
+          "artists": "方大同",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 3,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "3348197008",
+          "name": "ブレインロット",
+          "artists": "東京真中 / 重音テト",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "29812004",
+          "name": "ECHO",
+          "artists": "Crusher-P / GUMI",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "3422522527",
+          "name": "9999",
+          "artists": "煮ル果実 / 洛天依Official",
+          "reason": "术力口 / 虚拟歌手 · 来自「术力口没有你我怎么活啊术力口」"
+        },
+        {
+          "id": "503704380",
+          "name": "你曾是少年（泠鸢.ver）（Cover S·H·E）",
+          "artists": "泠鸢yousa",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "36025996",
+          "name": "半道英雄(全职高手填词)",
+          "artists": "群星",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "212233",
+          "name": "千千阙歌",
+          "artists": "陈慧娴",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "2071906170",
+          "name": "Endless Summer (LUM!X Remix)",
+          "artists": "Alan Walker / Zak Abel / LUM!X",
+          "reason": "欧美 / 电音 · 来自「Alan Walker 热门电音精选」"
+        },
+        {
+          "id": "2124385868",
+          "name": "如果爱忘了 (live)",
+          "artists": "汪苏泷 / 单依纯",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 4,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "3444465586",
+          "name": "もし君がずっと (feat. 初音ミク & AKITO)",
+          "artists": "Madam Radish / 初音ミク / AKITO",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3443726340",
+          "name": "Reunion (feat. 初音ミク)",
+          "artists": "Tatsu_P / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3445954743",
+          "name": "だったよ。 (feat. 初音ミク)",
+          "artists": "ちゃんすP / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "470856144",
+          "name": "荣耀再临（Cover 大胆音组）",
+          "artists": "哦漏",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "472481139",
+          "name": "临渊见萤",
+          "artists": "封茗囧菌",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "317868",
+          "name": "情人知己",
+          "artists": "叶蒨文",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "506092035",
+          "name": "The Spectre",
+          "artists": "Alan Walker",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "64093",
+          "name": "孤独患者",
+          "artists": "陈奕迅",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 5,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "1456486939",
+          "name": "春嵐",
+          "artists": "john / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2691663339",
+          "name": "我是洛天依",
+          "artists": "WOVOP / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3431103924",
+          "name": "キリエ (feat. 初音ミク)",
+          "artists": "アーリーバード研究所 / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "446247397",
+          "name": "前前前世（Slow Ver.）",
+          "artists": "泠鸢yousa",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "450451057",
+          "name": "同道殊途(魔道祖师)",
+          "artists": "HITA / Assen捷 / Aki阿杰 / W.K. / 图特哈蒙 / 吾恩 / 人衣大人 / 佑可猫 / 泠鸢yousa / 三无Marblue / 裂天 / 特曼 / 括号君",
+          "reason": "B站 / 二创小曲 · 来自「【循环向】b站上热门的歌，确定不来一发？」"
+        },
+        {
+          "id": "65766",
+          "name": "富士山下",
+          "artists": "陈奕迅",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "515453363",
+          "name": "All Falls Down",
+          "artists": "Alan Walker / Noah Cyrus / Digital Farm Animals / Juliander",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "254460",
+          "name": "当爱在靠近",
+          "artists": "刘若英",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 6,
+      "pool": 239,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "2639291583",
+          "name": "モニタリング",
+          "artists": "DECO*27 / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2084005979",
+          "name": "我愛メイデン",
+          "artists": "羽生まゐご / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2006735434",
+          "name": "深海少女 -deep sea girl- (feat. 初音ミク)",
+          "artists": "ゆうゆ / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3374381180",
+          "name": "Lightning Moment (闪耀时刻)",
+          "artists": "69岁牢二次元",
+          "reason": "B站 / 二创小曲 · 69岁牢二次元 相关"
+        },
+        {
+          "id": "3446925385",
+          "name": "unhappy",
+          "artists": "绵绵雨",
+          "reason": "B站 / 二创小曲 · 69岁牢二次元 相关"
+        },
+        {
+          "id": "5277756",
+          "name": "堆积情感",
+          "artists": "邝美云",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "2011072415",
+          "name": "On My Way",
+          "artists": "Alan Walker / Sabrina Carpenter / Farruko",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "431259309",
+          "name": "成全",
+          "artists": "林宥嘉",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 7,
+      "pool": 291,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "3356257929",
+          "name": "画脂鏤氷",
+          "artists": "かんてゐく / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "22635211",
+          "name": "ロミオとシンデレラ",
+          "artists": "doriko / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "432486474",
+          "name": "妄想感傷代償連盟",
+          "artists": "DECO*27 / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "1321708996",
+          "name": "Copines",
+          "artists": "Aya Nakamura",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "1881407002",
+          "name": "Luxurious",
+          "artists": "Gwen Stefani",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "276225",
+          "name": "夕阳之歌(Live)",
+          "artists": "梅艳芳",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "1998384188",
+          "name": "Alone",
+          "artists": "Alan Walker",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "354750",
+          "name": "奢香夫人",
+          "artists": "凤凰传奇",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 8,
+      "pool": 291,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "26440351",
+          "name": "蜘蛛糸モノポリー",
+          "artists": "sasakure.UK / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "514765051",
+          "name": "初音ミクの消失",
+          "artists": "初音ミク / cosMo@暴走P",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2138520986",
+          "name": "ビノミ",
+          "artists": "MARETU / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "22831636",
+          "name": "My jealousy (Original ver.)",
+          "artists": "DJMAX",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "3322518847",
+          "name": "HEAVENLY JUMPSTYLE (Tiktok Version)",
+          "artists": "TWXNY / Sxilwix / INNXCENCE",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "259398",
+          "name": "雨季不再来",
+          "artists": "黎瑞恩",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "2135183483",
+          "name": "Team Side (feat. RCB)",
+          "artists": "Alan Walker / Sofiloud",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "1465313631",
+          "name": "化身孤岛的鲸",
+          "artists": "周深",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 9,
+      "pool": 291,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "1878313261",
+          "name": "神っぽいな",
+          "artists": "ピノキオピー / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "22699098",
+          "name": "ローリンガール",
+          "artists": "wowaka / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2674765182",
+          "name": "超主人公",
+          "artists": "ピノキオピー / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3388191855",
+          "name": "Fever Deep",
+          "artists": "油壶 / Haze",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "427416520",
+          "name": "The Other Side Of Paradise",
+          "artists": "Glass Animals",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "229285",
+          "name": "漫步人生路",
+          "artists": "邓丽君",
+          "reason": "粤语 · 来自「粤语传世经典，怀旧是人的本能」"
+        },
+        {
+          "id": "1387559099",
+          "name": "Play",
+          "artists": "K-391 / Alan Walker / Tungevaag / Mangoo",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "209397",
+          "name": "太聪明",
+          "artists": "陈绮贞",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 10,
+      "pool": 291,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "29185030",
+          "name": "愛して愛して愛して",
+          "artists": "きくお / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "1825056882",
+          "name": "1000年生きてる",
+          "artists": "いよわ / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "2109714414",
+          "name": "Beyond the way (feat. 小豆沢こはね&白石杏&東雲彰人&青柳冬弥&初音ミク)",
+          "artists": "Giga / Vivid BAD SQUAD / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "3362038053",
+          "name": "Fever Pitch",
+          "artists": "Richz",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "28551589",
+          "name": "All My People",
+          "artists": "Alexandra Stan",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "32701152",
+          "name": "灰色轨迹",
+          "artists": "Beyond",
+          "reason": "粤语 · Beyond 相关"
+        },
+        {
+          "id": "29947420",
+          "name": "Fade",
+          "artists": "Alan Walker",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "190233",
+          "name": "偷心",
+          "artists": "张学友",
+          "reason": "华语流行 · 来自「华语流行100首，一人一首代表作」"
+        }
+      ]
+    },
+    {
+      "batch": 11,
+      "pool": 291,
+      "offline": false,
+      "exhausted": false,
+      "duplicates": [],
+      "songs": [
+        {
+          "id": "1440693335",
+          "name": "バケモノの唄",
+          "artists": "Shino / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "1825037926",
+          "name": "ラヴィット",
+          "artists": "ピノキオピー / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "27515069",
+          "name": "独りんぼエンヴィー",
+          "artists": "koyori / 初音ミク",
+          "reason": "术力口 / 虚拟歌手 · 初音ミク 相关"
+        },
+        {
+          "id": "26525808",
+          "name": "Superstar",
+          "artists": "Jamelia",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "2708984802",
+          "name": "Deadman",
+          "artists": "蔡徐坤",
+          "reason": "B站 / 二创小曲 · 来自「抖音B站热门英文歌BGM集合」"
+        },
+        {
+          "id": "346576",
+          "name": "光辉岁月",
+          "artists": "Beyond",
+          "reason": "粤语 · Beyond 相关"
+        },
+        {
+          "id": "2163871367",
+          "name": "Barcelona",
+          "artists": "Alan Walker / Ina Wroldsen",
+          "reason": "欧美 / 电音 · Alan Walker 相关"
+        },
+        {
+          "id": "1950614369",
+          "name": "等风的人",
+          "artists": "于果",
+          "reason": "华语流行 · 于果 相关"
+        }
+      ]
+    }
+  ],
+  "unique": 96
+}
