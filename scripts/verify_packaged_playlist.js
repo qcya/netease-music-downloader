@@ -47,10 +47,9 @@ async function client(url) {
       const id = ++serial;
       const resultPromise = new Promise((resolve,reject)=>pending.set(id,{resolve,reject}));
       socket.send(JSON.stringify({id,method,params}));
-      const result = await Promise.race([
-        resultPromise,
-        delay(15000).then(()=>{throw new Error('CDP Runtime.evaluate timed out: '+expression.slice(0,140));})
-      ]);
+      let timer;let result;
+      try { result=await Promise.race([resultPromise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('CDP command timed out: '+method)),15000);})]); }
+      finally {clearTimeout(timer);pending.delete(id);}
       if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
       return result;
     },
@@ -61,13 +60,40 @@ async function client(url) {
     close() { socket.close(); }
   };
 }
+// Synthetic 45-second PCM silence. This verifies file transport/decode, not online music availability.
+async function startFixture() {
+  const http=require('node:http');let failed=false,downloads=0,base='';
+  const rate=8000,frames=rate*45,pcm=Buffer.alloc(44+frames*2);
+  pcm.write('RIFF',0);pcm.writeUInt32LE(pcm.length-8,4);pcm.write('WAVEfmt ',8);
+  pcm.writeUInt32LE(16,16);pcm.writeUInt16LE(1,20);pcm.writeUInt16LE(1,22);
+  pcm.writeUInt32LE(rate,24);pcm.writeUInt32LE(rate*2,28);pcm.writeUInt16LE(2,32);pcm.writeUInt16LE(16,34);
+  pcm.write('data',36);pcm.writeUInt32LE(frames*2,40);
+  const songs=Array.from({length:32},(_,i)=>({id:700001+i,name:'验收音频 '+i,dt:45000,ar:[{name:'自动验收'}],al:{name:'合成静音测试'}}));
+  const playlists=Array.from({length:14},(_,i)=>({id:800001+i,name:'验收精选 '+i,trackCount:songs.length}));
+  const server=http.createServer((req,res)=>{
+    const u=new URL(req.url,base);let payload={code:200};
+    if(failed){res.writeHead(503,{'Content-Type':'application/json'});res.end('{"code":503}');return;}
+    if(u.pathname==='/top/playlist'||u.pathname==='/personalized')payload={code:200,playlists,result:playlists};
+    else if(u.pathname==='/playlist/track/all')payload={code:200,songs,total:songs.length};
+    else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs,trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
+    else if(u.pathname==='/song/detail')payload={code:200,songs:songs.filter(x=>(u.searchParams.get('ids')||'').split(',').includes(String(x.id)))};
+    else if(u.pathname==='/song/url/v1')payload={code:200,data:[{id:Number(u.searchParams.get('id')),url:base+'/audio.wav',type:'wav',level:'lossless',br:128000}]};
+    else if(u.pathname==='/lyric/new'||u.pathname==='/lyric')payload={code:200,lrc:{lyric:'[00:00.00]自动验收音频\n[00:10.00]第二行验收文字'},tlyric:{lyric:''}};
+    else if(u.pathname==='/audio.wav'){downloads++;res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':pcm.length});res.end(pcm);return;}
+    else payload={code:404};
+    const body=Buffer.from(JSON.stringify(payload));res.writeHead(200,{'Content-Type':'application/json','Content-Length':body.length});res.end(body);
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
+  return {base,downloads:()=>downloads,offline:()=>{failed=true;},close:async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}};
+}
+
 async function main() {
   const target = await debuggerTarget();
   console.log('Renderer URL:',target.url);
-  const c = await client(target.webSocketDebuggerUrl);
+  const c = await client(target.webSocketDebuggerUrl);let fixture;
   try {
-    async function wait(condition, reason) {
-      for (let attempt=0;attempt<70;attempt++) {
+    async function wait(condition, reason, attempts=70) {
+      for (let attempt=0;attempt<attempts;attempt++) {
         if (await c.run(condition)) return;
         await delay(180);
       }
@@ -101,21 +127,24 @@ async function main() {
     await realClick(createButton);
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Clicking New Playlist did not open an input dialog');
-    await c.run('(()=>{const input=document.getElementById("playlist-name-input");input.value="打包验收歌单";input.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("playlist-name-form").requestSubmit();return true})()');
+    await c.command('Input.insertText',{text:'打包验收歌单'});
+    await realClick('#playlist-name-save');
     await wait('document.getElementById("playlist-name-dialog").hidden && [...document.querySelectorAll(".playlist-category-header strong")].some(x=>x.textContent.includes("打包验收歌单"))',
       'New playlist not saved/rendered by packaged Electron');
 
     await realClick('.playlist-category:not([data-category-id=uncategorized]) .playlist-category-header button');
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Clicking Rename did not open dialog');
-    await c.run('(()=>{document.getElementById("playlist-name-input").value="打包验收已改名";document.getElementById("playlist-name-form").requestSubmit();return true})()');
+    await c.command('Input.insertText',{text:'打包验收已改名'});
+    await realClick('#playlist-name-save');
     await wait('document.getElementById("playlist-name-dialog").hidden && [...document.querySelectorAll(".playlist-category-header strong")].some(x=>x.textContent.includes("打包验收已改名"))',
       'Named playlist rename was not persisted/displayed');
 
     await realClick('.playlist-category[data-category-id=uncategorized] button');
     await wait('!document.getElementById("playlist-name-dialog").hidden',
       'Default playlist rename dialog absent');
-    await c.run('(()=>{document.getElementById("playlist-name-input").value="打包验收默认歌单";document.getElementById("playlist-name-form").requestSubmit();return true})()');
+    await c.command('Input.insertText',{text:'打包验收默认歌单'});
+    await realClick('#playlist-name-save');
     await wait('document.getElementById("playlist-name-dialog").hidden && document.querySelector(".playlist-category[data-category-id=uncategorized] strong")?.textContent.includes("打包验收默认歌单")',
       'Default playlist rename not persisted/displayed');
 
@@ -125,6 +154,47 @@ async function main() {
     assert.ok(saved.categories.some(x=>x.name==='打包验收已改名'));
     assert.equal(saved.categories.some(x=>x.name==='打包验收歌单'),false);
     console.log('PASS: packaged app New Playlist and both Rename buttons clicked, IPC succeeded, JSON persisted.');
-  } finally { c.close(); }
+    // Real Electron main-process fetch, Python download, local file decode and pointer interactions.
+    fixture=await startFixture();
+    const downloadDir=path.join(userData,'discovery-audio');fs.mkdirSync(downloadDir,{recursive:true});
+    await c.run('(async()=>{const settings=await musicBridge.getSettings();return musicBridge.saveSettings({...settings,downloadDir:'+JSON.stringify(downloadDir)+',apiBases:['+JSON.stringify(fixture.base)+']});})()');
+    await realClick('.nav-item[data-view=home]');
+    await realClick('#home-discover-tab');
+    await wait('!document.getElementById("discovery-refresh").disabled','Initial discovery request never settled',200);
+    await realClick('#discovery-refresh');
+    await wait('document.querySelectorAll(".discovery-song").length===8 && document.querySelector(".discovery-song")?.textContent.includes("验收音频")','Real recommendation IPC did not render fixture songs');
+    assert.equal(await c.run('document.querySelectorAll(".discovery-playlist").length'),6);
+    assert.equal(fixture.downloads(),0,'opening recommendations must never download or autoplay');
+    const first=await c.run('document.querySelector(".discovery-song").dataset.songId');
+    await realClick('#discovery-next');
+    await wait('document.querySelector(".discovery-song")?.dataset.songId!=='+JSON.stringify(first),'Next batch did not change selection');
+    await realClick('.discovery-playlist');
+    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length===32','Recommended playlist did not reach actual Python playlist loader',200);
+    await realClick('#home-discover-tab');
+    await realClick('.discovery-play');
+    await wait('document.getElementById("music-audio").currentSrc.startsWith("file:") && !document.getElementById("music-audio").paused','Download-and-play did not decode a local file',250);
+    assert.ok(fixture.downloads()>0,'explicit click must download fixture audio');
+    assert.ok(fs.readdirSync(downloadDir).some(x=>x.endsWith('.wav')),'complete file must exist on disk');
+    await realClick('#toggle-queue');
+    await wait('!document.getElementById("queue-panel").hidden && document.querySelectorAll(".queue-item").length===1','Current queue was not visible');
+    await realClick('#queue-close');
+    console.log('PASS: packaged discovery API, daily batch, playlist import, explicit download and real local WAV playback, visible queue.');
+    fixture.offline();
+    await realClick('#discovery-refresh');
+    await wait('document.getElementById("discovery-state").textContent.includes("缓存推荐") && !document.getElementById("discovery-refresh").disabled','Offline homepage did not show dated cache',200);
+    const runtimeInfo=await c.run('musicBridge.appInfo()');
+    assert.equal(runtimeInfo.version,'1.1.0');
+    console.log('PASS: packaged offline cache fallback retains cards and shows actual cache date; build version',runtimeInfo.version);
+    await c.run('document.getElementById("music-audio").pause()');
+    // Reload the renderer after writes and verify persisted groups and disabled first-run preferences.
+    await c.command('Page.reload',{});
+    await wait('!!window.musicBridge && !!document.getElementById("playlist-create-category")','Renderer did not reload');
+    await realClick('.nav-item[data-view=playlists]');
+    await wait('document.getElementById("my-playlist-tracks").textContent.includes("打包验收已改名") && document.getElementById("my-playlist-tracks").textContent.includes("打包验收默认歌单")','Playlist names did not survive renderer reload');
+    const prefs=await c.run('musicBridge.getSettings()');
+    assert.equal(prefs.desktopLyricsEnabled,false);assert.equal(prefs.miniPlayerEnabled,false);
+    console.log('PASS: persisted playlist names and first-run preferences survive renderer reload.');
+
+  } finally {if(fixture)await fixture.close();c.close(); }
 }
 main().catch(error=>{console.error(error);process.exitCode=1;});

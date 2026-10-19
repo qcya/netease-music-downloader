@@ -49,7 +49,7 @@ test('UI exposes selected features and local lyrics are loaded before network',(
  const ui=read('app/index.html'),js=read('app/renderer.js'),main=read('main.js'),preload=read('preload.js');
  for(const id of ['import-local-files','import-local-folder','toggle-mini-player'])assert.match(ui,new RegExp('id="'+id+'"'));
  assert.match(ui,/value="repeat-one"/);assert.match(ui,/value="stop-after"/);
- assert.match(js,/row\.draggable=true/);assert.match(js,/playlistsReorder\(updated\)/);
+ assert.match(js,/row\.draggable=true/);assert.match(js,/playlistOrganize\(updated,name,id\)/);
  assert.match(js,/localLyrics\(filename\)/);
  assert.match(js,/music-last-session/);
  assert.match(js,/startPaused:true,resumeTime:/);

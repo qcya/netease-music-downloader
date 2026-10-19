@@ -11,23 +11,25 @@ function validName(name){
   return typeof name==='string'&&name.length>0&&name===path.basename(name)&&!name.includes('\\')&&
     !/[\x00-\x1f]/.test(name)&&AUDIO_EXTS.has(path.extname(name).toLowerCase());
 }
-function createPlaylistStore({getDir,getIndexFile,readJSON,writeJSONAtomic}){
+function createPlaylistStore({getDir,getIndexFile,getDirs,readJSON,writeJSONAtomic}){
   function directory(){
     const dir=getDir();
     if(typeof dir!=='string'||!path.isAbsolute(dir))throw new Error('下载目录无效');
     return path.resolve(dir);
   }
+  function directories(){return [...new Set((getDirs?getDirs():[directory()]).map(p=>path.resolve(p)))];}
   function localFile(name){
     if(!validName(name))throw new Error('无效本地文件名');
-    const filename=path.join(directory(),name);
-    if(!fs.existsSync(filename)||!fs.statSync(filename).isFile())throw new Error('歌曲文件不存在');
-    return filename;
+    const matches=directories().map(dir=>path.join(dir,name)).filter(p=>fs.existsSync(p)&&fs.statSync(p).isFile());
+    if(!matches.length)throw new Error('歌曲文件不存在，请检查原音乐目录是否可用');
+    if(matches.length>1)throw new Error('多个音乐目录存在同名歌曲，请先在资源管理器中区分文件名：'+name);
+    return matches[0];
   }
   function move(name,newName){
     if(name===newName)return newName;
     const old=localFile(name);
     if(!validName(newName))throw new Error('歌单标记后的文件名无效');
-    const target=path.join(directory(),newName);
+    const target=path.join(path.dirname(old),newName);
     if(fs.existsSync(target))throw new Error('目标文件已经存在，不能覆盖：'+newName);
     const oldLyric=old.slice(0,-path.extname(old).length)+'.lrc';
     const newLyric=target.slice(0,-path.extname(target).length)+'.lrc';
@@ -40,6 +42,7 @@ function createPlaylistStore({getDir,getIndexFile,readJSON,writeJSONAtomic}){
   }
   function sourceNames(){
     const saved=readJSON(getIndexFile(),null),names=[];
+    if((saved!==null&&!Array.isArray(saved))||(saved===null&&fs.existsSync(getIndexFile())))throw new Error('歌单索引格式损坏，已保留原文件');
     if(Array.isArray(saved)){
       for(const p of saved){
         if(!Array.isArray(p?.tracks))continue;
@@ -53,16 +56,17 @@ function createPlaylistStore({getDir,getIndexFile,readJSON,writeJSONAtomic}){
       let current=n;
       if(!tagged(n)){
         const prefixed=PREFIX+n;
-        if(fs.existsSync(path.join(directory(),n))&&!fs.existsSync(path.join(directory(),prefixed))){
+        if(directories().some(dir=>fs.existsSync(path.join(dir,n)))&&!directories().some(dir=>fs.existsSync(path.join(dir,prefixed)))){
           try{current=move(n,prefixed)}catch{current=n}
-        }else if(fs.existsSync(path.join(directory(),prefixed))&&!fs.existsSync(path.join(directory(),n))){
+        }else if(directories().some(dir=>fs.existsSync(path.join(dir,prefixed)))&&!directories().some(dir=>fs.existsSync(path.join(dir,n)))){
           current=prefixed;
         }
       }
       if(!tracks.includes(current))tracks.push(current);
     }
-    if(fs.existsSync(directory())){
-      for(const entry of fs.readdirSync(directory(),{withFileTypes:true})){
+    for(const dir of directories()){
+      if(!fs.existsSync(dir))continue;
+      for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
         if(entry.isFile()&&validName(entry.name)&&tagged(entry.name)&&!tracks.includes(entry.name))tracks.push(entry.name);
       }
     }

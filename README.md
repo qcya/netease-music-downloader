@@ -20,7 +20,7 @@ Windows 桌面应用 / 单文件便携版
 
 ## 下载与运行
 
-普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.0.10-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
+普通用户：在 [GitHub Releases](https://github.com/qcya/netease-music-downloader/releases/latest) 下载 `MusicDownloader-1.1.0-portable.exe`，直接双击即可运行。适用于 Windows 10/11 64 位系统，无需安装 Python 或 Node.js。
 
 开发者：使用 Node.js 20+ 与 Python 3.10+。首次运行 `安装依赖.bat`，以后使用 `启动桌面版.bat` 或 `npm start` 启动源码。需要自行生成便携版时可运行 `构建Windows_EXE.bat`。
 
@@ -224,3 +224,15 @@ python -m pytest -q tests
 v1.0.9 Release 的 EXE 发布早于歌单弹窗修复，因此运行旧 EXE 时「新建歌单」和「重命名」仍然无响应。请下载 v1.0.10 便携版，运行文件名必须是 `MusicDownloader-1.0.10-portable.exe`，而不是旧 EXE。
 
 v1.0.10 包含应用内歌单名称输入框，支持新建、重命名默认歌单和其他歌单、错误提示与持久保存。Windows 自动化构建同时验证打包后的程序能够启动、完成真实 DOM 点击及 IPC 写入歌单，并在退出后不残留进程。
+
+## v1.1.0 发现音乐与歌单稳定性
+
+主页新增公开精选歌单、按本机日期抽样的每日歌曲、换批、类别切换和「暂不推荐」。不需要网易云登录，也不宣称这是用户账号的私人日推。歌曲需明确点击「下载并播放」后先保存到本地；离线推荐会标注实际缓存日期，可单独随机播放本地音乐。
+
+本轮还修复分类顺序与播放队列同步、保护损坏 JSON、备份有效记录、登记历史下载目录，移除本地列表的 1000 首截断，加入本地筛选、歌单折叠和可见队列。四项导航、粉蓝风格、实际 `[歌单]` 前缀以及桌面歌词/锁定/迷你播放器偏好继续保留。
+
+新增模块：`durable_json.js` 负责安全 JSON；`library_roots.js` 记录音乐目录；`discovery_service.js` 提供公开推荐和缓存；`app/discovery.js`、`app/discovery.css` 为发现页；`app/playlist_queue.js` 负责分类队列协调。
+
+开发验收：`node --test tests/test_*.js`、`PYTHONPATH=skill/scripts python -m pytest -q tests`、`npm run check`。有 Playwright 和 Chromium 的开发环境可运行 `python scripts/verify_browser_ui.py` 生成明确使用测试数据的界面验收图；`node scripts/check_discovery_online.js` 仅探测公开推荐元数据，不下载音频。Windows 构建中的 `scripts/verify_packaged_playlist.js` 对真实 EXE 执行鼠标/键盘/IPC/本地下载播放与离线缓存验收。
+
+变更范围与限制见 `RELEASE_NOTES_v1.1.0.md`。完整歌曲 UUID 数据库与高级音频功能不在本轮迁移内；跨目录同名文件明确报冲突，而非猜测应该操作哪一个。更新仍需下载新 EXE，设置内「获取新版」打开官方 Release 页面。

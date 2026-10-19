@@ -49,9 +49,10 @@ class WindowsEncoding(unittest.TestCase):
         self.assertIn('  push:', workflow)
         self.assertIn("      - '.github/workflows/windows-build.yml'", workflow)
         self.assertIn('  contents: write', workflow)
-        self.assertIn('Publish GitHub Release v1.0.10', workflow)
+        version = json.loads((root / 'package.json').read_text(encoding='utf-8'))['version']
+        self.assertIn(f'Publish GitHub Release v{version}', workflow)
         self.assertIn("if: github.event_name == 'push'", workflow)
-        self.assertIn('MusicDownloader-1.0.10-portable.exe.sha256', workflow)
+        self.assertIn(f'MusicDownloader-{version}-portable.exe.sha256', workflow)
         self.assertIn('Run all regression tests', workflow)
 
 

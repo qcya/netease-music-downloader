@@ -1,0 +1,9 @@
+'use strict';
+const fs=require('node:fs');
+const path=require('node:path');
+const root=path.join(__dirname,'..');
+const version=require('../package.json').version;
+const candidate=process.env.GITHUB_SHA||'';
+const commit=/^[a-f0-9]{40}$/.test(candidate)?candidate:'development';
+fs.writeFileSync(path.join(root,'build-info.json'),JSON.stringify({version,commit,builtAt:new Date().toISOString()},null,2));
+console.log('Build identity:',version,commit);
