@@ -236,3 +236,6 @@ v1.0.10 包含应用内歌单名称输入框，支持新建、重命名默认歌
 开发验收：`node --test tests/test_*.js`、`PYTHONPATH=skill/scripts python -m pytest -q tests`、`npm run check`。有 Playwright 和 Chromium 的开发环境可运行 `python scripts/verify_browser_ui.py` 生成明确使用测试数据的界面验收图；`node scripts/check_discovery_online.js` 仅探测公开推荐元数据，不下载音频。Windows 构建中的 `scripts/verify_packaged_playlist.js` 对真实 EXE 执行鼠标/键盘/IPC/本地下载播放与离线缓存验收。
 
 变更范围与限制见 `RELEASE_NOTES_v1.1.0.md`。完整歌曲 UUID 数据库与高级音频功能不在本轮迁移内；跨目录同名文件明确报冲突，而非猜测应该操作哪一个。更新仍需下载新 EXE，设置内「获取新版」打开官方 Release 页面。
+
+## v1.1.1 在线播放与桌面歌词
+搜索/推荐里的播放按钮现在走纯流式播放，不保存音频文件或 Chromium HTTP 磁盘缓存；下载必须另点下载按钮。在线歌词只保存在内存。桌面歌词新增状态反馈、公开取词来源与后台同步，坏缓存不再阻断获取。使用时需要正常网络及可用音源，不保证所有歌曲匿名可播或绝对零起播等待。详见 RELEASE_NOTES_v1.1.1.md。

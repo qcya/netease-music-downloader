@@ -136,6 +136,12 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   const lyric=await invoke('music:lyric','12345');
   assert.equal(lyric.found,true);
   assert.match(lyric.lrc,/是水做的/);
+  const lyricFile=path.join(oldLyricDir,'12345.json');
+  fs.writeFileSync(lyricFile,'{');
+  assert.equal((await invoke('music:lyric','12345')).found,true,'corrupt optional cache cannot hide valid lyrics');
+  assert.equal(fs.readFileSync(lyricFile,'utf8'),'{','corrupt cache preserved');
+  fs.unlinkSync(lyricFile);
+  await invoke('music:lyric','12345');
   const lyricCached=await invoke('music:lyric','12345');
   assert.equal(lyricCached.fromCache,true);
   const favorite=await invoke('favorites:add',s.results[0]);

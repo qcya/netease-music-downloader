@@ -15,6 +15,11 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   if(typeof floating.showInactive==='function')floating.showInactive();else floating.show();
  }
  function setMainFocused(_value){reconcileVisibility()}
+ function status(){return {open:exists(),visible:exists()&&!!floating.isVisible?.(),loaded,locked,position:position()};}
+ function fail(reason){
+  const main=getMainWindow();if(exists())floating.close();
+  if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false,error:String(reason).slice(0,240)});
+ }
  function open(){
   if(exists()){reconcileVisibility();return {open:true};}
   const s=safeSettings();
@@ -24,7 +29,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   floating=new BrowserWindow({...(location||{}),width,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
     frame:false,title:'',titleBarStyle:'hidden',autoHideMenuBar:true,transparent:true,hasShadow:false,thickFrame:false,roundedCorners:false,alwaysOnTop:s.alwaysOnTop!==false,skipTaskbar:true,resizable:false,maximizable:false,minimizable:false,fullscreenable:false, // Prevent Windows DWM from creating phantom chrome on transparent frameless overlays.
     
-    backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
+    backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
   // Chromium's ready-to-show is inconsistent for fully transparent windows.
   // Wait for the actual page to load and for real lyric text before showing.
   loaded=false;lastText=null;
@@ -37,7 +42,10 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
     reconcileVisibility();
   });
   floating.setMenuBarVisibility?.(false);
-  floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
+  floating.webContents.on('did-fail-load',(_event,code,description)=>{if(code!==-3)fail('歌词页面加载失败：'+description);});
+  floating.webContents.on('render-process-gone',(_event,details)=>fail('歌词页面进程退出：'+details.reason));
+  const loading=floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
+  loading?.catch?.(e=>fail(e.message));
   floating.setBackgroundColor?.('#00000000');
   floating.on('closed',()=>{dragStart=null;floating=null;loaded=false;lastText=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
   floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
@@ -128,6 +136,6 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function setLockChange(callback){onLockChange=callback;}
  function lockAndSave(value){const result=lock(value);if(onLockChange)onLockChange(locked);return result;}
  function owns(webContents){return exists()&&webContents?.id===floating.webContents.id;}
- return {open,close,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,dragBegin,dragMove,dragEnd,resetPosition,position,showMenu,exists,owns,setMainFocused};
+ return {open,close,status,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,dragBegin,dragMove,dragEnd,resetPosition,position,showMenu,exists,owns,setMainFocused};
 }
 module.exports={createFloatingLyricsController};

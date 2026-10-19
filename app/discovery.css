@@ -78,3 +78,5 @@ button:focus-visible{outline:2px solid #8ab4db;outline-offset:3px}
 @media(max-width:1060px){.discovery-welcome-actions{flex-direction:column;gap:6px}.discovery-welcome-actions button{padding:7px 10px}.discovery-playlist{grid-template-columns:44px minmax(0,1fr);gap:3px 7px;padding:7px}.discovery-playlist .discovery-art{width:44px;height:44px}.discovery-playlist strong{font-size:11px}}
 
 .build-info-row{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:#77899f;padding-bottom:13px;border-bottom:1px solid #e8e9ef}
+
+.discovery-download{border:0;border-radius:8px;background:#f9e8f2;color:#936580;padding:7px;font-size:16px;cursor:pointer}
