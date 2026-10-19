@@ -305,6 +305,13 @@ function persistFloatingLyricsPosition(position){
   writeJSONAtomic(file,{...existing,floatingLyricsPosition:next});
   return next;
 }
+function persistDesktopLyricsEnabled(value){
+  const enabled=value===true;
+  ensureData();
+  const stored=readJSON(configFile(),{});
+  writeJSONAtomic(configFile(),{...stored,desktopLyricsEnabled:enabled});
+  return enabled;
+}
 function persistMiniPlayerEnabled(value){
   const enabled=value===true;
   ensureData();
@@ -758,8 +765,8 @@ app.whenReady().then(() => {
     return statsCache();
   });
   ipcMain.handle('favorites:list',()=>listFavorites());
-  ipcMain.handle('lyrics:open',()=>{const state=floatingLyrics.open();notifyLyricLock(config().floatingLyrics.mouseThrough);return state});
-  ipcMain.handle('lyrics:close',()=>floatingLyrics.close());
+  ipcMain.handle('lyrics:open',()=>{const state=floatingLyrics.open();persistDesktopLyricsEnabled(true);notifyLyricLock(config().floatingLyrics.mouseThrough);return state});
+  ipcMain.handle('lyrics:close',()=>{const state=floatingLyrics.close();persistDesktopLyricsEnabled(false);return state});
   ipcMain.handle('lyrics:reset-position',()=>floatingLyrics.resetPosition());
   ipcMain.handle('lyrics:position',()=>config().floatingLyricsPosition);
   ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);const state=floatingLyrics.lock(wanted);notifyLyricLock(wanted);return state});

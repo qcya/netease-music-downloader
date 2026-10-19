@@ -1014,7 +1014,8 @@
     try{
       if(enabled){await bridge.showFloatingLyrics();state.floating=true;updateFloatingLine();}
       else {await bridge.closeFloatingLyrics();state.floating=false;}
-      if(state.settings)state.settings=await bridge.saveSettings({...state.settings,desktopLyricsEnabled:enabled});
+      // The main-process toggle owns persistence; never replay an old settings snapshot.
+      if(state.settings)state.settings.desktopLyricsEnabled=enabled;
       updateDesktopLyricsToggle();
     }catch(e){showToast('桌面歌词切换失败：'+errMessage(e),true);}
     finally{btn.disabled=false;}
