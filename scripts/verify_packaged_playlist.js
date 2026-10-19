@@ -287,12 +287,15 @@ async function main() {
     await wait('!document.querySelector(".discovery-download").disabled','Explicit download did not finish',250);
     assert.ok(fs.readdirSync(downloadDir).some(x=>x.endsWith('.wav')),'explicit download must still work');
     console.log('PASS: explicit Download remains independent of online Play.');
+    const beforeOffline=new Set(await c.run('[...document.querySelectorAll(".discovery-song")].map(e=>e.dataset.songId)'));
     fixture.offline();
     await realClick('#discovery-refresh');
-    await wait('document.getElementById("discovery-state").textContent.includes("缓存选曲") && !document.getElementById("discovery-refresh").disabled','Offline homepage did not show dated cache',200);
+    await wait('!document.getElementById("discovery-refresh").disabled && document.querySelectorAll(".discovery-song").length===8','Saved candidate pool should continue to supply songs while offline',200);
+    const offlineIDs=await c.run('[...document.querySelectorAll(".discovery-song")].map(e=>e.dataset.songId)');
+    for(const id of offlineIDs)assert.ok(!beforeOffline.has(id),'offline refresh must not repeat the previous page');
     const runtimeInfo=await c.run('musicBridge.appInfo()');
-    assert.equal(runtimeInfo.version,'1.1.2');
-    console.log('PASS: packaged offline cache fallback retains cards and shows actual cache date; build version',runtimeInfo.version);
+    assert.equal(runtimeInfo.version,require('../package.json').version);
+    console.log('PASS: packaged offline refresh serves unseen saved candidates; build version',runtimeInfo.version);
     await c.run('document.getElementById("music-audio").pause()');
     // Reload the renderer after writes and verify persisted groups and disabled first-run preferences.
     await c.command('Page.reload',{});
