@@ -1,0 +1,21 @@
+name: Playlist Catalog Probe
+on:
+  push:
+    branches: ['fix/refresh-playlist-backend-v113']
+    paths: ['.github/workflows/catalog-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: |
+          node <<'JS'
+          (async()=>{for(const id of ['5017390341','95073804'])for(const route of ['/api/playlist/detail','/api/v3/playlist/detail','/api/v6/playlist/detail'])for(const method of ['GET','POST']){
+            try{const args=new URLSearchParams({id,n:'100000',s:'0'});const r=await fetch('https://music.163.com'+route+(method==='GET'?'?'+args:''),{method,body:method==='POST'?args:undefined,headers:{Referer:'https://music.163.com/'},signal:AbortSignal.timeout(6000)});const d=await r.json(),p=d.playlist||d.result;console.log(JSON.stringify({id,route,method,status:r.status,code:d.code,keys:Object.keys(d),detailKeys:p&&Object.keys(p),trackCount:p?.trackCount,tracks:p?.tracks?.length,trackIds:p?.trackIds?.length,firstID:p?.trackIds?.[0],lastID:p?.trackIds?.at(-1),message:d.message||d.msg}));}catch(e){console.log(JSON.stringify({id,route,method,error:e.message}));}
+          }})();
+          JS
