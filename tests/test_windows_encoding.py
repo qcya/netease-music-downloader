@@ -51,7 +51,10 @@ class WindowsEncoding(unittest.TestCase):
         self.assertIn('  contents: write', workflow)
         version = json.loads((root / 'package.json').read_text(encoding='utf-8'))['version']
         self.assertIn(f'Publish GitHub Release v{version}', workflow)
-        self.assertIn("if: github.event_name == 'push'", workflow)
+        release_step = workflow.split(f'      - name: Publish GitHub Release v{version}', 1)[1]
+        self.assertIn("if: success() && github.event_name == 'push'", release_step,
+                      'publishing must require successful verification and a push event')
+        self.assertNotIn('if: always()', release_step)
         self.assertIn(f'MusicDownloader-{version}-portable.exe.sha256', workflow)
         self.assertIn('Run all regression tests', workflow)
 

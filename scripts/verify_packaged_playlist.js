@@ -8,6 +8,7 @@ const assert = require('node:assert/strict');
 
 const port = Number(process.argv[2]);
 const userData = process.argv[3];
+const processName=process.env.MUSIC_DOWNLOADER_TEST_PROCESS==='electron'?'electron':'MusicDownloader';
 if (!Number.isInteger(port) || port < 1 || !userData) throw new Error('Usage: node scripts/verify_packaged_playlist.js PORT USER_DATA');
 
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -86,9 +87,19 @@ async function startFixture() {
       const headers={'Content-Type':'audio/wav','Content-Length':end-start+1,'Accept-Ranges':'bytes'};
       if(m)headers['Content-Range']=`bytes ${start}-${end}/${pcm.length}`;
       res.writeHead(m?206:200,headers);
-      const cut=Math.min(start+128044,end+1);res.write(pcm.subarray(start,cut));
-      const timer=setTimeout(()=>{completed++;res.end(pcm.subarray(cut,end+1));},9000);
-      res.on('close',()=>clearTimeout(timer));return;
+      // A direct-HTTP control also stalls with only 128044 bytes of this WAV.
+      // Deliver progressive decoder input, then keep most of the body pending.
+      // The before-completion assertion below remains mandatory.
+      let cursor=start,timer;
+      const prefixEnd=Math.min(start+256*1024,end+1);
+      const send=()=>{
+        const next=Math.min(cursor+32*1024,prefixEnd);
+        res.write(pcm.subarray(cursor,next));cursor=next;
+        if(cursor>=end+1){completed++;res.end();return;}
+        if(cursor<prefixEnd)timer=setTimeout(send,100);
+        else timer=setTimeout(()=>{completed++;res.end(pcm.subarray(cursor,end+1));},9000);
+      };
+      send();res.on('close',()=>clearTimeout(timer));return;
     }
     else payload={code:404};
     const body=Buffer.from(JSON.stringify(payload));res.writeHead(200,{'Content-Type':'application/json','Content-Length':body.length});res.end(body);
@@ -101,12 +112,14 @@ async function main() {
   const target = await debuggerTarget();
   console.log('Renderer URL:',target.url);
   const c = await client(target.webSocketDebuggerUrl);let fixture;
+  const initialized='document.readyState==="complete" && !!document.querySelector(".nav-icon svg") && /就绪/.test(document.getElementById("python-label")?.textContent||"")';
   try {
     async function wait(condition, reason, attempts=70) {
       for (let attempt=0;attempt<attempts;attempt++) {
         if (await c.run(condition)) return;
         await delay(180);
       }
+      console.error('AUDIO FAILURE STATE',await c.run('(()=>{const a=document.getElementById("music-audio");return {document:document.readyState,icons:document.querySelectorAll(".nav-icon svg").length,environment:document.getElementById("python-label")?.textContent,ready:a.readyState,network:a.networkState,time:a.currentTime,paused:a.paused,error:a.error&&{code:a.error.code,message:a.error.message}}})()'));
       throw new Error(reason);
     }
     async function realClick(selector) {
@@ -118,6 +131,7 @@ async function main() {
       await c.command('Input.dispatchMouseEvent',{type:'mouseReleased',x:point.x,y:point.y,button:'left',clickCount:1});
     }
     await wait('!!document.getElementById("playlist-create-category")','Playlist creation button absent');
+    await wait(initialized,'Renderer initialization did not finish before input',150);
     // Complete first-launch consent before any pointer testing, so a modal cannot cover controls.
     const disclaimer = await c.run('!document.getElementById("first-run").hidden');
     if (disclaimer) {
@@ -184,9 +198,11 @@ async function main() {
     // Online playback must start while the synthetic response is still unfinished.
     await realClick('#toggle-desktop-lyrics');
     await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded;})()','Desktop lyrics did not become visible on explicit enable');
+    const streamingClickAt=Date.now();
     await realClick('.discovery-play');
     await wait('document.getElementById("music-audio").currentSrc.startsWith("music-preview:") && !document.getElementById("music-audio").paused && document.getElementById("music-audio").currentTime>0','Online playback did not start',140);
     assert.equal(fixture.completed(),0,'must play before complete response arrives');
+    console.log('STREAM START EVIDENCE',JSON.stringify({elapsedMs:Date.now()-streamingClickAt,completedResponses:fixture.completed(),currentTime:await c.run('document.getElementById("music-audio").currentTime')}));
     assert.equal(fs.readdirSync(downloadDir).length,0,'online play cannot save a music file');
     const cache=await c.run('musicBridge.cacheStats()');assert.equal(cache.count,0);assert.equal(cache.httpCacheBytes,0,'Chromium HTTP cache must stay disabled');
     assert.equal(fs.existsSync(path.join(userData,'lyric-cache')),false,'online lyrics stay in RAM');
@@ -197,14 +213,16 @@ async function main() {
       await wait('document.getElementById("player-synced-line").textContent.includes("验收")','Lyric retrieval did not reach player');
       assert.ok((await lyricClient.run('document.getElementById("lyric").textContent')).includes('验收'));
       // Minimize the real Windows main window, not a mock element.
-      const {execFileSync}=require('node:child_process');
-      function showMain(n){execFileSync('powershell.exe',['-NoProfile','-Command',
-        "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class WinState { [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr h,int n); }'; $p=Get-Process -Name MusicDownloader | Where-Object { $_.MainWindowTitle -like '音乐下载器*' } | Select-Object -First 1; if(!$p){throw 'main window missing'}; [WinState]::ShowWindowAsync($p.MainWindowHandle,"+n+")"],{timeout:15000});}
+      const {setWindowState}=require('./native_test_window');
+      const showMain=n=>setWindowState(processName,n);
       showMain(6);
       try{await wait('document.getElementById("music-audio").currentTime>4','Audio stopped when minimized');
         assert.ok((await lyricClient.run('document.getElementById("lyric").textContent')).includes('第二行'),'desktop lyric clock must continue when main is minimized');
         assert.ok((await lyricClient.run('document.getElementById("translate").textContent')).includes('验收二'));
         assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).visible,true);
+        const shot=await lyricClient.command('Page.captureScreenshot',{format:'png'});
+        fs.writeFileSync(path.join(userData,'desktop-lyrics-minimized.png'),Buffer.from(shot.data,'base64'));
+        console.log('DESKTOP LYRIC EVIDENCE',JSON.stringify(await c.run('musicBridge.floatingLyricsStatus()')));
       }finally{showMain(9);}
       const position=(await c.run('musicBridge.floatingLyricsStatus()')).position;
       await realClick('#toggle-desktop-lock');assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).locked,true);
@@ -232,6 +250,7 @@ async function main() {
     // Reload the renderer after writes and verify persisted groups and disabled first-run preferences.
     await c.command('Page.reload',{});
     await wait('!!window.musicBridge && !!document.getElementById("playlist-create-category")','Renderer did not reload');
+    await wait(initialized,'Renderer initialization did not finish after reload',150);
     await realClick('.nav-item[data-view=playlists]');
     await wait('document.getElementById("my-playlist-tracks").textContent.includes("打包验收已改名") && document.getElementById("my-playlist-tracks").textContent.includes("打包验收默认歌单")','Playlist names did not survive renderer reload');
     const prefs=await c.run('musicBridge.getSettings()');

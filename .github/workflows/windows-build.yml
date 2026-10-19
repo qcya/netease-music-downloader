@@ -1,7 +1,7 @@
 name: Build Windows Portable
 
 on:
-  # Build a new Windows EXE when a versioned release workflow is merged.
+  # Rebuild v1.1.1 with isolated lyric settings and progressive-stream verification.
   push:
     branches: [main]
     paths:
@@ -116,7 +116,7 @@ jobs:
               throw "Packaged app did not reach a visible main window within 120 seconds"
             }
             Write-Host "Packaged EXE reached window_ready."
-            node scripts/verify_packaged_playlist.js $debugPort $smokeDir
+            node scripts/verify_packaged_playlist.js $debugPort $smokeDir 2>&1 | Tee-Object packaged-e2e.log
             if ($LASTEXITCODE -ne 0) { throw "Packaged lyrics, memory streaming or playlist test failed end-to-end" }
             Write-Host "PASS: Packaged playlist button E2E test."
             $mainWindow = $null
@@ -144,7 +144,20 @@ jobs:
             Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue |
               Stop-Process -Force -ErrorAction SilentlyContinue
             if ($launcher -and !$launcher.HasExited) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
+            $shot = Join-Path $smokeDir 'desktop-lyrics-minimized.png'
+            if (Test-Path $shot) { Copy-Item $shot packaged-desktop-lyrics.png }
+            if (Test-Path $log) { Copy-Item $log packaged-application.log }
           }
+      - name: Preserve packaged verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Packaged-Lyrics-Stream-Evidence-v1.1.1
+          path: |
+            packaged-*.log
+            packaged-*.png
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
         with:
@@ -154,7 +167,7 @@ jobs:
             dist/MusicDownloader-1.1.1-portable.exe.sha256
           if-no-files-found: error
       - name: Publish GitHub Release v1.1.1
-        if: github.event_name == 'push'
+        if: success() && github.event_name == 'push'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
