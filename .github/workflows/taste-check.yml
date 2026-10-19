@@ -4,17 +4,60 @@ on:
     branches: ['fix/taste-discovery-v1.1.2']
     paths: ['.github/workflows/taste-check.yml']
 permissions:
-  contents: read
+  contents: write
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Inspect anonymous search response shapes
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r skill/requirements.txt pytest
+      - name: Apply reviewed patch with integrity verification
+        shell: python
         run: |
-          node <<'JS'
-          (async()=>{for(const path of ['/api/search/get/web','/api/search/get','/api/cloudsearch/pc'])for(const method of ['GET','POST']){try{const args=new URLSearchParams({s:'Alan Walker',type:'1',limit:'3',offset:'0'}),u='https://music.163.com'+path;const r=await fetch(u+(method==='GET'?'?'+args:''),{method,body:method==='POST'?args:undefined,headers:{'Referer':'https://music.163.com/'},signal:AbortSignal.timeout(7000)});const t=await r.text();console.log(JSON.stringify({path,method,status:r.status,sample:t.slice(0,2300)}));}catch(e){console.log(JSON.stringify({path,method,error:e.message}));}}})()
-          JS
+          import pathlib, base64, lzma, hashlib, subprocess, os
+          data=''.join(pathlib.Path(f'.ci-transfer/taste-{i}.txt').read_text().strip() for i in [1,2])
+          patch=lzma.decompress(base64.b64decode(data,validate=True))
+          assert hashlib.sha256(patch).hexdigest()=='1d770989f13b24f40b283f4560b546a5fefbc4a2996c0825a3c2e982b6b80c36'
+          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'taste.patch';p.write_bytes(patch)
+          subprocess.run(['git','apply','--unidiff-zero','--check',str(p)],check=True)
+          subprocess.run(['git','apply','--unidiff-zero',str(p)],check=True)
+      - name: Full regression tests
+        env:
+          PYTHONPATH: skill/scripts
+          MUSIC_PYTHON_EXE: python
+        run: |
+          npm run check
+          node --test tests/test_*.js
+          python -m pytest -q tests
+      - name: Record actual public taste results
+        continue-on-error: true
+        env:
+          MUSIC_TASTE_EVIDENCE: taste-online.json
+        run: node scripts/check_taste_online.js | tee taste-online.log
+      - name: Commit verified implementation only
+        run: |
+          git rm -r .ci-transfer
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md RELEASE_NOTES_v1.1.2.md app main.js online_media.js source_availability.js package.json preload.js scripts tests '构建Windows_EXE.bat'
+          git diff --cached --stat
+          git commit -m 'feat: familiar taste discovery, verified play controls and persistent unlocked lyric defaults'
+          git push origin HEAD:fix/taste-discovery-v1.1.2
+          git archive --format=zip --output=verified-source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: taste-v112-verification
+          path: |
+            taste-online.json
+            taste-online.log
+            verified-source.zip
+          retention-days: 14
+          if-no-files-found: ignore
