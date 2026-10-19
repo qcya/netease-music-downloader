@@ -13,15 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Archive baseline
-        run: git archive --format=zip --output=baseline.zip HEAD
-      - uses: actions/upload-artifact@v4
-        with:
-          name: taste-baseline
-          path: baseline.zip
-          retention-days: 7
       - name: Inspect anonymous search response shapes
         run: |
           node <<'JS'
-          (async()=>{for(const [s,type] of [['初音未来',1],['洛天依',1],['Alan Walker',1],['海阔天空 Beyond',1],['侧脸 于果',1],['术力口',1000],['B站热门 二创',1000]]){try{const u=new URL('https://music.163.com/api/search/get/web');for(const [k,v] of Object.entries({s,type,limit:6,offset:0}))u.searchParams.set(k,v);const r=await fetch(u,{signal:AbortSignal.timeout(7000)});const d=await r.json();console.log(JSON.stringify({query:s,type,status:r.status,code:d.code,count:d.result?.songCount||d.result?.playlistCount,rows:(d.result?.songs||d.result?.playlists||[]).map(x=>({id:x.id,name:x.name,artists:x.artists?.map(a=>a.name),playCount:x.playCount}))}));}catch(e){console.log(JSON.stringify({query:s,error:e.message}));}}})()
+          (async()=>{for(const path of ['/api/search/get/web','/api/search/get','/api/cloudsearch/pc'])for(const method of ['GET','POST']){try{const args=new URLSearchParams({s:'Alan Walker',type:'1',limit:'3',offset:'0'}),u='https://music.163.com'+path;const r=await fetch(u+(method==='GET'?'?'+args:''),{method,body:method==='POST'?args:undefined,headers:{'Referer':'https://music.163.com/'},signal:AbortSignal.timeout(7000)});const t=await r.text();console.log(JSON.stringify({path,method,status:r.status,sample:t.slice(0,2300)}));}catch(e){console.log(JSON.stringify({path,method,error:e.message}));}}})()
           JS
