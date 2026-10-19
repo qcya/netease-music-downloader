@@ -62,7 +62,7 @@ async function client(url) {
 }
 // Synthetic 45-second PCM silence. This verifies file transport/decode, not online music availability.
 async function startFixture() {
-  const http=require('node:http');let failed=false,downloads=0,base='';
+  const http=require('node:http');let failed=false,downloads=0,completed=0,base='';
   const rate=8000,frames=rate*45,pcm=Buffer.alloc(44+frames*2);
   pcm.write('RIFF',0);pcm.writeUInt32LE(pcm.length-8,4);pcm.write('WAVEfmt ',8);
   pcm.writeUInt32LE(16,16);pcm.writeUInt16LE(1,20);pcm.writeUInt16LE(1,22);
@@ -78,13 +78,23 @@ async function startFixture() {
     else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs,trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
     else if(u.pathname==='/song/detail')payload={code:200,songs:songs.filter(x=>(u.searchParams.get('ids')||'').split(',').includes(String(x.id)))};
     else if(u.pathname==='/song/url/v1')payload={code:200,data:[{id:Number(u.searchParams.get('id')),url:base+'/audio.wav',type:'wav',level:'lossless',br:128000}]};
-    else if(u.pathname==='/lyric/new'||u.pathname==='/lyric')payload={code:200,lrc:{lyric:'[00:00.00]自动验收音频\n[00:10.00]第二行验收文字'},tlyric:{lyric:''}};
-    else if(u.pathname==='/audio.wav'){downloads++;res.writeHead(200,{'Content-Type':'audio/wav','Content-Length':pcm.length});res.end(pcm);return;}
+    else if(u.pathname==='/lyric/new'||u.pathname==='/lyric')payload={code:200,lrc:{lyric:'[00:00.00]自动验收音频\n[00:03.00]第二行验收文字'},tlyric:{lyric:'[00:00.00]翻译验收一\n[00:03.00]翻译验收二'}};
+    else if(u.pathname==='/audio.wav'){
+      downloads++;const m=/^bytes=(\d+)-(\d*)$/.exec(req.headers.range||'');
+      const start=m?Number(m[1]):0,end=m&&m[2]?Math.min(Number(m[2]),pcm.length-1):pcm.length-1;
+      if(start> end){res.writeHead(416,{'Content-Range':'bytes */'+pcm.length});res.end();return;}
+      const headers={'Content-Type':'audio/wav','Content-Length':end-start+1,'Accept-Ranges':'bytes'};
+      if(m)headers['Content-Range']=`bytes ${start}-${end}/${pcm.length}`;
+      res.writeHead(m?206:200,headers);
+      const cut=Math.min(start+128044,end+1);res.write(pcm.subarray(start,cut));
+      const timer=setTimeout(()=>{completed++;res.end(pcm.subarray(cut,end+1));},9000);
+      res.on('close',()=>clearTimeout(timer));return;
+    }
     else payload={code:404};
     const body=Buffer.from(JSON.stringify(payload));res.writeHead(200,{'Content-Type':'application/json','Content-Length':body.length});res.end(body);
   });
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));base='http://127.0.0.1:'+server.address().port;
-  return {base,downloads:()=>downloads,offline:()=>{failed=true;},close:async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}};
+  return {base,downloads:()=>downloads,completed:()=>completed,offline:()=>{failed=true;},close:async()=>{server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}};
 }
 
 async function main() {
@@ -171,19 +181,52 @@ async function main() {
     await realClick('.discovery-playlist');
     await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length===32','Recommended playlist did not reach the public metadata service',200);
     await realClick('#home-discover-tab');
+    // Online playback must start while the synthetic response is still unfinished.
+    await realClick('#toggle-desktop-lyrics');
+    await wait('(async()=>{const s=await musicBridge.floatingLyricsStatus();return s.open&&s.visible&&s.loaded;})()','Desktop lyrics did not become visible on explicit enable');
     await realClick('.discovery-play');
-    await wait('document.getElementById("music-audio").currentSrc.startsWith("file:") && !document.getElementById("music-audio").paused','Download-and-play did not decode a local file',250);
-    assert.ok(fixture.downloads()>0,'explicit click must download fixture audio');
-    assert.ok(fs.readdirSync(downloadDir).some(x=>x.endsWith('.wav')),'complete file must exist on disk');
+    await wait('document.getElementById("music-audio").currentSrc.startsWith("music-preview:") && !document.getElementById("music-audio").paused && document.getElementById("music-audio").currentTime>0','Online playback did not start',140);
+    assert.equal(fixture.completed(),0,'must play before complete response arrives');
+    assert.equal(fs.readdirSync(downloadDir).length,0,'online play cannot save a music file');
+    const cache=await c.run('musicBridge.cacheStats()');assert.equal(cache.count,0);assert.equal(cache.httpCacheBytes,0,'Chromium HTTP cache must stay disabled');
+    assert.equal(fs.existsSync(path.join(userData,'lyric-cache')),false,'online lyrics stay in RAM');
+    const pages=await (await fetch('http://127.0.0.1:'+port+'/json/list')).json();
+    const overlay=pages.find(p=>/floating-lyrics\.html/.test(p.url));assert.ok(overlay,'native lyric renderer missing');
+    const lyricClient=await client(overlay.webSocketDebuggerUrl);
+    try {
+      await wait('document.getElementById("player-synced-line").textContent.includes("验收")','Lyric retrieval did not reach player');
+      assert.ok((await lyricClient.run('document.getElementById("lyric").textContent')).includes('验收'));
+      // Minimize the real Windows main window, not a mock element.
+      const {execFileSync}=require('node:child_process');
+      function showMain(n){execFileSync('powershell.exe',['-NoProfile','-Command',
+        "Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public static class WinState { [DllImport(\"user32.dll\")] public static extern bool ShowWindowAsync(IntPtr h,int n); }'; $p=Get-Process -Name MusicDownloader | Where-Object { $_.MainWindowTitle -like '音乐下载器*' } | Select-Object -First 1; if(!$p){throw 'main window missing'}; [WinState]::ShowWindowAsync($p.MainWindowHandle,"+n+")"],{timeout:15000});}
+      showMain(6);
+      try{await wait('document.getElementById("music-audio").currentTime>4','Audio stopped when minimized');
+        assert.ok((await lyricClient.run('document.getElementById("lyric").textContent')).includes('第二行'),'desktop lyric clock must continue when main is minimized');
+        assert.ok((await lyricClient.run('document.getElementById("translate").textContent')).includes('验收二'));
+        assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).visible,true);
+      }finally{showMain(9);}
+      const position=(await c.run('musicBridge.floatingLyricsStatus()')).position;
+      await realClick('#toggle-desktop-lock');assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).locked,true);
+      assert.deepEqual((await c.run('musicBridge.floatingLyricsStatus()')).position,position);
+      await realClick('#toggle-desktop-lock');
+    } finally{lyricClient.close();}
+    await realClick('#toggle-desktop-lyrics');
     await realClick('#toggle-queue');
-    await wait('!document.getElementById("queue-panel").hidden && document.querySelectorAll(".queue-item").length===1','Current queue was not visible');
+    await wait('!document.getElementById("queue-panel").hidden && document.querySelectorAll(".queue-item").length===8','Online recommendation queue missing');
     await realClick('#queue-close');
-    console.log('PASS: packaged discovery API, daily batch, playlist import, explicit download and real local WAV playback, visible queue.');
+    await c.run('document.getElementById("music-audio").pause()');await c.run('musicBridge.stopOnlinePlayback()');
+    console.log('PASS: streaming starts before complete body, zero audio files/HTTP cache, memory lyrics, native overlay visibility and minimized bilingual synchronization, lock preserves position.');
+    // Download remains a separate, explicitly clicked action.
+    await realClick('.discovery-download');
+    await wait('!document.querySelector(".discovery-download").disabled','Explicit download did not finish',250);
+    assert.ok(fs.readdirSync(downloadDir).some(x=>x.endsWith('.wav')),'explicit download must still work');
+    console.log('PASS: explicit Download remains independent of online Play.');
     fixture.offline();
     await realClick('#discovery-refresh');
     await wait('document.getElementById("discovery-state").textContent.includes("缓存推荐") && !document.getElementById("discovery-refresh").disabled','Offline homepage did not show dated cache',200);
     const runtimeInfo=await c.run('musicBridge.appInfo()');
-    assert.equal(runtimeInfo.version,'1.1.0');
+    assert.equal(runtimeInfo.version,'1.1.1');
     console.log('PASS: packaged offline cache fallback retains cards and shows actual cache date; build version',runtimeInfo.version);
     await c.run('document.getElementById("music-audio").pause()');
     // Reload the renderer after writes and verify persisted groups and disabled first-run preferences.

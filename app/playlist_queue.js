@@ -9,7 +9,7 @@
     });
   }
   function reconcile(queue, current, tracks, meta) {
-    if (!queue || ['local', 'discovery-local', 'temporary'].includes(queue.id)) return queue;
+    if (!queue || queue.kind==='online' || ['local', 'discovery-local', 'temporary'].includes(queue.id)) return queue;
     const categories = meta.categories || [], assignments = meta.assignments || {};
     const id = queue.id === 'default' || !categories.some(c => c.id === queue.id) ? 'default' : queue.id;
     const rows = ordered(tracks, meta).filter(name => (assignments[name] || 'default') === id);

@@ -60,6 +60,8 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   retryFavoriteLyrics:id=>ipcRenderer.invoke('favorites:retry-lyrics',id),
   prepareAudio: id => ipcRenderer.invoke('music:prepare', id),
   streamAudio: id => ipcRenderer.invoke('music:stream', id),
+  stopOnlinePlayback:()=>ipcRenderer.invoke('music:stop-stream'),
+  fetchLyricsMemory:id=>ipcRenderer.invoke('music:lyric-memory',id),
   setPlaybackState:playing=>ipcRenderer.invoke('music:playback-state',!!playing),
   fetchLyrics: id => ipcRenderer.invoke('music:lyric', id),
   playLocal: name => ipcRenderer.invoke('local:play', name),

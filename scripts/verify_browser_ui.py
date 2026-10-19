@@ -26,6 +26,8 @@ window.musicBridge=new Proxy({
  listFiles:async()=>tracks,
  discovery:async options=>{window.__calls.push(['discovery',options]);if(window.__offline)throw Error('测试断网');return {ok:true,day:'2026-10-19',poolSize:64,message:'公开精选 · 界面验收测试数据',songs:Array.from({length:8},(_,i)=>({id:String(10000+options.batch*10+i),name:'测试歌曲 '+(options.batch*10+i),artists:'测试歌手',cover_url:''})),playlists:Array.from({length:6},(_,i)=>({id:String(100+i),name:'测试精选歌单 '+i,trackCount:35,cover_url:''}))};},
  discoveryPlaylist:async id=>{window.__calls.push(['playlist',id]);return {tracks:[{id:'7',name:'歌单测试曲',artists:'歌手',duration_seconds:180}],total:1};},
+ streamAudio:async id=>{window.__calls.push(['stream',id]);return {ok:true,url:'',streaming:true};},
+ updateFloatingLyrics:async info=>{window.__lyricPayload=info;return true;},
  download:async ids=>{window.__calls.push(['download',ids]);return {success_count:1,results:[{ok:true,localName:tracks[0].name,path:'/music/'+tracks[0].name}]};},
  playLocal:async name=>{window.__calls.push(['playLocal',name]);return {ok:true,url:'',name,id:null};},
  localLyrics:async()=>({found:false}), songInfo:async()=>null, downloadHistory:async()=>[],
@@ -70,7 +72,12 @@ with sync_playwright() as p:
     assert page.locator('.song-card').count()==1
     page.locator('#home-discover-tab').click()
     page.locator('.discovery-play').first.click()
+    page.wait_for_function('window.__calls.some(x=>x[0]==="stream")')
+    assert page.evaluate('window.__calls.filter(x=>x[0]==="download").length')==0
+    page.locator('.discovery-download').first.click()
     page.wait_for_function('window.__calls.some(x=>x[0]==="download")')
+    page.locator('#toggle-desktop-lyrics').click()
+    page.wait_for_function('window.__lyricPayload && window.__lyricPayload.line.length>0')
     page.evaluate('window.__offline=true')
     page.locator('#discovery-refresh').click()
     page.wait_for_function('document.querySelector("#discovery-state").textContent.includes("测试断网")')
@@ -96,5 +103,5 @@ with sync_playwright() as p:
             rect=page.locator(selector).bounding_box()
             assert rect and rect['x']>=0 and rect['x']+rect['width']<=width, (width,selector,rect)
     assert not errors,errors
-    print(json.dumps({'ok':True,'checks':['no autoplay','daily batch','playlist click','download click','offline retry','1205 files','filter','create playlist','collapse','three viewport sizes'],'consoleErrors':errors},ensure_ascii=False))
+    print(json.dumps({'ok':True,'checks':['no autoplay','daily batch','playlist click','stream does not download','explicit download','desktop lyric feedback','offline retry','1205 files','filter','create playlist','collapse','three viewport sizes'],'consoleErrors':errors},ensure_ascii=False))
     browser.close()

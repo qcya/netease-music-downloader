@@ -1,6 +1,6 @@
 'use strict';
 (function(root){
-  function create({document:doc,bridge,onSong,onPlaylist,onLocalRandom,notify}){
+  function create({document:doc,bridge,onSong,onDownload,onPlaylist,onLocalRandom,notify}){
     const get=id=>doc.getElementById(id);
     let storage;try{storage=root.localStorage;}catch{storage={getItem:()=>null,setItem:()=>{}};}
     const read=(key,fallback)=>{try{return JSON.parse(storage.getItem(key))??fallback;}catch{return fallback;}};
@@ -25,11 +25,12 @@
         const card=el('article','discovery-song');card.dataset.songId=song.id;
         const info=el('div','discovery-song-info'),name=el('strong','',song.name);name.title=song.name;
         info.append(name,el('span','',song.artists||'歌手信息暂缺'));
-        const play=el('button','discovery-play','下载并播放');play.type='button';play.setAttribute('aria-label','下载并播放 '+song.name);
-        play.onclick=async()=>{play.disabled=true;play.textContent='正在准备…';try{await onSong(song);}catch(e){notify(e.message||String(e),true);}finally{play.disabled=false;play.textContent='下载并播放';}};
+        const play=el('button','discovery-play','在线播放');play.type='button';play.setAttribute('aria-label','在线播放 '+song.name);
+        play.onclick=async()=>{play.disabled=true;play.textContent='正在准备…';try{await onSong(song,data.songs);}catch(e){notify(e.message||String(e),true);}finally{play.disabled=false;play.textContent='在线播放';}};
         const skip=el('button','discovery-dismiss','×');skip.type='button';skip.title='暂时不再推荐这首';skip.setAttribute('aria-label','不感兴趣：'+song.name);
         skip.onclick=()=>{excluded=[...new Set([...excluded,song.id])].slice(-500);save('discovery-excluded',excluded);void load();};
-        card.append(artwork(song.cover_url,''),info,play,skip);songs.append(card);
+        const download=el('button','discovery-download','↓');download.type='button';download.title='下载到本地';download.setAttribute('aria-label','下载 '+song.name);download.onclick=async()=>{download.disabled=true;try{await onDownload(song);}finally{download.disabled=false;}};
+        card.append(artwork(song.cover_url,''),info,play,download,skip);songs.append(card);
       }
       if(!songs.children.length)songs.append(el('p','discovery-empty','暂时没有可展示的新歌。试试其他分类，或从本地随机听一首。'));
       for(const list of data.playlists||[]){
