@@ -4,56 +4,24 @@ on:
     branches: ['fix/lyrics-stream-v1.1.1']
     paths: ['.github/workflows/apply-v111.yml']
 permissions:
-  contents: write
+  contents: read
 jobs:
-  repair:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - run: python -m pip install -r skill/requirements.txt pytest
-      - name: Decode tested patch and verify SHA256
-        shell: python
+      - name: Anonymous metadata and media availability
         run: |
-          import pathlib, base64, lzma, hashlib, os, subprocess
-          data=''.join(pathlib.Path(f'.repair-transfer/part{i}.txt').read_text().strip() for i in range(1,4))
-          patch=lzma.decompress(base64.b64decode(data,validate=True))
-          assert hashlib.sha256(patch).hexdigest()=='d7b8c16d23d1bd53412898e16b819d537435c79604e7796095695a2ed5ad486f'
-          p=pathlib.Path(os.environ['RUNNER_TEMP'])/'memory-repair.patch'
-          p.write_bytes(patch)
-          subprocess.run(['git','apply','--unidiff-zero','--check',str(p)],check=True)
-          subprocess.run(['git','apply','--stat',str(p)],check=True)
-          subprocess.run(['git','apply','--unidiff-zero',str(p)],check=True)
-      - name: Full JavaScript and Python regression
-        env:
-          PYTHONPATH: skill/scripts
-          MUSIC_PYTHON_EXE: python
-        run: |
-          npm run check
-          node --test tests/test_*.js
-          python -m pytest -q tests
-      - name: Live anonymous media availability probe
-        continue-on-error: true
-        run: node scripts/probe_online_stream.js
-      - name: Commit tested implementation on isolated branch
-        run: |
-          git rm -r .repair-transfer
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add --all
-          git diff --cached --stat
-          git commit -m 'fix: restore visible desktop lyrics and stream audio without disk cache'
-          git push origin HEAD:fix/lyrics-stream-v1.1.1
-      - name: Archive verified implementation
-        run: git archive --format=zip --output=verified-source.zip HEAD
-      - uses: actions/upload-artifact@v4
-        with:
-          name: memory-stream-source
-          path: verified-source.zip
-          retention-days: 7
+          node <<'JS'
+          const ids=['3392268481','3360869362','2103336805','347230','186016','33448965','22636664','536622304','1397744004','1405304658'];
+          async function inspect(id){
+            for(const route of ['player/url','player/url/v1']){
+              const url='https://music.163.com/api/song/enhance/'+route+'?ids='+encodeURIComponent('['+id+']')+(route.endsWith('/v1')?'&level=standard&encodeType=mp3':'&br=128000');
+              try{const r=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(8000)});const d=await r.json();const row=d.data?.[0];console.log(JSON.stringify({id,route,http:r.status,code:d.code,keys:Object.keys(d),row:row&&{id:row.id,code:row.code,hasURL:!!row.url,type:row.type,trial:row.freeTrialInfo,fee:row.fee,host:row.url?new URL(row.url).host:null},message:d.msg||d.message}));}catch(e){console.log(JSON.stringify({id,route,error:e.message}));}
+            }
+          }
+          (async()=>{await Promise.all(ids.map(inspect));for(const path of ['/api/song/lyric?id=347230&lv=-1&kv=-1&tv=-1','/song/media/outer/url?id=347230.mp3']){try{const r=await fetch('https://music.163.com'+path,{redirect:'manual',signal:AbortSignal.timeout(8000)});const t=await r.text();console.log(JSON.stringify({path,status:r.status,type:r.headers.get('content-type'),location:r.headers.get('location'),sample:t.slice(0,200)}));}catch(e){console.log(e.message);}}})();
+          JS
