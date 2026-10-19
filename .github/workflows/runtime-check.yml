@@ -1,0 +1,68 @@
+name: Electron Runtime Verification
+on:
+  push:
+    branches: ['fix/stream-runtime-v111']
+  pull_request:
+    paths: ['online_media.js', 'scripts/verify_packaged_playlist.js', '.github/workflows/runtime-check.yml']
+permissions:
+  contents: read
+concurrency:
+  group: runtime-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  runtime:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r skill/requirements.txt pytest
+      - run: npm install --no-audit --no-fund
+        env:
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      - name: Instrument media boundaries for diagnosis
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('online_media.js');s=p.read_text(encoding='utf8')
+          s=s.replace('async function handle(req){', "async function handle(req){ console.log('MEDIA request',req.url,req.method,!!req.signal,req.headers?.get?.('range')); ")
+          s=s.replace("const mime=(r.headers.get('content-type')", "console.log('MEDIA response',r.status,Array.from(r.headers)); const mime=(r.headers.get('content-type')")
+          s=s.replace('const first=await timed(()=>reader.read());', "const first=await timed(()=>reader.read()); console.log('MEDIA first',first.done,first.value?.length);")
+          s=s.replace('controller.error(e);c.abort()', "console.error('MEDIA pull error',e);controller.error(e);c.abort()")
+          s=s.replace('}catch(e){c.abort();return new Response', "}catch(e){console.error('MEDIA handler error',e);c.abort();return new Response")
+          p.write_text(s,encoding='utf8')
+          p=Path('scripts/verify_packaged_playlist.js');s=p.read_text(encoding='utf8')
+          s=s.replace('const request = pending.get(message.id);', "if(message.method&&/exceptionThrown|entryAdded|loadingFailed|playerErrorsRaised/.test(message.method))console.log('CDP EVENT',JSON.stringify(message)); const request = pending.get(message.id);")
+          s=s.replace('async function wait(condition, reason,', 'async function wait(condition, reason,')
+          s=s.replace('throw new Error(reason);', "console.log('FAILURE DIAGNOSTIC',await c.run('(()=>{const a=document.getElementById(\"music-audio\");return {src:a.currentSrc,paused:a.paused,ready:a.readyState,network:a.networkState,time:a.currentTime,duration:a.duration,error:a.error&&{code:a.error.code,message:a.error.message},buffered:Array.from({length:a.buffered.length},(_,i)=>[a.buffered.start(i),a.buffered.end(i)]),toasts:document.getElementById(\"toast-container\").textContent,body:document.body.innerText.slice(-2500)}})()')); throw new Error(reason);")
+          s=s.replace('try {\n    async function wait', "try {\n    await c.command('Runtime.enable',{});await c.command('Log.enable',{});await c.command('Network.enable',{});await c.command('Media.enable',{});\n    async function wait")
+          p.write_text(s,encoding='utf8')
+      - name: Real runtime playback and desktop lyrics
+        shell: pwsh
+        env:
+          MUSIC_PYTHON_EXE: python
+        run: |
+          $env:MUSIC_DOWNLOADER_TEST_USER_DATA = Join-Path $env:RUNNER_TEMP 'runtime-user'
+          New-Item -ItemType Directory -Force $env:MUSIC_DOWNLOADER_TEST_USER_DATA | Out-Null
+          Copy-Item node_modules/electron/dist/electron.exe node_modules/electron/dist/MusicDownloader.exe
+          $p=Start-Process node_modules/electron/dist/MusicDownloader.exe -ArgumentList @('.', '--remote-debugging-port=19273','--remote-allow-origins=*','--enable-logging') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
+          try {
+            node scripts/verify_packaged_playlist.js 19273 $env:MUSIC_DOWNLOADER_TEST_USER_DATA
+            if($LASTEXITCODE -ne 0){throw 'Runtime verification failed'}
+          } finally {
+            Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Content runtime-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 70
+            Get-Content runtime-stderr.log -ErrorAction SilentlyContinue | Select-Object -Last 70
+            Get-Content "$env:MUSIC_DOWNLOADER_TEST_USER_DATA/logs/application.log" -ErrorAction SilentlyContinue | Select-Object -Last 30
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runtime-diagnostics
+          path: 'runtime-*.log'
+          retention-days: 7
