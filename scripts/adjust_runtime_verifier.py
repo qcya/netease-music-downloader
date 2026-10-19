@@ -18,7 +18,6 @@ replace("      const cut=Math.min(start+128044,end+1);res.write(pcm.subarray(sta
         else timer=setTimeout(()=>{completed++;res.end(pcm.subarray(cursor,end+1));},9000);
       };
       send();res.on('close',()=>clearTimeout(timer));return;""")
-replace("Get-Process -Name MusicDownloader", 'Get-Process -Name "+processName+"')
 replace("    await realClick('.discovery-play');", "    const streamingClickAt=Date.now();\n    await realClick('.discovery-play');")
 replace("    assert.equal(fixture.completed(),0,'must play before complete response arrives');", "    assert.equal(fixture.completed(),0,'must play before complete response arrives');\n    console.log('STREAM START EVIDENCE',JSON.stringify({elapsedMs:Date.now()-streamingClickAt,completedResponses:fixture.completed(),currentTime:await c.run('document.getElementById(\"music-audio\").currentTime')}));")
 replace("        assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).visible,true);", "        assert.equal((await c.run('musicBridge.floatingLyricsStatus()')).visible,true);\n        const shot=await lyricClient.command('Page.captureScreenshot',{format:'png'});\n        fs.writeFileSync(path.join(userData,'desktop-lyrics-minimized.png'),Buffer.from(shot.data,'base64'));\n        console.log('DESKTOP LYRIC EVIDENCE',JSON.stringify(await c.run('musicBridge.floatingLyricsStatus()')));")
@@ -26,4 +25,7 @@ replace("      throw new Error(reason);", "      console.error('AUDIO FAILURE ST
 replace("  const c = await client(target.webSocketDebuggerUrl);let fixture;", "  const c = await client(target.webSocketDebuggerUrl);let fixture;\n  const initialized='document.readyState===\"complete\" && !!document.querySelector(\".nav-icon svg\") && /就绪/.test(document.getElementById(\"python-label\")?.textContent||\"\")';")
 replace("    await wait('!!document.getElementById(\"playlist-create-category\")','Playlist creation button absent');", "    await wait('!!document.getElementById(\"playlist-create-category\")','Playlist creation button absent');\n    await wait(initialized,'Renderer initialization did not finish before input',150);")
 replace("    await wait('!!window.musicBridge && !!document.getElementById(\"playlist-create-category\")','Renderer did not reload');", "    await wait('!!window.musicBridge && !!document.getElementById(\"playlist-create-category\")','Renderer did not reload');\n    await wait(initialized,'Renderer initialization did not finish after reload',150);")
+start=s.index("      const {execFileSync}=require('node:child_process');")
+end=s.index('      showMain(6);',start)
+s=s[:start]+"      const {setWindowState}=require('./native_test_window');\n      const showMain=n=>setWindowState(processName,n);\n"+s[end:]
 p.write_text(s,encoding='utf8')
