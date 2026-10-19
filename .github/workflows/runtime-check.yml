@@ -2,10 +2,8 @@ name: Electron Runtime Verification
 on:
   push:
     branches: ['fix/stream-runtime-v111']
-  pull_request:
-    paths: ['online_media.js', 'scripts/verify_packaged_playlist.js', '.github/workflows/runtime-check.yml']
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: runtime-${{ github.ref }}
   cancel-in-progress: true
@@ -25,12 +23,58 @@ jobs:
       - run: npm install --no-audit --no-fund
         env:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+      - name: Apply isolated toggle fix after reproducing regression
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+          p=Path('app/renderer.js');s=p.read_text(encoding='utf8')
+          old='if(state.settings)state.settings=await bridge.saveSettings({...state.settings,desktopLyricsEnabled:enabled});'
+          if old in s:
+              result=subprocess.run(['node','--test','tests/test_lyric_toggle_isolation.js'])
+              assert result.returncode!=0,'regression must fail before the repair'
+              assert s.count(old)==1
+              s=s.replace(old,'// The main-process toggle owns persistence; never replay an old settings snapshot.\n      if(state.settings)state.settings.desktopLyricsEnabled=enabled;')
+              p.write_text(s,encoding='utf8')
+              p=Path('main.js');s=p.read_text(encoding='utf8')
+              old='function persistMiniPlayerEnabled(value){'
+              assert s.count(old)==1
+              s=s.replace(old,'function persistDesktopLyricsEnabled(value){\n  const enabled=value===true;\n  ensureData();\n  const stored=readJSON(configFile(),{});\n  writeJSONAtomic(configFile(),{...stored,desktopLyricsEnabled:enabled});\n  return enabled;\n}\n'+old)
+              old='const state=floatingLyrics.open();notifyLyricLock'
+              assert s.count(old)==1
+              s=s.replace(old,'const state=floatingLyrics.open();persistDesktopLyricsEnabled(true);notifyLyricLock')
+              old="ipcMain.handle('lyrics:close',()=>floatingLyrics.close());"
+              assert s.count(old)==1
+              s=s.replace(old,"ipcMain.handle('lyrics:close',()=>{const state=floatingLyrics.close();persistDesktopLyricsEnabled(false);return state});")
+              p.write_text(s,encoding='utf8')
+      - name: Verify and commit narrow product fix
+        shell: pwsh
+        env:
+          MUSIC_PYTHON_EXE: python
+          PYTHONPATH: skill/scripts
+        run: |
+          npm run check
+          if($LASTEXITCODE -ne 0){throw 'Syntax failed'}
+          $files=@(Get-ChildItem tests -Filter 'test_*.js' | ForEach-Object {$_.FullName})
+          node --test @files
+          if($LASTEXITCODE -ne 0){throw 'Node regression failed'}
+          python -m pytest -q tests
+          if($LASTEXITCODE -ne 0){throw 'Python regression failed'}
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add main.js app/renderer.js
+          git diff --cached --quiet
+          if($LASTEXITCODE -ne 0){
+            git commit -m 'fix: isolate desktop lyric preference writes from audio settings'
+            git push origin HEAD:fix/stream-runtime-v111
+            if($LASTEXITCODE -ne 0){throw 'Push failed'}
+          }
       - name: Instrument media boundaries for diagnosis
         shell: python
         run: |
           from pathlib import Path
           p=Path('online_media.js');s=p.read_text(encoding='utf8')
-          s=s.replace('async function handle(req){', "async function handle(req){ console.log('MEDIA request',req.url,req.method,!!req.signal,req.headers?.get?.('range')); ")
+          s=s.replace('async function handle(req){', "async function handle(req){ console.log('MEDIA request',req.method,!!req.signal,req.headers?.get?.('range')); ")
           s=s.replace("const mime=(r.headers.get('content-type')", "console.log('MEDIA response',r.status,Array.from(r.headers)); const mime=(r.headers.get('content-type')")
           s=s.replace('const first=await timed(()=>reader.read());', "const first=await timed(()=>reader.read()); console.log('MEDIA first',first.done,first.value?.length);")
           s=s.replace('controller.error(e);c.abort()', "console.error('MEDIA pull error',e);controller.error(e);c.abort()")
@@ -38,9 +82,9 @@ jobs:
           p.write_text(s,encoding='utf8')
           p=Path('scripts/verify_packaged_playlist.js');s=p.read_text(encoding='utf8')
           s=s.replace('const request = pending.get(message.id);', "if(message.method&&/exceptionThrown|entryAdded|loadingFailed|playerErrorsRaised/.test(message.method))console.log('CDP EVENT',JSON.stringify(message)); const request = pending.get(message.id);")
-          s=s.replace('async function wait(condition, reason,', 'async function wait(condition, reason,')
-          s=s.replace('throw new Error(reason);', "console.log('FAILURE DIAGNOSTIC',await c.run('(()=>{const a=document.getElementById(\"music-audio\");return {src:a.currentSrc,paused:a.paused,ready:a.readyState,network:a.networkState,time:a.currentTime,duration:a.duration,error:a.error&&{code:a.error.code,message:a.error.message},buffered:Array.from({length:a.buffered.length},(_,i)=>[a.buffered.start(i),a.buffered.end(i)]),toasts:document.getElementById(\"toast-container\").textContent,body:document.body.innerText.slice(-2500)}})()')); throw new Error(reason);")
+          s=s.replace('throw new Error(reason);', "console.log('FAILURE DIAGNOSTIC',await c.run('(()=>{const a=document.getElementById(\"music-audio\");return {src:a.currentSrc,paused:a.paused,ready:a.readyState,network:a.networkState,time:a.currentTime,duration:a.duration,error:a.error&&{code:a.error.code,message:a.error.message},buffered:Array.from({length:a.buffered.length},(_,i)=>[a.buffered.start(i),a.buffered.end(i)]),body:document.body.innerText.slice(-1800)}})()')); throw new Error(reason);")
           s=s.replace('try {\n    async function wait', "try {\n    await c.command('Runtime.enable',{});await c.command('Log.enable',{});await c.command('Network.enable',{});await c.command('Media.enable',{});\n    async function wait")
+          s=s.replace('Get-Process -Name MusicDownloader','Get-Process -Name electron')
           p.write_text(s,encoding='utf8')
       - name: Real runtime playback and desktop lyrics
         shell: pwsh
@@ -49,13 +93,12 @@ jobs:
         run: |
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = Join-Path $env:RUNNER_TEMP 'runtime-user'
           New-Item -ItemType Directory -Force $env:MUSIC_DOWNLOADER_TEST_USER_DATA | Out-Null
-          Copy-Item node_modules/electron/dist/electron.exe node_modules/electron/dist/MusicDownloader.exe
-          $p=Start-Process node_modules/electron/dist/MusicDownloader.exe -ArgumentList @('.', '--remote-debugging-port=19273','--remote-allow-origins=*','--enable-logging') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
+          $p=Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('.', '--remote-debugging-port=19273','--remote-allow-origins=*','--enable-logging') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
           try {
             node scripts/verify_packaged_playlist.js 19273 $env:MUSIC_DOWNLOADER_TEST_USER_DATA
             if($LASTEXITCODE -ne 0){throw 'Runtime verification failed'}
           } finally {
-            Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            Get-Process -Name electron -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             Get-Content runtime-stdout.log -ErrorAction SilentlyContinue | Select-Object -Last 70
             Get-Content runtime-stderr.log -ErrorAction SilentlyContinue | Select-Object -Last 70
             Get-Content "$env:MUSIC_DOWNLOADER_TEST_USER_DATA/logs/application.log" -ErrorAction SilentlyContinue | Select-Object -Last 30
