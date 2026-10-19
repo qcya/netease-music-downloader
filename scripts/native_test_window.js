@@ -4,6 +4,8 @@ const {execFileSync}=require('node:child_process');
 function setWindowState(processName,state){
  if(!['electron','MusicDownloader'].includes(processName)||![6,9].includes(state))throw Error('Invalid test window selector');
  const script=`
+$ErrorActionPreference='Stop'
+$ProgressPreference='SilentlyContinue'
 Add-Type -TypeDefinition @'
 using System;
 using System.Text;
@@ -41,7 +43,7 @@ for($i=0;$i -lt 60;$i++){
 if([MusicWindowTest]::IsIconic($h) -ne $wanted){throw 'Native window state did not change'}
 @{handle=$h.ToString();minimized=[MusicWindowTest]::IsIconic($h)} | ConvertTo-Json -Compress
 `;
- const output=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:15000,encoding:'utf8'});
+ const output=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',Buffer.from(script,'utf16le').toString('base64')],{timeout:15000,encoding:'utf8',stdio:['ignore','pipe','pipe']});
  const result=JSON.parse(output.trim());console.log('NATIVE WINDOW STATE',result);return result;
 }
 module.exports={setWindowState};
