@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -17,6 +17,9 @@ const {normalizePosition}=require('./lyric_position.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
+const {readJSON,writeJSONAtomic}=require('./durable_json.js');
+const {createLibraryRoots}=require('./library_roots.js');
+const {createDiscoveryService}=require('./discovery_service.js');
 
 // 开发版使用独立的 Windows 任务栏分组，避免复用旧版 EXE 的固定图标。
 const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
@@ -136,13 +139,6 @@ async function refreshFavoriteLyrics(id) {
 }
 
 function validId(id) { return /^\d{1,20}$/.test(String(id || '')); }
-function writeJSONAtomic(file, value) {
-  fs.mkdirSync(path.dirname(file), {recursive:true});
-  const tmp = file + '.' + process.pid + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(value, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-}
-function readJSON(file, fallback) {try {return JSON.parse(fs.readFileSync(file, 'utf8'));} catch{return fallback;}}
 function inDirectory(directory, file) {
   const root = path.resolve(directory) + path.sep;
   const full = path.resolve(file);
@@ -150,8 +146,10 @@ function inDirectory(directory, file) {
 }
 /** A single playlist shares the download directory; [歌单] is a real filename prefix.
  * Legacy multiple-playlist JSON is merged without deleting files. */
+const libraryRoots=createLibraryRoots({getFile:()=>path.join(app.getPath('userData'),'library-roots.json'),getCurrent:()=>config().downloadDir});
 const localPlaylist=createPlaylistStore({
   getDir:()=>config().downloadDir,
+  getDirs:()=>libraryRoots.list(),
   getIndexFile:()=>playlistsFile(),
   readJSON,writeJSONAtomic
 });
@@ -159,6 +157,22 @@ function availableLocalTrack(name){return localPlaylist.localFile(name)}
 const categoryStore=createCategoryStore({getFile:playlistCategoriesFile,
   getTracks:()=>localPlaylist.list()[0].tracks,readJSON,writeJSONAtomic});
 function readPlaylists(){return localPlaylist.list()}
+const discovery=createDiscoveryService({
+  getFile:()=>path.join(app.getPath('userData'),'discovery-cache.json'),
+  getBases:()=>config().apiBases,
+  fetchJSON:async(url,options)=>{
+    const response=await (net?.fetch?net.fetch(url,options):fetch(url,options));
+    if(!response.ok)throw new Error('推荐接口暂不可用');
+    if(Number(response.headers.get('content-length'))>3000000)throw new Error('推荐接口响应过大');
+    const body=await response.text();if(body.length>3000000)throw new Error('推荐接口响应过大');
+    return JSON.parse(body);
+  }
+});
+function assertMainSender(event){
+  // Real Electron IPC always supplies an event; omitted only in direct unit tests.
+  if(!event)return;
+  if(!win||event.sender!==win.webContents||event.senderFrame&&win.webContents.mainFrame&&event.senderFrame!==win.webContents.mainFrame)throw new Error('此操作仅允许主窗口调用');
+}
 function changeLocalPlaylist(id,name,add){
   return add?localPlaylist.add(id,name):localPlaylist.remove(id,name);
 }
@@ -324,8 +338,8 @@ function writeConfig(value) {
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
   const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:value.desktopLyricsEnabled===true,miniPlayerEnabled:config().miniPlayerEnabled,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
   ensureData();
-  fs.writeFileSync(configFile() + '.tmp', JSON.stringify(result, null, 2), 'utf8');
-  fs.renameSync(configFile() + '.tmp', configFile());
+  if(path.resolve(config().downloadDir)!==path.resolve(dir))libraryRoots.remember(config().downloadDir,dir);
+  writeJSONAtomic(configFile(),result);
   downloadQueue.setLimit(parallelDownloads);
   floatingLyrics.applySettings(result.floatingLyrics);
   return result;
@@ -557,7 +571,7 @@ async function beginStream(id){
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.0.10', icon: appIcon(), backgroundColor: '#FFFAFD',
+    title: '音乐下载器 v1.1.0', icon: appIcon(), backgroundColor: '#FFFAFD',
     show: false, autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -651,7 +665,11 @@ app.whenReady().then(() => {
   ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragEnd()});
   ipcMain.on?.('lyrics:context-menu',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.showMenu()});
   ipcMain.handle('settings:get', () => config());
-  ipcMain.handle('settings:set', (_e, value) => writeConfig(value));
+  ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
+  ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
+  ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
+  ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return discovery.get(options||{})});
+  ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('system:choose-directory', async () => {
     const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
     return r.canceled ? null : r.filePaths[0];
@@ -666,6 +684,7 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:rename-default',(_e,name)=>categoryStore.renameDefault(name));
   ipcMain.handle('playlists:categories-delete',(_e,id)=>categoryStore.remove(id));
   ipcMain.handle('playlists:categories-move',(_e,name,id)=>categoryStore.move(name,id));
+  ipcMain.handle('playlists:organize',(_e,order,name,id)=>{assertMainSender(_e);return categoryStore.organize(order,name,id)});
   ipcMain.handle('mini:open',()=>{const state=miniPlayer.open();persistMiniPlayerEnabled(true);return state});
   ipcMain.handle('mini:close',()=>{const state=miniPlayer.close();persistMiniPlayerEnabled(false);return state});
   ipcMain.handle('mini:state',(_e,state)=>miniPlayer.update(state));
@@ -735,7 +754,7 @@ app.whenReady().then(() => {
     }));
     const success=results.filter(row=>row.ok).length;logger.info('download_result',`success=${success} failed=${valid.length-success}`);
     return {ok:success===valid.length,requested_count:valid.length,success_count:success,
-      failed_count:valid.length-success,results,output_dir:s.downloadDir};
+      failed_count:valid.length-success,results:results.map(row=>({...row,localName:row.ok&&typeof row.path==='string'?path.basename(row.path):null})),output_dir:s.downloadDir};
   });
   ipcMain.handle('download:history',()=>[...downloadHistory.values()].map(row=>({...row,progress:row.status==='running'?row.progress:null})).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300));
   ipcMain.handle('download:cancel',(_e,id)=>{if(!validId(id))throw new Error('无效歌曲 ID');return downloadQueue.cancelSong(id)});
@@ -829,12 +848,9 @@ app.whenReady().then(() => {
     return true;
   });
   ipcMain.handle('local:list', async () => {
-    const dir = config().downloadDir;
-    if (!fs.existsSync(dir)) return [];
     const members=new Set(readPlaylists()[0].tracks);
-    return fs.readdirSync(dir,{withFileTypes:true}).filter(x => x.isFile() && AUDIO_EXTS.has(path.extname(x.name).toLowerCase()))
-      .map(x => ({name:x.name, size: fs.statSync(path.join(dir,x.name)).size, inPlaylist:members.has(x.name)||localPlaylist.tagged(x.name)}))
-      .sort((a,b) => a.name.localeCompare(b.name,'zh-CN')).slice(0,1000);
+    const files=await libraryRoots.files();
+    return files.map(row=>({...row,inPlaylist:members.has(row.name)||localPlaylist.tagged(row.name)}));
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 }).catch(e=>reportStartupFailure('Electron 初始化失败',e));

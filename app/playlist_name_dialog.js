@@ -19,6 +19,8 @@
       throw new Error('歌单名称弹窗缺少必要的页面元素');
     }
 
+    const shell = doc.querySelector?.('.app-shell');
+    let oldInert = false;
     let active = null;
     let saving = false;
     function busy(value) {
@@ -33,6 +35,7 @@
       const {resolve, previousFocus} = active;
       active = null;
       overlay.hidden = true;
+      if(shell)shell.inert=oldInert;
       error.textContent = '';
       busy(false);
       previousFocus?.focus?.();
@@ -45,7 +48,16 @@
       if (event.target === overlay && !saving) close(null);
     });
     overlay.addEventListener('keydown', event => {
-      if (event.key !== 'Escape' || !active) return;
+      if(!active)return;
+      if(event.key==='Tab'){
+        const controls=[input,cancel,save].filter(el=>!el.disabled);
+        if(!controls.length){event.preventDefault();return;}
+        const first=controls[0],last=controls.at(-1);
+        if(event.shiftKey&&doc.activeElement===first){event.preventDefault();last.focus();}
+        else if(!event.shiftKey&&doc.activeElement===last){event.preventDefault();first.focus();}
+        return;
+      }
+      if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
       if (!saving) close(null);
@@ -80,6 +92,7 @@
         input.value = String(initialName);
         error.textContent = '';
         overlay.hidden = false;
+        if(shell){oldInert=shell.inert;shell.inert=true;}
         const promise = new Promise(resolve => {
           active = {resolve, onSubmit, confirmText, previousFocus};
         });

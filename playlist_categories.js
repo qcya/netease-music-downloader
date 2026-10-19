@@ -9,6 +9,8 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
   };
   function read(){
     const raw=readJSON(getFile(),{});
+    if(!raw||typeof raw!=='object'||Array.isArray(raw))throw new Error('歌单数据格式损坏，原文件已保留');
+    if(raw.categories!==undefined&&!Array.isArray(raw.categories))throw new Error('歌单分类格式损坏，原文件已保留');
     const rows=Array.isArray(raw?.categories)?raw.categories:[];
     const categories=[],ids=new Set(),names=new Set();
     for(const item of rows){
@@ -24,8 +26,8 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
     // The legacy unclassified bucket becomes a user-renamable default list.
     const defaultName=typeof raw?.defaultName==='string'?raw.defaultName:'未分类';
     let safeDefaultName='未分类';try{safeDefaultName=tidyName(defaultName)}catch{}
-    const data={categories,assignments,defaultName:safeDefaultName};
-    if(JSON.stringify(data)!==JSON.stringify(raw))writeJSONAtomic(getFile(),data);
+    const order=Array.isArray(raw.order)?[...new Set(raw.order.filter(name=>tracks.has(name)))]:[];
+    const data={categories,assignments,defaultName:safeDefaultName,order};
     return data;
   }
   function persist(data){writeJSONAtomic(getFile(),data);return data}
@@ -60,6 +62,16 @@ function createCategoryStore({getFile,getTracks,readJSON,writeJSONAtomic}){
     if(id===null)delete data.assignments[name];else data.assignments[name]=id;
     return persist(data);
   }
-  return {list,create,rename,renameDefault,remove,move};
+  function organize(order,name=null,id=null){
+    const tracks=getTracks(),data=read();
+    if(!Array.isArray(order)||order.length!==tracks.length||new Set(order).size!==order.length||order.some(n=>!tracks.includes(n)))throw new Error('歌单排序内容已过期，请刷新后重试');
+    if(name!==null){
+      if(!tracks.includes(name))throw new Error('歌曲不在歌单中');
+      if(id!==null&&!data.categories.some(c=>c.id===id))throw new Error('目标歌单不存在');
+      if(id===null)delete data.assignments[name];else data.assignments[name]=id;
+    }
+    data.order=[...order];return persist(data);
+  }
+  return {list,create,rename,renameDefault,remove,move,organize};
 }
 module.exports={createCategoryStore};

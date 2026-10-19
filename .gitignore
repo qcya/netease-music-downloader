@@ -61,3 +61,6 @@ Thumbs.db
 
 # Locally supplied immersive background video; do not publish media assets
 assets/immersive-background.mp4
+
+# Generated build identity
+/build-info.json

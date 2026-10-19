@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: music-media: https://*.music.126.net https://*.music.163.com; style-src 'self'; script-src 'self'; connect-src 'none'; media-src music-media: music-preview: file:; object-src 'none'; base-uri 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>音乐下载器 v1.0.10</title>
+  <title>音乐下载器 v1.1.0</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="immersive.css">
   <link rel="stylesheet" href="lyric-glow.css">
+  <link rel="stylesheet" href="discovery.css">
 </head>
 <body>
   <div class="app-shell">
@@ -35,8 +36,8 @@
 
       <section id="view-home" class="view active" aria-labelledby="search-title">
         <div class="search-header">
-          <div class="search-title" id="search-title">想听什么歌？</div>
-          <p>搜索歌曲，选择喜欢的版本，保存为本地音频。</p>
+          <div class="search-title" id="search-title">发现音乐</div>
+          <p>不必先想好歌名，遇见新的喜欢；也可以直接搜索。</p>
         </div>
         <form class="search-container" id="search-form">
           <div class="search-input-wrap">
@@ -45,8 +46,29 @@
           </div>
           <button class="search-action" id="search-action" type="submit" aria-label="搜索歌曲"><span data-icon="search"></span></button>
         </form>
+        <div class="home-tabs" role="tablist" aria-label="首页内容">
+          <button id="home-discover-tab" type="button" role="tab" aria-controls="discovery-panel" aria-selected="true">为你发现</button>
+          <button id="home-search-tab" type="button" role="tab" aria-controls="search-panel" aria-selected="false">搜索与导入</button>
+          <span class="home-tab-note">公开精选 · 无需登录</span>
+        </div>
+        <section id="discovery-panel" class="discovery-panel" role="tabpanel" aria-labelledby="home-discover-tab">
+          <div class="discovery-welcome">
+            <div><div class="discovery-eyebrow">今日发现 <span id="discovery-date"></span></div><h2>今天，换点新声音。</h2></div>
+            <div class="discovery-welcome-actions"><button type="button" class="primary" id="discovery-local">随机听一首本地音乐</button><button type="button" id="discovery-refresh">重新获取推荐</button></div>
+          </div>
+          <div class="discovery-categories" id="discovery-categories" aria-label="推荐分类">
+            <button type="button" data-category="all" aria-pressed="true">全部</button><button type="button" data-category="chinese" aria-pressed="false">华语</button><button type="button" data-category="japanese" aria-pressed="false">日语</button><button type="button" data-category="acg" aria-pressed="false">动漫</button><button type="button" data-category="instrumental" aria-pressed="false">轻音乐</button>
+          </div>
+          <p id="discovery-state" class="discovery-state" aria-live="polite">确认首次使用说明后，即可获取公开推荐。</p>
+          <div class="discovery-section-heading"><h3>精选歌单</h3><span>点开查看，选择喜欢的歌曲下载</span></div>
+          <div id="discovery-playlists" class="discovery-playlists"></div>
+          <div class="discovery-section-heading"><h3>今天听点不一样的</h3><span id="discovery-pool"></span><button type="button" id="discovery-next">换一批 ↻</button></div>
+          <div id="discovery-songs" class="discovery-songs"></div>
+          <button id="discovery-reset" class="discovery-reset" type="button">清除“不感兴趣”记录</button>
+        </section>
+        <div id="search-panel" class="search-panel" role="tabpanel" aria-labelledby="home-search-tab" hidden>
         <div class="results-header">
-          <div class="results-heading"><span class="results-icon" data-icon="music"></span><h2>搜索结果</h2><span class="results-count" id="results-count">等待搜索</span></div>
+          <div class="results-heading"><span class="results-icon" data-icon="music"></span><h2 id="search-results-title">搜索结果</h2><span class="results-count" id="results-count">等待搜索</span></div>
           <div class="results-actions">
             <button class="subtle-action" id="playlist-toggle" type="button"><span data-icon="list"></span> 导入歌单</button>
             <button class="soft-action" id="download-selected" type="button" disabled><span data-icon="download"></span> 下载已选 <b id="selected-count">0</b></button>
@@ -68,6 +90,7 @@
             </div>
           </div>
         </div>
+        </div>
         <div class="download-activity" id="download-activity" hidden aria-live="polite">
           <div class="download-activity-title" id="download-activity-label">下载任务</div>
           <div class="download-activity-items" id="download-activity-items"></div>
@@ -82,7 +105,7 @@
       </section>
       <section id="view-local" class="view" aria-labelledby="local-title">
         <div class="page-header"><div class="eyebrow">LOCAL LIBRARY</div><h1 id="local-title">本地音乐</h1><p>文件名前有 [歌单] 表示已加入我的歌单。删除操作会移入回收站，不会直接永久删除。</p></div>
-        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button><button type="button" class="soft-action" id="import-local-files">导入音乐文件</button><button type="button" class="soft-action" id="import-local-folder">导入文件夹</button></div><p class="settings-hint">导入会复制音乐和同名歌词到下载目录，不移动你原来的文件。</p>
+        <div class="page-actions"><button type="button" class="soft-action" id="local-open"><span data-icon="folder"></span> 打开下载目录</button><button type="button" class="soft-action" id="import-local-files">导入音乐文件</button><button type="button" class="soft-action" id="import-local-folder">导入文件夹</button><input type="search" id="local-filter" class="local-filter" placeholder="筛选本地歌曲…" aria-label="筛选本地歌曲"><span id="local-count" class="library-count"></span></div><p class="settings-hint">导入会复制音乐和同名歌词到下载目录，不移动你原来的文件。</p>
         <div class="local-list" id="local-list"><div class="empty-simple">还没有找到本地音乐文件。</div></div>
         <details id="local-downloads" class="local-downloads" hidden>
           <summary class="local-downloads-section"><strong>下载列表</strong><span id="download-list-summary">待处理任务</span><span class="download-chevron" aria-hidden="true">▾</span></summary>
@@ -90,9 +113,9 @@
         </details>
       </section>
       <section id="view-settings" class="view" aria-labelledby="settings-title">
-        <div class="page-header"><div class="eyebrow">PREFERENCES</div><h1 id="settings-title">下载设置</h1><p>保存位置和音质偏好，仅影响后续下载。</p></div>
+        <div class="page-header"><div class="eyebrow">PREFERENCES</div><h1 id="settings-title">设置</h1><p>保存位置和音质偏好，仅影响后续下载。</p></div>
         <div class="settings-card">
-          <label for="download-dir">音乐保存目录</label>
+          <div class="build-info-row"><span id="build-info">音乐下载器</span><button type="button" class="soft-action" id="open-release-page">获取新版</button></div><label for="download-dir">新下载的音乐保存目录</label>
           <div class="input-button"><input id="download-dir" readonly aria-label="音乐保存目录"><button id="pick-dir" type="button">选择目录</button></div>
                     <p class="settings-hint">默认选择最高可获得的音质；没有 FLAC / WAV 时自动尝试 MP3，并明确显示降级提醒。</p>
           <label for="parallel-downloads">同时下载歌曲数</label>
@@ -176,13 +199,16 @@
       </section>
       <div class="player-dock" id="player-dock">
         <button type="button" class="player-cover player-cover-button" id="open-immersive" title="打开沉浸歌词" aria-label="打开沉浸式歌词播放器"><img id="player-cover-art" src="../assets/avatar.png" alt="正在播放的专辑封面"></button>
-        <div class="player-info"><div class="player-song" id="player-song">还没有播放歌曲</div><div class="player-artist" id="player-artist">点选搜索结果中的播放按钮</div></div>
+        <div class="player-info"><div class="player-song" id="player-song">还没有播放歌曲</div><div class="player-artist" id="player-artist">下载或导入后，从本地播放</div></div>
         <div class="player-center">
-          <div class="player-buttons"><button type="button" class="player-skip" id="player-prev" title="上一首" aria-label="上一首">◀◀</button><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><button type="button" class="player-skip" id="player-next" title="下一首" aria-label="下一首">▶▶</button><select class="player-mode" id="player-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option><option value="repeat-one">单曲循环</option><option value="stop-after">播放完停止</option></select><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span><div class="desktop-lyric-actions"><button type="button" class="desktop-lyrics-toggle" id="toggle-desktop-lyrics" aria-pressed="false"><span class="toggle-indicator" aria-hidden="true"></span><span id="desktop-lyrics-button-text">桌面歌词 · 关</span></button><button type="button" class="desktop-lyrics-lock" id="toggle-desktop-lock" aria-pressed="false" aria-label="锁定桌面歌词" title="锁定后鼠标穿透">锁定歌词</button><button type="button" class="mini-player-toggle" id="toggle-mini-player" aria-pressed="false">迷你 · 关</button></div></div>
+          <div class="player-buttons"><button type="button" class="player-skip" id="player-prev" title="上一首" aria-label="上一首">◀◀</button><button type="button" class="player-main-btn" id="player-toggle" aria-label="播放或暂停"><span data-icon="play"></span></button><button type="button" class="player-skip" id="player-next" title="下一首" aria-label="下一首">▶▶</button><select class="player-mode" id="player-mode" aria-label="歌单播放模式" title="歌单播放模式"><option value="sequence">顺序</option><option value="shuffle">随机</option><option value="reverse">倒序</option><option value="repeat-one">单曲循环</option><option value="stop-after">播放完停止</option></select><span class="player-synced-line" id="player-synced-line">歌词将显示在这里</span></div>
           <div class="player-progress"><span id="time-current">0:00</span><input type="range" id="player-seek" min="0" max="1000" value="0" step="1" aria-label="播放进度"><span id="time-duration">0:00</span></div>
         </div>
-        <div class="player-volume"><span data-icon="volume"></span><input id="player-volume" type="range" min="0" max="100" value="75" aria-label="音量"></div>
+        <div class="desktop-lyric-actions"><button type="button" class="desktop-lyrics-toggle" id="toggle-desktop-lyrics" aria-pressed="false"><span class="toggle-indicator" aria-hidden="true"></span><span id="desktop-lyrics-button-text">桌面歌词 · 关</span></button><button type="button" class="desktop-lyrics-lock" id="toggle-desktop-lock" aria-pressed="false" aria-label="锁定桌面歌词" title="锁定后鼠标穿透">锁定歌词</button><button type="button" class="mini-player-toggle" id="toggle-mini-player" aria-pressed="false">迷你 · 关</button><button type="button" id="toggle-queue" class="queue-toggle" aria-expanded="false" aria-controls="queue-panel">播放队列</button><div class="player-volume"><span data-icon="volume"></span><input id="player-volume" type="range" min="0" max="100" value="75" aria-label="音量"></div></div>
       </div>
+      <section id="queue-panel" class="queue-panel" hidden aria-label="当前播放队列">
+        <div class="queue-heading"><strong>当前播放队列</strong><button type="button" id="queue-close">关闭</button></div><p id="queue-count" class="queue-count"></p><div id="queue-items" class="queue-items"></div>
+      </section>
       <audio id="music-audio" preload="metadata"></audio>
       <div id="first-run" class="first-run-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="first-run-title">
         <div class="first-run-card disclaimer-only"><div class="first-run-symbol">✦</div><h2 id="first-run-title">免责声明</h2>
@@ -211,6 +237,8 @@
   <script src="lyric_navigation.js"></script>
   <script src="playback_navigation.js"></script>
   <script src="playlist_name_dialog.js"></script>
+  <script src="playlist_queue.js"></script>
+  <script src="discovery.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>
