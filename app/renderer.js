@@ -642,7 +642,15 @@
           if(state.busy){showToast('正在读取歌曲，请等当前操作结束。');return;}
           showHomeContent('search');$('#playlist-input').value=list.id;
           $('#search-results-title').textContent=list.name;
-          await playlist();
+          setBusy(true,'正在读取公开歌单…');
+          try{
+            const res=await bridge.discoveryPlaylist(list.id);
+            showTracks(res.tracks,res.total);state.playlist=true;
+            $('#page-prev').disabled=true;$('#page-next').disabled=true;$('#page-label').textContent='歌单曲目';
+            if(res.possibly_incomplete)showToast('公开接口只返回了部分歌曲，当前展示 '+res.tracks.length+' 首。');
+            setStatus('已读取「'+list.name+'」：'+res.tracks.length+' 首，可选择下载。','ok');
+          }catch(e){showToast('歌单读取失败：'+errMessage(e),true);setStatus('歌单读取失败，可返回发现页重试。','error');}
+          finally{setBusy(false);}
         }});
     }
     if(state.settings?.disclaimerAcceptedVersion)void discoveryUI.init();

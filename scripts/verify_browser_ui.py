@@ -25,7 +25,7 @@ window.musicBridge=new Proxy({
  playlistRenameDefault:async name=>{meta.defaultName=name;},
  listFiles:async()=>tracks,
  discovery:async options=>{window.__calls.push(['discovery',options]);if(window.__offline)throw Error('测试断网');return {ok:true,day:'2026-10-19',poolSize:64,message:'公开精选 · 界面验收测试数据',songs:Array.from({length:8},(_,i)=>({id:String(10000+options.batch*10+i),name:'测试歌曲 '+(options.batch*10+i),artists:'测试歌手',cover_url:''})),playlists:Array.from({length:6},(_,i)=>({id:String(100+i),name:'测试精选歌单 '+i,trackCount:35,cover_url:''}))};},
- playlist:async id=>{window.__calls.push(['playlist',id]);return {tracks:[{id:'7',name:'歌单测试曲',artists:'歌手',duration_seconds:180}],total:1};},
+ discoveryPlaylist:async id=>{window.__calls.push(['playlist',id]);return {tracks:[{id:'7',name:'歌单测试曲',artists:'歌手',duration_seconds:180}],total:1};},
  download:async ids=>{window.__calls.push(['download',ids]);return {success_count:1,results:[{ok:true,localName:tracks[0].name,path:'/music/'+tracks[0].name}]};},
  playLocal:async name=>{window.__calls.push(['playLocal',name]);return {ok:true,url:'',name,id:null};},
  localLyrics:async()=>({found:false}), songInfo:async()=>null, downloadHistory:async()=>[],

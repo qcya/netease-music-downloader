@@ -669,6 +669,7 @@ app.whenReady().then(() => {
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
   ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return discovery.get(options||{})});
+  ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('system:choose-directory', async () => {
     const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
     return r.canceled ? null : r.filePaths[0];

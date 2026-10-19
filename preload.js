@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   appInfo:()=>ipcRenderer.invoke('app:info'),
   openReleasePage:()=>ipcRenderer.invoke('app:release-page'),
   discovery:options=>ipcRenderer.invoke('discovery:get',options),
+  discoveryPlaylist:id=>ipcRenderer.invoke('discovery:playlist',id),
   playlistOrganize:(order,name=null,id=null)=>ipcRenderer.invoke('playlists:organize',order,name,id),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   saveSettings: s => ipcRenderer.invoke('settings:set',s),

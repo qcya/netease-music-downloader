@@ -169,7 +169,7 @@ async function main() {
     await realClick('#discovery-next');
     await wait('document.querySelector(".discovery-song")?.dataset.songId!=='+JSON.stringify(first),'Next batch did not change selection');
     await realClick('.discovery-playlist');
-    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length===32','Recommended playlist did not reach actual Python playlist loader',200);
+    await wait('!document.getElementById("search-panel").hidden && document.querySelectorAll(".song-card").length===32','Recommended playlist did not reach the public metadata service',200);
     await realClick('#home-discover-tab');
     await realClick('.discovery-play');
     await wait('document.getElementById("music-audio").currentSrc.startsWith("file:") && !document.getElementById("music-audio").paused','Download-and-play did not decode a local file',250);
