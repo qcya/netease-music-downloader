@@ -39,8 +39,9 @@ function createPlaylistReader({getBases,fetchJSON,normalizeSong,now=Date.now}) {
         total=Math.max(total,Number(d.trackCount)||0,listed.length,tracks.size);
       }
       absorbDetail(detail);
-      // The classic endpoint often only contains a preview. v3/v6 expose its ID catalog.
-      if(direct&&total>tracks.size&&ids.length<total){
+      // The legacy endpoint may report trackCount=10 as well as returning ten tracks.
+      // Verify its catalog regardless of that misleading preview count.
+      if(direct&&(!ids.length||ids.length<total)){
         for(const endpoint of ['/v6/playlist/detail','/v3/playlist/detail']){
           const d=await request(endpoint,{id,n:100000,s:0});absorbDetail(d?.playlist||d?.result);
           if(ids.length>=total)break;
@@ -82,7 +83,7 @@ function createPlaylistReader({getBases,fetchJSON,normalizeSong,now=Date.now}) {
         const rows=[...paged.values()].slice(0,limit),expected=knownTotal||cursor;
         if(rows.length){const result={tracks:rows,total:expected,source:base+'/playlist/track/all',possibly_incomplete:stalled||rows.length<Math.min(limit,Math.max(0,expected-offset))||offset+limit<expected,offset,limit,hasMore:offset+limit<expected};if(!best||rows.length>best.tracks.length)best=result;if(!result.possibly_incomplete)return result;}
       }
-      if(!best&&tracks.size){const rows=[...tracks.values()].slice(offset,offset+limit);best={tracks:rows,total,source:base+'/playlist/detail',possibly_incomplete:rows.length<total,offset,limit,hasMore:offset+limit<total};}
+      if(!best&&tracks.size){const rows=[...tracks.values()].slice(offset,offset+limit);best={tracks:rows,total,source:base+'/playlist/detail',possibly_incomplete:(direct&&!ids.length)||rows.length<total,offset,limit,hasMore:offset+limit<total};}
       if(best&&!best.possibly_incomplete)return best;
     }
     if(best)return best;
