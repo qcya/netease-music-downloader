@@ -25,10 +25,15 @@ jobs:
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
       - name: Verify isolated regression
         run: node --test tests/test_lyric_toggle_isolation.js tests/test_online_memory.js
+      - name: Keep comparison process alive between windows
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('scripts/probe_stream_buffer.js')
+          p.write_text(p.read_text(encoding='utf8').replace('let base,media,server;',"app.on('window-all-closed',()=>{});let base,media,server;"),encoding='utf8')
       - name: Compare Chromium demux startup with direct HTTP control
         shell: pwsh
         run: |
-          node -e "const fs=require('fs'),p='scripts/probe_stream_buffer.js';fs.writeFileSync(p,fs.readFileSync(p,'utf8').replace('let base,media,server;',\"app.on('window-all-closed',()=>{});let base,media,server;\"));"
           $p=Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('scripts/probe_stream_buffer.js') -RedirectStandardError runtime-stderr.log -RedirectStandardOutput runtime-stdout.log -PassThru
           try {
             if(!$p.WaitForExit(90000)){throw 'Transport comparison timed out'}
