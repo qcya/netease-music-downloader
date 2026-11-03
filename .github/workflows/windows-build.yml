@@ -44,7 +44,7 @@ jobs:
       - name: Verify packaged player and embedded downloader
         shell: pwsh
         run: |
-          $exe = 'dist/MusicDownloader-2.0.0-preview.1-portable.exe'
+          $exe = 'dist/MusicDownloader-2.0.0-preview.2-portable.exe'
           $testDir = Join-Path $env:RUNNER_TEMP 'orbit-packaged-test'
           New-Item -ItemType Directory -Force -Path $testDir | Out-Null
           @{ downloadDir=(Join-Path $testDir 'music'); desktopLyricsEnabled=$false; disclaimerAcceptedVersion=1 } | ConvertTo-Json | Set-Content (Join-Path $testDir 'settings.json') -Encoding utf8
@@ -63,10 +63,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Orbit-Windows-2.0.0-preview.1
+          name: Orbit-Windows-2.0.0-preview.2
           path: |
-            dist/MusicDownloader-2.0.0-preview.1-portable.exe
-            dist/MusicDownloader-2.0.0-preview.1-portable.exe.sha256
+            dist/MusicDownloader-2.0.0-preview.2-portable.exe
+            dist/MusicDownloader-2.0.0-preview.2-portable.exe.sha256
             .validation/panel-result.json
             .validation/panel-*.png
             packaged-result.json

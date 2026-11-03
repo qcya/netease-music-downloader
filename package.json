@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.0.0-preview.1",
+  "version": "2.0.0-preview.2",
   "private": true,
   "description": "星轨音乐：顶部悬绳下拉播放器，原生毛玻璃与本地音乐库",
   "main": "main.js",
@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "top.qcya.netease.music.desktop",
-    "productName": "星轨音乐",
+    "productName": "音乐下载器",
     "artifactName": "MusicDownloader-${version}-${arch}.${ext}",
     "directories": {
       "output": "dist"

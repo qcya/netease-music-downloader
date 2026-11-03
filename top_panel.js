@@ -33,7 +33,8 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
  function tick(point){
   if(!gesture||!alive(panel()))return;gesture.last=point;const dy=point.y-gesture.start.y,dx=point.x-gesture.start.x;
   gesture.moved=Math.max(gesture.moved,Math.abs(dy),Math.abs(dx));
-  if(gesture.kind==='move'){
+  if(gesture.kind==='pull'&&!gesture.axis&&Math.max(Math.abs(dx),Math.abs(dy))>8){gesture.axis=Math.abs(dx)>Math.abs(dy)*1.15?'horizontal':'vertical';if(gesture.axis==='horizontal')gesture.kind='charm-move';}
+  if(gesture.kind==='move'||gesture.kind==='charm-move'){
    const display=screen.getDisplayNearestPoint(point);area=display.workArea;prefs.displayId=display.id;
    prefs.right=clamp(area.x+area.width-(gesture.initial.x+dx)-gesture.initial.width,0,area.width-gesture.initial.width);
    panel().setBounds(bounds());placeCharm();

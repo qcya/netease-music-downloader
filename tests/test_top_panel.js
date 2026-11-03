@@ -19,6 +19,10 @@ test('cord pull, cancellation, resize, monitor movement and sender boundaries',(
  const screen={getAllDisplays:()=>[primary,second],getPrimaryDisplay:()=>primary,getDisplayNearestPoint:p=>p.x<0?second:primary,getCursorScreenPoint:()=>({x:1680,y:100}),on(){},removeListener(){}};
  const ctrl=createTopPanel({BrowserWindow:Window,screen,baseDir:'.',getWindow:()=>panel,save:p=>saved=p});ctrl.init();const send=(w,m)=>ctrl.action(w.webContents,m);
  assert.equal(charm.visible,true);assert.equal(panel.visible,false);assert.equal(ctrl.action({}, {type:'expand'}),false);
+ const before=charm.bounds.x;
+ send(charm,{type:'begin',kind:'pull',x:1680,y:100});send(charm,{type:'move',x:1480,y:104});send(charm,{type:'end'});
+ assert.equal(charm.bounds.x,before-200,'collapsed pendant moves horizontally');assert.equal(panel.visible,false,'sideways drag must not expand');assert.equal(saved.right,228);
+ send(charm,{type:'begin',kind:'pull',x:1480,y:100});send(charm,{type:'move',x:1680,y:104});send(charm,{type:'end'});
  assert.equal(send(charm,{type:'begin',kind:'resize'}),false);
  send(charm,{type:'begin',kind:'pull',x:1680,y:100});send(charm,{type:'move',x:1680,y:300});assert.equal(panel.bounds.y,0);assert.equal(panel.bounds.height,320);
  send(charm,{type:'cancel'});assert.equal(panel.visible,false);assert.equal(charm.visible,true);

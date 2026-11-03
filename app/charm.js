@@ -1,7 +1,7 @@
 'use strict';
 const cord=document.getElementById('cord');let held=false;
-cord.onpointerdown=e=>{if(e.button!==0)return;held=true;cord.setPointerCapture(e.pointerId);charmBridge.action({type:'begin',kind:'pull',x:window.screenX+e.clientX,y:window.screenY+e.clientY});};
-cord.onpointermove=e=>{if(held)charmBridge.action({type:'move',x:window.screenX+e.clientX,y:window.screenY+e.clientY});};
+cord.onpointerdown=e=>{if(e.button!==0)return;held=true;cord.setPointerCapture(e.pointerId);charmBridge.action({type:'begin',kind:'pull',x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});};
+cord.onpointermove=e=>{if(held)charmBridge.action({type:'move',x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});};
 cord.onpointerup=()=>{if(held){held=false;charmBridge.action({type:'end'});}};
 cord.onpointercancel=()=>{held=false;charmBridge.action({type:'cancel'});};
 cord.onlostpointercapture=()=>{if(held){held=false;charmBridge.action({type:'cancel'});}};

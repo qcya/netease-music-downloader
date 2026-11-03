@@ -9,7 +9,7 @@
  const safe=fn=>(...args)=>Promise.resolve().then(()=>fn(...args)).catch(e=>status(e.message||String(e),true));
  const clean=name=>String(name||'').replace(/\s*\[歌单\]/g,'').replace(/\s*\[\d+\](?=\.[^.]+$)/,'').replace(/\.[^.]+$/,'');
  const time=n=>{n=Math.max(0,Math.floor(n||0));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');};
- const coverURL=url=>{try{const u=new URL(url);return u.protocol==='https:'&&/(^|\.)music\.(126|163)\.net$/.test(u.hostname)?u.href:'orbit.svg';}catch{return 'orbit.svg';}};
+ const coverURL=url=>{try{const u=new URL(url);return u.protocol==='https:'&&/(^|\.)music\.(126|163)\.net$/.test(u.hostname)?u.href:'../assets/avatar.png';}catch{return '../assets/avatar.png';}};
  const localRow=f=>({key:'local:'+f.name,local:true,file:f.name,name:clean(f.name),artists:'本地音乐',conflict:f.conflict});
  const onlineRow=s=>({...s,key:'online:'+s.id,id:String(s.id),local:false});
  const element=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
@@ -27,7 +27,7 @@
   $('track-title').textContent=s.track?.name||'让音乐降落';$('track-title').title=s.track?.name||'';$('track-artist').textContent=s.track?.artists||'从下面选一首，留给此刻。';
   $('track-source').textContent=s.track?(s.track.local?'LOCAL COLLECTION':s.track.fromLocal?'已下载 · 本地播放':'ONLINE FREQUENCY'):'YOUR PERSONAL FREQUENCY';
   const art=coverURL(s.track?.cover_url);if($('cover').getAttribute('src')!==art)$('cover').src=art;
-  $('cover').onerror=()=>{$('cover').src='orbit.svg';};$('preview-tag').hidden=!s.track?.previewOnly;
+  $('cover').onerror=()=>{$('cover').src='../assets/avatar.png';};$('preview-tag').hidden=!s.track?.previewOnly;
   $('track-format').textContent=s.track?.previewOnly?'PREVIEW':s.track?.local||s.track?.fromLocal?'LOCAL':'STREAM';
   $('elapsed').textContent=time(s.time);$('duration').textContent=time(s.duration);$('seek').disabled=!s.duration;$('seek').max=String(s.duration||1);
   if(document.activeElement!==$('seek'))$('seek').value=String(s.time);if(document.activeElement!==$('volume'))$('volume').value=String(s.volume);
@@ -124,8 +124,8 @@
   for(const t of entries){const item=element('div','task');item.append(element('strong','',t.name||t.song?.name||'歌曲 '+t.id),element('p','',({running:'正在下载',queued:'排队中',done:'下载完成',completed:'下载完成',failed:'下载失败',cancelled:'已取消'})[t.status]||t.status));if(t.error)item.append(element('p','',t.error));const button=element('button','',t.status==='failed'?'重试':'取消');button.hidden=!['failed','running','queued'].includes(t.status);button.onclick=safe(()=>t.status==='failed'?bridge.retryDownload(String(t.id)):bridge.cancelDownload(String(t.id)));item.append(button);$('task-list').append(item);}
  }
  function gesture(node,kind){
-  let held=false;node.addEventListener('pointerdown',e=>{if(e.button!==0||kind==='move'&&e.target.closest('button'))return;held=true;node.setPointerCapture(e.pointerId);bridge.panelAction({type:'begin',kind,x:window.screenX+e.clientX,y:window.screenY+e.clientY});});
-  node.addEventListener('pointermove',e=>{if(held)bridge.panelAction({type:'move',x:window.screenX+e.clientX,y:window.screenY+e.clientY});});
+  let held=false;node.addEventListener('pointerdown',e=>{if(e.button!==0||kind==='move'&&e.target.closest('button'))return;held=true;node.setPointerCapture(e.pointerId);bridge.panelAction({type:'begin',kind,x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});});
+  node.addEventListener('pointermove',e=>{if(held)bridge.panelAction({type:'move',x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});});
   node.addEventListener('pointerup',()=>{if(held){held=false;bridge.panelAction({type:'end'});}});for(const event of ['pointercancel','lostpointercapture'])node.addEventListener(event,()=>{if(held){held=false;bridge.panelAction({type:'cancel'});}});
  }
  gesture($('resize-grip'),'resize');gesture($('anchor'),'move');
@@ -169,5 +169,5 @@
  audio.onended=()=>{void player.step(1,'ended');};audio.onerror=()=>{if(audio.src)status('这首歌暂时无法播放，可以重新选择或检测音源。',true);};
  bridge.onDownloadTask(t=>{tasks.set(t.key||t.id,{...t,time:Date.now()});renderTasks();});
  bridge.onBackendStatus(s=>{if(s.ok===false)status(s.message,true);});bridge.onOpenLyricsSettings(()=>$('settings-button').click());
- safe(async()=>{audio.volume=Number.isFinite(session.volume)?Math.max(0,Math.min(1,session.volume)):.75;player.setMode(session.mode);settings=await bridge.getSettings();await loadTab('local');const remembered=rows.find(r=>r.file===session.file);if(remembered)await player.play(remembered,rows,{paused:true,resumeTime:session.time});const info=await bridge.appInfo();$('build-label').textContent='星轨音乐 · '+info.version;if(!settings.disclaimerAcceptedVersion)$('welcome').showModal();if(settings.desktopLyricsEnabled)await bridge.showFloatingLyrics();status('顶部拖动位置 · 底边调节长度');})();
+ safe(async()=>{audio.volume=Number.isFinite(session.volume)?Math.max(0,Math.min(1,session.volume)):.75;player.setMode(session.mode);settings=await bridge.getSettings();await loadTab('local');const remembered=rows.find(r=>r.file===session.file);if(remembered)await player.play(remembered,rows,{paused:true,resumeTime:session.time});const info=await bridge.appInfo();$('build-label').textContent='音乐下载器 · '+info.version;if(!settings.disclaimerAcceptedVersion)$('welcome').showModal();if(settings.desktopLyricsEnabled)await bridge.showFloatingLyrics();status('顶部拖动位置 · 底边调节长度');})();
 })();

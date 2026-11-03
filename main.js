@@ -569,7 +569,7 @@ function createWindow() {
   const acrylic=process.platform==='win32' && Number(require('node:os').release().split('.')[2])>=22621;
   win = new BrowserWindow({
     width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundMaterial:acrylic?'acrylic':'none',transparent:false,
-    title:'星轨 · 音乐',icon:appIcon(),backgroundColor:acrylic?'#00000000':'#101e2b',
+    title:'音乐下载器 · 下拉播放器',icon:appIcon(),backgroundColor:acrylic?'#00000000':'#101e2b',
     show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -656,7 +656,7 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
-  tray=new Tray(appIcon());tray.setToolTip('星轨 · 下拉音乐');
+  tray=new Tray(appIcon());tray.setToolTip('音乐下载器 · 下拉音乐');
   const showMain=()=>topPanel.unfold();
   tray.setContextMenu(Menu.buildFromTemplate([{label:'拉开音乐',click:showMain},{label:'收起',click:()=>topPanel.collapse()},{type:'separator'},{label:'退出',click:()=>app.quit()}]));
   tray.on('double-click',showMain);
