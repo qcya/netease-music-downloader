@@ -43,6 +43,14 @@ const server=http.createServer((req,res)=>{
  await run("document.getElementById('load-online-playlist').click()");await wait(()=>run("document.getElementById('dialog').open"),'playlist prompt missing');
  await run("document.getElementById('dialog-input').value='https://music.163.com/#/playlist?id=99000001';document.getElementById('dialog-confirm').click()");await wait(()=>run("document.getElementById('status').textContent.startsWith('歌单已载入')"),'online playlist failed');
  await run("document.getElementById('play').click();musicBridge.panelAction({type:'height',value:620})");await sleep(300);assert.equal(await run('innerHeight'),620);
+ async function drag(target,x,y,dx){
+  await target.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});await sleep(80);
+  await target.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:x+dx,y,button:'left',buttons:1});await sleep(120);
+  await target.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',buttons:0,clickCount:1});await sleep(100);
+ }
+ let oldX=await run('screenX');await drag(client,150,25,-60);assert.equal(await run('screenX'),oldX-60);
+ await run("musicBridge.panelAction({type:'collapse'})");await sleep(200);oldX=await charm.run('screenX');await drag(charm,38,105,-100);assert.equal(await charm.run('screenX'),oldX-100);
+ await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
  const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','local playback','collapsed playback','renderer search','online stream','download button','reuse downloaded audio','online playlist URL','resize']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  if(process.env.ORBIT_KEEP_OPEN!=='1')await run("musicBridge.windowAction('quit')").catch(()=>{});
 })().catch(async e=>{console.error(e.stack);console.error('Requests',requests);if(client)console.error(await client.run('document.body.innerText').catch(()=>''));process.exitCode=1;}).finally(()=>{client?.close();charm?.close();server.close();});

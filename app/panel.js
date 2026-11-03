@@ -124,8 +124,8 @@
   for(const t of entries){const item=element('div','task');item.append(element('strong','',t.name||t.song?.name||'歌曲 '+t.id),element('p','',({running:'正在下载',queued:'排队中',done:'下载完成',completed:'下载完成',failed:'下载失败',cancelled:'已取消'})[t.status]||t.status));if(t.error)item.append(element('p','',t.error));const button=element('button','',t.status==='failed'?'重试':'取消');button.hidden=!['failed','running','queued'].includes(t.status);button.onclick=safe(()=>t.status==='failed'?bridge.retryDownload(String(t.id)):bridge.cancelDownload(String(t.id)));item.append(button);$('task-list').append(item);}
  }
  function gesture(node,kind){
-  let held=false;node.addEventListener('pointerdown',e=>{if(e.button!==0||kind==='move'&&e.target.closest('button'))return;held=true;node.setPointerCapture(e.pointerId);bridge.panelAction({type:'begin',kind,x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});});
-  node.addEventListener('pointermove',e=>{if(held)bridge.panelAction({type:'move',x:e.screenX||window.screenX+e.clientX,y:e.screenY||window.screenY+e.clientY});});
+  let held=false;node.addEventListener('pointerdown',e=>{if(e.button!==0||kind==='move'&&e.target.closest('button'))return;held=true;node.setPointerCapture(e.pointerId);bridge.panelAction({type:'begin',kind,x:window.screenX+e.clientX,y:window.screenY+e.clientY});});
+  node.addEventListener('pointermove',e=>{if(held)bridge.panelAction({type:'move',x:window.screenX+e.clientX,y:window.screenY+e.clientY});});
   node.addEventListener('pointerup',()=>{if(held){held=false;bridge.panelAction({type:'end'});}});for(const event of ['pointercancel','lostpointercapture'])node.addEventListener(event,()=>{if(held){held=false;bridge.panelAction({type:'cancel'});}});
  }
  gesture($('resize-grip'),'resize');gesture($('anchor'),'move');
