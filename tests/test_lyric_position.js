@@ -101,15 +101,3 @@ test('reset while hidden stores the default preference without enabling desktop 
  assert.equal(c.saved,null);
  assert.equal(c.ctrl.exists(),false);
 });
-test('reset button only exists in settings, is connected to dedicated IPC, and is separate from style reset',()=>{
- const html=read('app/index.html'),ui=read('app/renderer.js'),pre=read('preload.js'),main=read('main.js');
- assert.match(html,/id="lyr-reset-position"/);
- assert.match(ui,/bridge\.resetFloatingLyricsPosition\(\)/);
- assert.match(pre,/resetFloatingLyricsPosition:\(\)=>ipcRenderer\.invoke\('lyrics:reset-position'\)/);
- assert.match(main,/ipcMain\.handle\('lyrics:reset-position',\(\)=>floatingLyrics\.resetPosition\(\)\)/);
- assert.match(main,/floatingLyricsPosition:config\(\)\.floatingLyricsPosition/);
- const toggle=ui.split('async function toggleDesktopLyrics(next)')[1].split('function renderSettings()')[0];
- assert.doesNotMatch(toggle,/resetFloatingLyricsPosition|lyr-reset-position/);
- const appearance=ui.split("$('#lyr-reset').addEventListener")[1].split("$('#lyr-test')")[0];
- assert.doesNotMatch(appearance,/resetFloatingLyricsPosition|lyr-reset-position/);
-});

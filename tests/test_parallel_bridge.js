@@ -11,11 +11,13 @@ const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'netease-parallel-'));
 process.env.MUSIC_PYTHON_EXE=process.env.MUSIC_PYTHON_EXE||'/opt/pyvenv/bin/python';
 const handlers=new Map(); const updates=[];
 class Window {
-  constructor(){this.webContents={send:(channel,obj)=>updates.push({channel,obj}),on(){},setWindowOpenHandler(){}};}
+  constructor(){this.webContents={send:(channel,obj)=>updates.push({channel,obj}),on(){},once(){},setWindowOpenHandler(){}};}
   loadFile(){} once(evt,cb){if(evt==='ready-to-show')cb()} show(){} isDestroyed(){return false} setAppDetails(){} setIcon(){}
+  setBounds(){}
   static getAllWindows(){return []}
 }
 const fake={
+  screen:{getAllDisplays:()=>[{id:1,workArea:{x:0,y:0,width:1920,height:1080}}],getPrimaryDisplay:()=>({id:1,workArea:{x:0,y:0,width:1920,height:1080}}),on(){}},
   Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
   app:{isPackaged:false,getPath:k=>path.join(tmp,k),setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}},
   BrowserWindow:Window, ipcMain:{handle:(key,cb)=>handlers.set(key,cb),on(){}},

@@ -14,16 +14,18 @@ const handlers = new Map();
 let mediaHandler = null;
 let previewHandler = null;
 class Window {
-  constructor(o){this.opts=o;this.webContents={send(){},on(){},setWindowOpenHandler(){}};this.closed=false;}
+  constructor(o){this.opts=o;this.webContents={send(){},on(){},once(){},setWindowOpenHandler(){}};this.closed=false;}
   loadFile(p){assert.ok(fs.existsSync(p),p)}
   once(evt,cb){if(evt==='ready-to-show')cb()}
   show(){}
   isDestroyed(){return this.closed}
   setAppDetails(){}
   setIcon(){}
+  setBounds(){}
   static getAllWindows(){return []}
 }
 const electron = {
+  screen:{getAllDisplays:()=>[{id:1,workArea:{x:0,y:0,width:1920,height:1080}}],getPrimaryDisplay:()=>({id:1,workArea:{x:0,y:0,width:1920,height:1080}}),on(){}},
   Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
   app:{
     isPackaged:false,
@@ -109,6 +111,11 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   assert.equal(downloaded.success_count,1,JSON.stringify(downloaded));
   assert.ok(fs.existsSync(downloaded.results[0].path));
   assert.equal(path.extname(downloaded.results[0].path),'.flac');
+  const localPreferred=await invoke('music:stream','12345');
+  assert.equal(localPreferred.fromLocal,true,'a downloaded track must bypass online URL resolution');
+  assert.match(localPreferred.url,/^file:/);
+  const localAvailability=await invoke('music:availability',['12345']);
+  assert.equal(localAvailability[0].fromLocal,true);
   const found=await invoke('local:list');
   assert.equal(found.length,1);
   assert.match(found[0].name,/洛天依/);

@@ -2,6 +2,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen } = require('electron');
 const fs = require('node:fs');
 const {createOnlineMedia}=require('./online_media');
+const {effectiveMusicApis}=require('./music_providers');
 app.commandLine?.appendSwitch('disable-http-cache');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
@@ -13,7 +14,7 @@ const { createFloatingLyricsController } = require('./floating_window.js');
 const { createPlaylistStore } = require('./local_playlist.js');
 const {createCategoryStore}=require('./playlist_categories.js');
 const { importMusic } = require('./local_import.js');
-const {createMiniPlayerController}=require('./mini_player.js');
+const {createTopPanel}=require('./top_panel');
 const {wireMainWindow}=require('./app_lifecycle.js');
 const {normalizePosition}=require('./lyric_position.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
@@ -50,7 +51,8 @@ const remotePreview = new Map();
 const previewSourceCache=new Map();
 const previewSourcePending=new Map();
 const lyricsPending=new Map();
-const onlineMedia=createOnlineMedia({getBases:()=>config().apiBases,fetchImpl:(url,options)=>net.fetch(url,options)});
+const onlineMedia=createOnlineMedia({getBases:()=>effectiveMusicApis(config().apiBases),fetchImpl:(url,options)=>net.fetch(url,options)});
+let playbackResolveVersion=0;
 if (protocol?.registerSchemesAsPrivileged) {
   protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 }
@@ -549,17 +551,25 @@ async function fetchLyrics(id, force=false) {
 }
 
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,screen:require('electron').screen});
-const miniPlayer=createMiniPlayerController({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win});
+const topPanel=createTopPanel({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,getSaved:()=>readJSON(path.join(app.getPath('userData'),'panel-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'panel-layout.json'),prefs)});
 const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>path.join(app.getPath('userData'),'recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 
 // No audio files, Python download subprocesses or full-file fallback on online playback.
 async function proxyPreview(req){return onlineMedia.handle(req);}
-async function beginStream(id,options){return onlineMedia.open(id,{allowTrial:options?.allowTrial===true});}
+async function beginStream(id,options){
+  const [sid]=songIds([id]),revision=++playbackResolveVersion;
+  const files=await libraryRoots.files();
+  if(revision!==playbackResolveVersion)throw Error('已切换歌曲');
+  const local=files.find(row=>!row.conflict&&new RegExp('\\['+sid+'\\]\\.[^.]+$').test(row.name));
+  if(local){onlineMedia.stop();return {ok:true,id:sid,url:localAudioUrl(availableLocalTrack(local.name)),fromLocal:true,localFile:local.name,streaming:false,previewOnly:false};}
+  return onlineMedia.open(sid,{allowTrial:options?.allowTrial===true});
+}
 
 function createWindow() {
+  const acrylic=process.platform==='win32' && Number(require('node:os').release().split('.')[2])>=22621;
   win = new BrowserWindow({
-    width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.2.0-preview.1', icon: appIcon(), backgroundColor: '#FFFAFD',
+    width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundMaterial:acrylic?'acrylic':'none',transparent:false,
+    title:'星轨 · 音乐',icon:appIcon(),backgroundColor:acrylic?'#00000000':'#101e2b',
     show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -575,22 +585,23 @@ function createWindow() {
   win.webContents.on('will-navigate', event=>event.preventDefault());
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   wireMainWindow({
-    window:win,app,
-    shouldHide:()=>!exiting&&!process.env.MUSIC_DOWNLOADER_TEST_USER_DATA,
-    onHide:()=>{miniPlayer.open();win.webContents.send('mini:status',{open:true});win.webContents.send('mini:control',{type:'sync'});},
+    window:win,app,showWindow:false,
+    shouldHide:()=>!exiting,
+    onHide:()=>topPanel.collapse(),
     onShown:()=>{
+      topPanel.init();
       floatingLyrics.setMainFocused(true);
-      try{createLogger(app.getPath('userData')).info('window_ready','主界面已显示')}catch{}
+      try{createLogger(app.getPath('userData')).info('window_ready','顶部播放器已就绪')}catch{}
     },
     onFailure:(reason,error)=>reportStartupFailure(reason,error),
     closeChildren:()=>{
       floatingLyrics.close();
-      miniPlayer.close();
+      topPanel.close();
     }
   });
   // Handle both ready-to-show AND did-finish-load, and surface load errors.
   // A failed load must not silently leave a hidden background process.
-  const loading=win.loadFile(path.join(__dirname, 'app', 'index.html'));
+  const loading=win.loadFile(path.join(__dirname,'app','panel.html'));
   loading?.catch?.(e=>reportStartupFailure('主界面文件加载失败',e));
 }
 function stopBackendChildren(){
@@ -606,7 +617,7 @@ function reportStartupFailure(stage,error){
   try{dialog.showErrorBox('音乐下载器启动失败',stage+'。\\n'+details+'\\n\\n请将程序日志中的 application.log 提供给开发者。')}catch{}
   exiting=true;
   try{floatingLyrics.close()}catch{}
-  try{miniPlayer.close()}catch{}
+  try{topPanel.close()}catch{}
   stopBackendChildren();
   try{app.quit()}catch{}
 }
@@ -624,8 +635,7 @@ if(!ownsInstance){
 }else{
 app.on('second-instance',()=>{
   if(win&&!win.isDestroyed?.()){
-    if(win.isMinimized?.())win.restore?.();
-    win.show();win.focus?.();
+    topPanel.unfold();
   }
 });
 app.whenReady().then(() => {
@@ -646,12 +656,12 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
-  tray=new Tray(appIcon());tray.setToolTip('音乐抽屉');
-  const showMain=()=>{win.restore();win.show();win.focus();};
-  tray.setContextMenu(Menu.buildFromTemplate([{label:'打开音乐库',click:showMain},{label:'展开音乐抽屉',click:()=>{miniPlayer.open();miniPlayer.expand(true);win.webContents.send('mini:status',{open:true});}},{type:'separator'},{label:'退出',click:()=>app.quit()}]));
+  tray=new Tray(appIcon());tray.setToolTip('星轨 · 下拉音乐');
+  const showMain=()=>topPanel.unfold();
+  tray.setContextMenu(Menu.buildFromTemplate([{label:'拉开音乐',click:showMain},{label:'收起',click:()=>topPanel.collapse()},{type:'separator'},{label:'退出',click:()=>app.quit()}]));
   tray.on('double-click',showMain);
-  ipcMain.on('window:action',(event,action)=>{assertMainSender(event);if(action==='minimize')win.minimize();else if(action==='maximize')win.isMaximized()?win.unmaximize():win.maximize();else if(action==='close')win.close();});
-  ipcMain.on('mini:quit',event=>{if(miniPlayer.owns(event.sender))app.quit();});
+  ipcMain.on('panel:action',(event,message)=>topPanel.action(event.sender,message));
+  ipcMain.on('window:action',(event,action)=>{assertMainSender(event);if(action==='quit')app.quit();else if(action==='close')topPanel.collapse();});
   const notifyLyricLock=locked=>{
     if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
   };
@@ -664,7 +674,12 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
-  ipcMain.handle('music:availability',(_e,ids,options)=>{assertMainSender(_e);return onlineMedia.availability(ids,{force:options?.force===true});});
+  ipcMain.handle('music:availability',async(_e,ids,options)=>{
+    assertMainSender(_e);if(!Array.isArray(ids)||ids.length>40)throw Error('每次最多检测 40 首歌曲');
+    if(!ids.length)return [];const requested=songIds(ids),files=await libraryRoots.files(),local=new Set(files.filter(f=>!f.conflict).map(f=>/\[(\d+)\]\.[^.]+$/.exec(f.name)?.[1]).filter(Boolean));
+    const remote=await onlineMedia.availability(requested.filter(id=>!local.has(id)),{force:options?.force===true}),byId=new Map(remote.map(row=>[row.id,row]));
+    return requested.map(id=>local.has(id)?{id,state:'available',fromLocal:true,reason:'已下载，可本地播放',checkedAt:Date.now()}:byId.get(id));
+  });
   ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return options?.category==='recent'?recentDiscovery.get(options):discovery.get(options||{})});
   ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('system:choose-directory', async () => {
@@ -682,38 +697,7 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:categories-delete',(_e,id)=>categoryStore.remove(id));
   ipcMain.handle('playlists:categories-move',(_e,name,id)=>categoryStore.move(name,id));
   ipcMain.handle('playlists:organize',(_e,order,name,id)=>{assertMainSender(_e);return categoryStore.organize(order,name,id)});
-  ipcMain.handle('mini:open',()=>{const state=miniPlayer.open();persistMiniPlayerEnabled(true);return state});
-  ipcMain.handle('mini:close',()=>{const state=miniPlayer.close();persistMiniPlayerEnabled(false);return state});
-  ipcMain.handle('mini:state',(_e,state)=>{assertMainSender(_e);return miniPlayer.update(state)});
-  ipcMain.on?.('mini:control',(event,action)=>miniPlayer.control(event.sender,action));
-  ipcMain.handle('background:choose',async()=>{
-    const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});
-    if(result.canceled||!result.filePaths?.length)return null;
-    const file=path.resolve(result.filePaths[0]),ext=path.extname(file).toLowerCase();
-    if(!BACKGROUND_EXTS.has(ext))throw new Error('不支持的背景格式');
-    const st=await fs.promises.stat(file);
-    if(!st.isFile()||st.size>2*1024*1024*1024)throw new Error('背景文件过大或不可用');
-    // User-supplied video is not tracked by Git. Keep a durable app-data copy instead of
-    // retaining a fragile path to the original file or requiring it in the repository.
-    const store=path.join(app.getPath('userData'),'player-backgrounds');
-    await fs.promises.mkdir(store,{recursive:true});
-    const installed=path.join(store,randomUUID()+ext);
-    try {
-      await fs.promises.copyFile(file,installed);
-      if((await fs.promises.stat(installed)).size!==st.size)throw new Error('背景复制不完整');
-      writeConfig({...config(),playerBackgroundPath:installed});
-      return {path:installed};
-    }catch(e){await fs.promises.rm(installed,{force:true}).catch(()=>{});throw e;}
-  });
-  ipcMain.handle('background:clear',()=>{writeConfig({...config(),playerBackgroundPath:''});return true});
-  ipcMain.handle('background:get',()=>{
-    const explicit=config().playerBackgroundPath;
-    // Bundled GitHub asset lives inside app.asar in packaged mode, not process.resourcesPath.
-    const fallback=path.join(__dirname,'assets','immersive-background-1080p.mp4');
-    const file=explicit||fallback;
-    if(!BACKGROUND_EXTS.has(path.extname(file).toLowerCase())||!fs.existsSync(file)||!fs.statSync(file).isFile())return {kind:explicit?'missing':'default'};
-    return {kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:grantMedia(file)};
-  });
+
   ipcMain.handle('system:open-directory', async () => {
     const dest = config().downloadDir;
     fs.mkdirSync(dest, {recursive:true});
@@ -770,7 +754,7 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('music:stop-stream',(event)=>{
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可停止在线歌曲');
-    onlineMedia.stop();return true;
+    playbackResolveVersion++;onlineMedia.stop();return true;
   });
   ipcMain.handle('music:lyric-memory',async(event,id)=>{
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可读取在线歌词');
@@ -866,7 +850,7 @@ app.whenReady().then(() => {
 app.on('before-quit',()=>{
   exiting=true;
   try{floatingLyrics.close()}catch{}
-  try{miniPlayer.close()}catch{}
+  try{topPanel.close()}catch{}
   onlineMedia.close();
   stopBackendChildren();
 });

@@ -1,6 +1,8 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
+  panelAction:message=>ipcRenderer.send('panel:action',message),
+  onPanelState:cb=>{const f=(_e,state)=>cb(state);ipcRenderer.on('panel:state',f);return()=>ipcRenderer.removeListener('panel:state',f);},
   onBackendStatus:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('backend:status',listener);return ()=>ipcRenderer.removeListener('backend:status',listener);},
   windowAction:action=>ipcRenderer.send('window:action',action),
   appInfo:()=>ipcRenderer.invoke('app:info'),
@@ -31,14 +33,6 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   playlistCategoryMove:(name,id)=>ipcRenderer.invoke('playlists:categories-move',name,id),
   importLocal:kind=>ipcRenderer.invoke('local:import',kind),
   localLyrics:name=>ipcRenderer.invoke('local:lyrics',name),
-  openMiniPlayer:()=>ipcRenderer.invoke('mini:open'),
-  closeMiniPlayer:()=>ipcRenderer.invoke('mini:close'),
-  updateMiniPlayer:state=>ipcRenderer.invoke('mini:state',state),
-  onMiniControl:cb=>{const listener=(_e,action)=>cb(action);ipcRenderer.on('mini:control',listener);return()=>ipcRenderer.removeListener('mini:control',listener)},
-  onMiniStatus:cb=>{const listener=(_e,data)=>cb(data);ipcRenderer.on('mini:status',listener);return()=>ipcRenderer.removeListener('mini:status',listener)},
-  playerBackground:()=>ipcRenderer.invoke('background:get'),
-  choosePlayerBackground:()=>ipcRenderer.invoke('background:choose'),
-  clearPlayerBackground:()=>ipcRenderer.invoke('background:clear'),
   listFiles: () => ipcRenderer.invoke('local:list'),
   deleteLocal:(name,confirmed)=>ipcRenderer.invoke('local:delete',name,confirmed),
   downloadHistory:()=>ipcRenderer.invoke('download:history'),

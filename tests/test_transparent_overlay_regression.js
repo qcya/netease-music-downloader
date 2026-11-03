@@ -10,7 +10,7 @@ test('Electron runtime includes upstream Windows frameless transparent-titlebar 
   assert.ok(minor>3||(minor===3&&patch>=1),
     'Electron 37.2.0 has the Windows titlebar-on-blur bug electron/electron#46882; use 37.3.1 or newer');
   const workflow=fs.readFileSync(path.join(root,'.github/workflows/windows-build.yml'),'utf8');
-  assert.match(workflow,/Smoke-test installed portable executable and main-window exit/);
+  assert.match(workflow,/check_packaged_panel\.js/);
 });
 test('desktop overlay disables native titlebar, resizability and maximize controls on Windows',()=>{
  let created,shown=0,hidden=0;

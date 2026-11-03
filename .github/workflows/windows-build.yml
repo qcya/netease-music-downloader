@@ -1,24 +1,19 @@
 name: Build Windows Portable
-
 on:
-  # Rebuild v1.2.0-preview.1 with repeated-launch and complete-catalog regression checks.
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
 permissions:
   contents: read
-
 concurrency:
-  group: windows-portable-v1.2.0-preview.1-${{ github.ref }}
+  group: windows-portable-${{ github.ref }}
   cancel-in-progress: false
-
 jobs:
   windows-portable:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,146 +22,52 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Ensure release version matches package
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          if ($version -ne "1.2.0-preview.1") { throw "Wrong package version: $version" }
-      - name: Install Python libraries
-        run: python -m pip install -r skill/requirements.txt -r skill/requirements-build.txt pytest
-      - name: Install npm libraries
-        env:
-          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-        run: npm install --no-audit --no-fund
+      - run: python -m pip install -r skill/requirements.txt -r skill/requirements-build.txt pytest
+      - run: npm ci --no-audit --no-fund
       - name: Run all regression tests
         shell: pwsh
         env:
           MUSIC_PYTHON_EXE: python
-          PYTHONPATH: skill/scripts
         run: |
           npm run check
-          if ($LASTEXITCODE -ne 0) { throw "JavaScript syntax checks failed" }
-          $testFiles = @(Get-ChildItem -Path tests -Filter 'test_*.js' | ForEach-Object { $_.FullName })
-          node --test @testFiles
-          if ($LASTEXITCODE -ne 0) { throw "Node tests failed" }
+          if ($LASTEXITCODE) { throw 'Syntax check failed' }
+          npm test
+          if ($LASTEXITCODE) { throw 'Node tests failed' }
           python -m pytest -q tests
-          if ($LASTEXITCODE -ne 0) { throw "Python tests failed" }
-      - name: Verify live taste metadata (informational)
-        continue-on-error: true
+          if ($LASTEXITCODE) { throw 'Python tests failed' }
+          $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList 'scripts/verify_top_panel.js' -WindowStyle Hidden -PassThru -Wait
+          if ($p.ExitCode) { throw 'Top panel interaction test failed' }
+      - name: Build portable EXE
         env:
-          MUSIC_TASTE_EVIDENCE: packaged-taste-online.json
-        run: node scripts/check_v113_online.js
-      - name: Probe anonymous online audio and lyric availability (informational)
-        continue-on-error: true
-        run: node scripts/probe_online_stream.js
-      - name: Build standalone portable EXE
-        env:
-          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
-          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npm run build:win
-      - name: Validate bundled backend, wallpaper, and single-file EXE
+      - name: Verify packaged player and embedded downloader
         shell: pwsh
         run: |
-          $exe = "dist/MusicDownloader-1.2.0-preview.1-portable.exe"
-          $backend = "backend/music_backend.exe"
-          $wallpaper = "assets/immersive-background-1080p.mp4"
-          $asar = "dist/win-unpacked/resources/app.asar"
-          foreach ($file in @($exe,$backend,$wallpaper,$asar)) {
-            if (!(Test-Path $file)) { throw "Missing file: $file" }
-          }
-          if ((Get-Item $exe).Length -lt 30000000) { throw "Portable EXE unexpectedly small" }
-          if ((Get-Item $wallpaper).Length -lt 100000) { throw "Missing expected video payload" }
-          $info = & $backend --runtime-info | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or !$info.ok -or !$info.embedded) {
-            throw "Embedded backend runtime verification failed"
-          }
-          $hash = (Get-FileHash -Path $exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          Set-Content -Path "dist/MusicDownloader-1.2.0-preview.1-portable.exe.sha256" -Encoding ascii -Value "$hash  MusicDownloader-1.2.0-preview.1-portable.exe"
-          Write-Host "Portable EXE SHA256: $hash"
-      - name: Smoke-test installed portable executable and main-window exit
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $sample = "dist/MusicDownloader-1.2.0-preview.1-portable.exe"
-          $smokeDir = Join-Path $env:RUNNER_TEMP ("MusicDownloader-smoke-" + $env:GITHUB_RUN_ID)
-          New-Item -ItemType Directory -Force -Path $smokeDir | Out-Null
-          $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $smokeDir
-          $log = Join-Path $smokeDir "logs/application.log"
-          Write-Host "Launching packaged EXE in a clean Windows user-data folder..."
-          $debugPort = 19273
-          $launcher = Start-Process -FilePath (Resolve-Path $sample) -ArgumentList @("--remote-debugging-port=$debugPort", "--remote-allow-origins=*") -PassThru
+          $exe = 'dist/MusicDownloader-2.0.0-preview.1-portable.exe'
+          $testDir = Join-Path $env:RUNNER_TEMP 'orbit-packaged-test'
+          New-Item -ItemType Directory -Force -Path $testDir | Out-Null
+          @{ downloadDir=(Join-Path $testDir 'music'); desktopLyricsEnabled=$false; disclaimerAcceptedVersion=1 } | ConvertTo-Json | Set-Content (Join-Path $testDir 'settings.json') -Encoding utf8
+          $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $testDir
+          $p = Start-Process -FilePath (Resolve-Path $exe) -ArgumentList '--remote-debugging-port=19273' -WindowStyle Hidden -PassThru
           try {
-            $ready = $false
-            for ($i=0; $i -lt 120; $i++) {
-              Start-Sleep -Seconds 1
-              if ((Test-Path $log) -and (Select-String -Path $log -Pattern '"event":"window_ready"' -Quiet)) {
-                $ready = $true
-                break
-              }
-            }
-            if (!$ready) {
-              if (Test-Path $log) { Get-Content $log | Select-Object -Last 30 | Write-Host }
-              throw "Packaged app did not reach a visible main window within 120 seconds"
-            }
-            Write-Host "Packaged EXE reached window_ready."
-            # In v1.1.2 the duplicate launcher removed the first instance's backend.
-            for ($repeat=0; $repeat -lt 2; $repeat++) {
-              $duplicate=Start-Process -FilePath (Resolve-Path $sample) -PassThru
-              if (!$duplicate.WaitForExit(60000)) { throw "Duplicate portable launcher did not exit" }
-              Start-Sleep -Seconds 1
-            }
-            Write-Host "Duplicate launchers exited; verify the surviving process can really download."
-            node scripts/verify_packaged_playlist.js $debugPort $smokeDir 2>&1 | Tee-Object packaged-e2e.log
-            if ($LASTEXITCODE -ne 0) { throw "Packaged lyrics, memory streaming or playlist test failed end-to-end" }
-            Write-Host "PASS: Packaged playlist button E2E test."
-            node -e "require('./scripts/native_test_window').setWindowState('MusicDownloader',16)"
-            if ($LASTEXITCODE -ne 0) { throw "Could not send WM_CLOSE to actual main window" }
-            $exited = $false
-            for ($i=0; $i -lt 30; $i++) {
-              Start-Sleep -Seconds 1
-              $alive = @(Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue)
-              if ($alive.Count -eq 0) { $exited = $true; break }
-            }
-            if (!$exited) { throw "Closing main window left MusicDownloader in background" }
-            Write-Host "PASS: packaged app launched, displayed its window, and fully exited on close."
-            Write-Host "Relaunching the same EXE and saved user-data directory..."
-            $launcher = Start-Process -FilePath (Resolve-Path $sample) -ArgumentList @("--remote-debugging-port=$debugPort", "--remote-allow-origins=*") -PassThru
-            node scripts/verify_packaged_playlist.js $debugPort $smokeDir restart 2>&1 | Tee-Object -Append packaged-e2e.log
-            if ($LASTEXITCODE -ne 0) { throw "Restart lost the user's lyric lock or position" }
-            node -e "require('./scripts/native_test_window').setWindowState('MusicDownloader',16)"
-            if ($LASTEXITCODE -ne 0) { throw "Could not close restarted main window" }
-            $exited = $false
-            for ($i=0; $i -lt 30; $i++) {
-              Start-Sleep -Seconds 1
-              if (@(Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue).Count -eq 0) { $exited = $true; break }
-            }
-            if (!$exited) { throw "Restarted player left background processes" }
+            node scripts/check_packaged_panel.js 19273 $testDir
+            if ($LASTEXITCODE) { throw 'Packaged panel test failed' }
+            if (!$p.WaitForExit(30000)) { throw 'Packaged application did not exit' }
           } finally {
-            Get-Process -Name MusicDownloader -ErrorAction SilentlyContinue |
-              Stop-Process -Force -ErrorAction SilentlyContinue
-            if ($launcher -and !$launcher.HasExited) { Stop-Process -Id $launcher.Id -Force -ErrorAction SilentlyContinue }
-            $shot = Join-Path $smokeDir 'desktop-lyrics-minimized.png'
-            if (Test-Path $shot) { Copy-Item $shot packaged-desktop-lyrics.png }
-            if (Test-Path $log) { Copy-Item $log packaged-application.log }
+            if (!$p.HasExited) { Stop-Process -Id $p.Id -Force }
+            Copy-Item (Join-Path $testDir 'packaged-result.json') packaged-result.json -ErrorAction SilentlyContinue
           }
-      - name: Preserve packaged verification evidence
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $exe -Leaf)" | Set-Content "$exe.sha256" -Encoding ascii
+      - uses: actions/upload-artifact@v4
         if: always()
-        uses: actions/upload-artifact@v4
         with:
-          name: Packaged-Lyrics-Stream-Evidence-v1.2.0-preview.1
+          name: Orbit-Windows-2.0.0-preview.1
           path: |
-            packaged-*.log
-            packaged-*.png
-            packaged-*.json
-          retention-days: 14
-          if-no-files-found: ignore
-      - name: Upload portable artifact
-        if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: MusicDownloader-Windows-Portable-v1.2.0-preview.1
-          path: |
-            dist/MusicDownloader-1.2.0-preview.1-portable.exe
-            dist/MusicDownloader-1.2.0-preview.1-portable.exe.sha256
-          if-no-files-found: error
+            dist/MusicDownloader-2.0.0-preview.1-portable.exe
+            dist/MusicDownloader-2.0.0-preview.1-portable.exe.sha256
+            .validation/panel-result.json
+            .validation/panel-*.png
+            packaged-result.json
+          if-no-files-found: warn

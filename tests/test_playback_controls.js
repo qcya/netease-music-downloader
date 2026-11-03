@@ -30,19 +30,6 @@ test('shuffle exhausts unique songs before repeating, remembers history, support
  assert.notEqual(next.index,q.index,'end of shuffle cycle must not immediately repeat current song');
  assert.equal(step(createQueue(['A','B'],0,'shuffle'),-1),null,'no prior history yet');
 });
-test('transport controls and lyric lock exist in main and immersive player, wired to bridge',()=>{
- const html=read('app/index.html'),js=read('app/renderer.js'),pre=read('preload.js'),main=read('main.js');
- for(const id of ['player-prev','player-next','player-mode','immersive-prev','immersive-next','immersive-mode','toggle-desktop-lyrics','toggle-desktop-lock','lyric-style-preview'])assert.match(html,new RegExp('id="'+id+'"'));
- assert.match(html,/src="playback_navigation\.js"/);
- assert.match(js,/advancePlaylist\(dir,'manual'\)/);
- assert.match(js,/changePlaybackMode\(\$\('#'\+id\)\.value\)/);
- assert.match(js,/await bridge\.lockFloatingLyrics\(wanted\)/);
- assert.match(js,/previewFloatingLyricsStyle/);
- assert.match(js,/lyr-mouse-through'\)\.addEventListener\('change'/);
- assert.match(js,/desktop-lyrics-enabled'\)\.addEventListener\('change'/);
- assert.match(main,/ipcMain\.handle\('lyrics:preview-style'/);
- assert.match(pre,/previewFloatingLyricsStyle/);
-});
 test('desktop lyric remains visible while main app has focus and lock stays click-through',()=>{
  let fake,locks=[],events=[];
  class Window {

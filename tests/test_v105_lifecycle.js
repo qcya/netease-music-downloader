@@ -43,7 +43,7 @@ test('main bootstrap includes single instance activation, process termination an
  assert.match(main,/stopBackendChildren\(\)/);
  assert.match(main,/wireMainWindow\(\{/);
  assert.match(main,/\.catch\(e=>reportStartupFailure\('Electron 初始化失败',e\)\)/);
- assert.match(build,/Smoke-test installed portable executable/);
- assert.match(build,/WM_CLOSE/);
- assert.match(build,/window_ready/);
+ assert.match(build,/check_packaged_panel\.js/);
+ assert.match(build,/WaitForExit\(30000\)/);
+ assert.match(build,/MUSIC_DOWNLOADER_TEST_USER_DATA/);
 });

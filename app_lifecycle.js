@@ -3,7 +3,7 @@
  * A portable Electron build must not remain invisible when Chromium omits
  * ready-to-show; neither should hidden tool windows keep the app running.
  */
-function wireMainWindow({window,app,onShown,onFailure,closeChildren,shouldHide=()=>false,onHide,timeoutMs=10000}){
+function wireMainWindow({window,app,onShown,onFailure,closeChildren,shouldHide=()=>false,onHide,showWindow=true,timeoutMs=10000}){
   let shown=false,closing=false,failed=false;
   const alive=()=>window&&!window.isDestroyed?.();
   function closeTools(){
@@ -14,7 +14,7 @@ function wireMainWindow({window,app,onShown,onFailure,closeChildren,shouldHide=(
   function show(){
     if(!alive()||shown||failed)return;
     shown=true;clearTimeout(watchdog);
-    window.show();
+    if(showWindow)window.show();
     onShown?.();
   }
   function fail(reason,error){

@@ -19,3 +19,7 @@ test('configured provider failure falls back to official metadata',async()=>{
  calls.push(u);if(u.startsWith('https://example.org'))throw Error('down');return {data:[{id:1,url:'https://m7.music.126.net/a.mp3'}]};}});
  assert.equal((await s.resolve('1')).state,'available');assert.equal(calls.length,2);
 });
+test('playback retries a higher quality source when standard has no URL',async()=>{
+ const levels=[],s=createSourceAvailability({getBases:()=>['https://api.example'],trusted:u=>!!u,json:async u=>{levels.push(u);return {data:[{id:1,url:u.includes('level=exhigh')?'https://m7.music.126.net/full.mp3':null}]};}});
+ const row=await s.resolve('1',new AbortController().signal);assert.equal(row.state,'available');assert.ok(levels.some(u=>u.includes('level=exhigh')));
+});

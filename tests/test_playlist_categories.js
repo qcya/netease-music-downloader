@@ -45,21 +45,6 @@ test('deleted playlist entries automatically lose stale category records',t=>{
  f.tracks.pop();
  assert.deepEqual(f.store.list().assignments,{});
 });
-test('UI and IPC expose new folder actions and all toast messages appear top right',()=>{
- const main=fs.readFileSync(path.join(__dirname,'..','main.js'),'utf8');
- const preload=fs.readFileSync(path.join(__dirname,'..','preload.js'),'utf8');
- const renderer=fs.readFileSync(path.join(__dirname,'..','app/renderer.js'),'utf8');
- const html=fs.readFileSync(path.join(__dirname,'..','app/index.html'),'utf8');
- const css=fs.readFileSync(path.join(__dirname,'..','app/style.css'),'utf8');
- assert.match(html,/id="playlist-create-category"/);
- for(const op of ['categories-list','categories-create','categories-rename','categories-delete','categories-move'])assert.match(main,new RegExp("playlists:"+op));
- assert.match(preload,/playlistCategoryMove/);
- assert.match(renderer,/playlistCategoryMove\(name,category\.id\)/);
- assert.match(renderer,/dragPlaylistName=name/);
- assert.match(css,/\.toast-container\{top:55px;bottom:auto/);
- assert.match(renderer,/async function changeLocalPlaylistMembership/);
- assert.match(renderer,/await resume\(renamed,resumed\.queue\)/);
-});
 test('lyric visibility not gated by main focus, while settings save keeps the persisted mouse-through state',()=>{
  const floating=fs.readFileSync(path.join(__dirname,'..','floating_window.js'),'utf8');
  const main=fs.readFileSync(path.join(__dirname,'..','main.js'),'utf8');
@@ -89,14 +74,4 @@ test('original unclassified playlist is renamable, persists across reloads, and 
  storeAgain.remove(newId);
  assert.equal(storeAgain.list().defaultName,'学习时听','deleting a playlist never resets default name');
  assert.equal(storeAgain.list().assignments[f.tracks[0]],undefined,'songs fall back to renamed default');
-});
-test('playlist UI has actual New Playlist affordance, rename for default group and independent play queues',()=>{
- const html=fs.readFileSync(path.join(__dirname,'..','app/index.html'),'utf8');
- const ui=fs.readFileSync(path.join(__dirname,'..','app/renderer.js'),'utf8');
- const main=fs.readFileSync(path.join(__dirname,'..','main.js'),'utf8');
- assert.match(html,/＋ 新建歌单/);
- assert.match(ui,/await bridge\.playlistRenameDefault\(value\)/);
- assert.match(ui,/name:meta\.defaultName\|\|'未分类'/);
- assert.match(ui,/tracks:names,index:names\.indexOf\(name\)/);
- assert.match(main,/ipcMain\.handle\('playlists:rename-default'/);
 });

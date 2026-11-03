@@ -7,10 +7,11 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
   function remember(key,row){
     cache.set(key,row);while(cache.size>256)cache.delete(cache.keys().next().value);return row;
   }
-  async function lookup(ids,ctx,signal){
+  async function lookup(ids,ctx,signal,extended=false){
     const result=new Map(ids.map(id=>[id,{id,state:'unknown',reason:'音源检测失败，可重试',checkedAt:now()}]));
     const endpoints=[...ctx.bases.map(b=>b.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level=standard'),
       'https://music.163.com/api/song/enhance/player/url?ids='+encodeURIComponent('['+ids.join(',')+']')+'&br=128000'];
+    if(extended)for(const level of ['higher','exhigh','lossless'])for(const base of ctx.bases)endpoints.push(base.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level='+level);
     for(const endpoint of endpoints){
       if(signal?.aborted)throw Error('已切换歌曲');
       try{
@@ -27,7 +28,7 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
           const trialAvailable=trial&&trusted(url),segment=row.freeTrialInfo||row.trialInfo;
           const trialSeconds=segment?Math.max(0,Math.min(600,(Number(segment.end)-Number(segment.start))/1000))||0:0;
           if(result.get(id).trialAvailable&&!available&&!trialAvailable)continue;
-          result.set(id,{id,state:available?'available':'unavailable',reason:available?'当前接口提供完整音源':trial?'仅提供试听片段':'暂无完整在线播放音源',checkedAt:now(),...(available?{url}:{}),ttl:available?Math.min(120000,Math.max(1000,Number(row.expi||180)*1000-30000)):60000});
+          result.set(id,{id,state:available?'available':'unavailable',reason:available?'当前接口提供完整音源':trialAvailable?'仅提供试听片段':trial?'接口标记有试听权限，但未提供可播放地址':'当前在线播放接口未返回可用地址（不代表无法下载）',checkedAt:now(),...(available?{url}:{}),ttl:available?Math.min(120000,Math.max(1000,Number(row.expi||180)*1000-30000)):60000});
           if(trialAvailable)Object.assign(result.get(id),{trialAvailable:true,trialUrl:url,trialSeconds});
         }
       }catch(e){if(signal?.aborted)throw e;}
@@ -44,7 +45,7 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
     if(missing.length){
       const key=ctx.key+':'+[...missing].sort().join(',');let rows;
       // Playback owns its own abort signal; card probes never cancel the player.
-      if(signal)rows=await lookup(missing,ctx,signal);
+      if(signal)rows=await lookup(missing,ctx,signal,force);
       else {
         if(!pending.has(key))pending.set(key,lookup(missing,ctx).finally(()=>pending.delete(key)));
         rows=await pending.get(key);

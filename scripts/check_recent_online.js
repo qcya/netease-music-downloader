@@ -8,7 +8,7 @@ const path=require('node:path'),fs=require('node:fs');
  const result=await s.get({force:true});
  console.log(JSON.stringify({kind:'recent',ok:result.ok,day:result.day,pool:result.poolSize,songs:result.songs.map(s=>({id:s.id,name:s.name,date:s.reason}))}));
  if(!result.ok||result.offline||!result.songs.length)throw Error('No live recent songs');
- const media=createOnlineMedia();
+ const media=createOnlineMedia({getBases:()=>require('../music_providers').effectiveMusicApis([])});
  try{
   for(const id of ['2649156123','1397744004']){
    const availability=(await media.availability([id]))[0];

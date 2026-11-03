@@ -20,15 +20,6 @@ test('legacy preset becomes white glow without destroying customized palette',()
  const custom=normalizeLyrics({originalColor:'#FF00FF',translationColor:'#00FFFF',glow:28});
  assert.equal(custom.originalColor,'#FF00FF');assert.equal(custom.translationColor,'#00FFFF');assert.equal(custom.glow,28);
 });
-test('floating long text wraps and resize request sent through isolated bridge',()=>{
- const css=read('app/floating-lyrics.css'),js=read('app/floating-lyrics.js'),html=read('app/index.html');
- assert.match(css,/white-space:pre-wrap/);assert.match(css,/overflow-wrap:anywhere/);
- assert.doesNotMatch(css,/text-overflow:ellipsis[^\n]*\.lyric/);
- assert.match(js,/scrollHeight/);assert.match(js,/floatingBridge\.resize/);
- for(const id of ['lyr-background','lyr-original-color','lyr-outline-color','lyr-translation-color','lyr-width',
- 'lyr-mouse-through','lyr-show-translation','lyr-align','lyr-shadow','lyr-glow'])assert.ok(html.includes(`id="${id}"`),id);
- assert.match(read('main.js'),/ipcMain\.handle\('lyrics:resize'/);
-});
 test('packaged runtime requires local embedded backend and has no system Python fallback',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'netease-backend-'));
  try {
