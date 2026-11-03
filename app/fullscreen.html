@@ -1,0 +1,9 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self';script-src 'self';style-src 'self';img-src 'self' https://*.music.126.net https://*.music.163.net;object-src 'none';base-uri 'none'">
+<title>音乐下载器 · 全屏歌词</title><link rel="stylesheet" href="fullscreen.css"></head><body>
+<header><span><img src="../assets/avatar.png" alt="" draggable="false">音乐下载器</span><button id="close" title="退出全屏，音乐继续播放">收起歌词 <kbd>Esc</kbd> ×</button></header>
+<main><section class="record"><div class="art"><span class="ring"></span><img id="cover" src="../assets/avatar.png" alt="专辑封面" draggable="false"></div><div class="song"><p id="state">等待播放</p><h1 id="title">让音乐降落</h1><p id="artist">从音乐库选一首喜欢的歌</p></div></section>
+<section id="lyrics" aria-label="同步歌词"><div id="lyric-list"></div></section></main>
+<footer><div class="timeline"><span id="elapsed">0:00</span><input id="seek" type="range" min="0" max="1" value="0" step="0.1" aria-label="播放进度"><span id="duration">0:00</span></div>
+<div class="controls"><span class="tip">点击歌词跳转播放</span><div class="transport"><button id="previous" title="上一首" aria-label="上一首">❮</button><button id="toggle" aria-label="播放或暂停">播放</button><button id="next" title="下一首" aria-label="下一首">❯</button></div><label class="volume">音量 <input id="volume" type="range" min="0" max="1" value=".75" step=".01" aria-label="音量"></label></div></footer>
+<script src="fullscreen.js"></script></body></html>

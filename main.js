@@ -552,6 +552,7 @@ async function fetchLyrics(id, force=false) {
 
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,screen:require('electron').screen});
 const topPanel=createTopPanel({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,getSaved:()=>readJSON(path.join(app.getPath('userData'),'panel-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'panel-layout.json'),prefs)});
+const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,restorePanel:()=>topPanel.unfold()});
 const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>path.join(app.getPath('userData'),'recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 
 // No audio files, Python download subprocesses or full-file fallback on online playback.
@@ -566,10 +567,9 @@ async function beginStream(id,options){
 }
 
 function createWindow() {
-  const acrylic=process.platform==='win32' && Number(require('node:os').release().split('.')[2])>=22621;
   win = new BrowserWindow({
-    width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundMaterial:acrylic?'acrylic':'none',transparent:false,
-    title:'音乐下载器 · 下拉播放器',icon:appIcon(),backgroundColor:acrylic?'#00000000':'#101e2b',
+    width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundMaterial:'none',transparent:false,roundedCorners:true,
+    title:'音乐下载器 · 下拉播放器',icon:appIcon(),backgroundColor:'#e5f3ff',
     show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -595,6 +595,7 @@ function createWindow() {
     },
     onFailure:(reason,error)=>reportStartupFailure(reason,error),
     closeChildren:()=>{
+      fullscreenPlayer.close();
       floatingLyrics.close();
       topPanel.close();
     }
@@ -616,6 +617,7 @@ function reportStartupFailure(stage,error){
   try{createLogger(app.getPath('userData')).error('startup_failure',stage+' '+details)}catch{}
   try{dialog.showErrorBox('音乐下载器启动失败',stage+'。\\n'+details+'\\n\\n请将程序日志中的 application.log 提供给开发者。')}catch{}
   exiting=true;
+  try{fullscreenPlayer.close()}catch{}
   try{floatingLyrics.close()}catch{}
   try{topPanel.close()}catch{}
   stopBackendChildren();
@@ -661,6 +663,9 @@ app.whenReady().then(() => {
   tray.setContextMenu(Menu.buildFromTemplate([{label:'拉开音乐',click:showMain},{label:'收起',click:()=>topPanel.collapse()},{type:'separator'},{label:'退出',click:()=>app.quit()}]));
   tray.on('double-click',showMain);
   ipcMain.on('panel:action',(event,message)=>topPanel.action(event.sender,message));
+  ipcMain.on('fullscreen:open',(event,state)=>{assertMainSender(event);fullscreenPlayer.open(state);});
+  ipcMain.on('fullscreen:update',(event,state)=>{assertMainSender(event);fullscreenPlayer.update(state);});
+  ipcMain.on('fullscreen:control',(event,message)=>fullscreenPlayer.control(event.sender,message));
   ipcMain.on('window:action',(event,action)=>{assertMainSender(event);if(action==='quit')app.quit();else if(action==='close')topPanel.collapse();});
   const notifyLyricLock=locked=>{
     if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
@@ -849,6 +854,7 @@ app.whenReady().then(() => {
 }
 app.on('before-quit',()=>{
   exiting=true;
+  try{fullscreenPlayer.close()}catch{}
   try{floatingLyrics.close()}catch{}
   try{topPanel.close()}catch{}
   onlineMedia.close();

@@ -1,6 +1,10 @@
 'use strict';
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
+  openFullscreen:state=>ipcRenderer.send('fullscreen:open',state),
+  updateFullscreen:state=>ipcRenderer.send('fullscreen:update',state),
+  onFullscreenActive:cb=>{const f=(_e,active)=>cb(active);ipcRenderer.on('fullscreen:active',f);return()=>ipcRenderer.removeListener('fullscreen:active',f);},
+  onFullscreenControl:cb=>{const f=(_e,message)=>cb(message);ipcRenderer.on('fullscreen:control',f);return()=>ipcRenderer.removeListener('fullscreen:control',f);},
   panelAction:message=>ipcRenderer.send('panel:action',message),
   onPanelState:cb=>{const f=(_e,state)=>cb(state);ipcRenderer.on('panel:state',f);return()=>ipcRenderer.removeListener('panel:state',f);},
   onBackendStatus:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('backend:status',listener);return ()=>ipcRenderer.removeListener('backend:status',listener);},
