@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen } = require('electron');
 const fs = require('node:fs');
 const {createOnlineMedia}=require('./online_media');
 app.commandLine?.appendSwitch('disable-http-cache');
@@ -27,7 +27,7 @@ const {createTasteDiscoveryService}=require('./taste_discovery.js');
 const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
 const BACKGROUND_EXTS=new Set(['.mp4','.webm','.png','.jpg','.jpeg','.webp']);
-let win;
+let win, tray;
 let exiting=false;
 const activeBackendChildren=new Set();
 const downloadHistory=new Map();
@@ -50,7 +50,7 @@ const remotePreview = new Map();
 const previewSourceCache=new Map();
 const previewSourcePending=new Map();
 const lyricsPending=new Map();
-const onlineMedia=createOnlineMedia({getBases:()=>config().apiBases});
+const onlineMedia=createOnlineMedia({getBases:()=>config().apiBases,fetchImpl:(url,options)=>net.fetch(url,options)});
 if (protocol?.registerSchemesAsPrivileged) {
   protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);
 }
@@ -549,17 +549,18 @@ async function fetchLyrics(id, force=false) {
 }
 
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,screen:require('electron').screen});
-const miniPlayer=createMiniPlayerController({BrowserWindow,baseDir:__dirname,getMainWindow:()=>win});
+const miniPlayer=createMiniPlayerController({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win});
+const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>path.join(app.getPath('userData'),'recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 
 // No audio files, Python download subprocesses or full-file fallback on online playback.
 async function proxyPreview(req){return onlineMedia.handle(req);}
-async function beginStream(id){return onlineMedia.open(id);}
+async function beginStream(id,options){return onlineMedia.open(id,{allowTrial:options?.allowTrial===true});}
 
 function createWindow() {
   win = new BrowserWindow({
     width: 1210, height: 790, minWidth: 930, minHeight: 620,
-    title: '音乐下载器 v1.1.3', icon: appIcon(), backgroundColor: '#FFFAFD',
-    show: false, autoHideMenuBar: true,
+    title: '音乐下载器 v1.2.0-preview.1', icon: appIcon(), backgroundColor: '#FFFAFD',
+    show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false, contextIsolation: true, sandbox: true,backgroundThrottling:false
@@ -575,6 +576,8 @@ function createWindow() {
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   wireMainWindow({
     window:win,app,
+    shouldHide:()=>!exiting&&!process.env.MUSIC_DOWNLOADER_TEST_USER_DATA,
+    onHide:()=>{miniPlayer.open();win.webContents.send('mini:status',{open:true});win.webContents.send('mini:control',{type:'sync'});},
     onShown:()=>{
       floatingLyrics.setMainFocused(true);
       try{createLogger(app.getPath('userData')).info('window_ready','主界面已显示')}catch{}
@@ -643,6 +646,12 @@ app.whenReady().then(() => {
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
   createWindow();
+  tray=new Tray(appIcon());tray.setToolTip('音乐抽屉');
+  const showMain=()=>{win.restore();win.show();win.focus();};
+  tray.setContextMenu(Menu.buildFromTemplate([{label:'打开音乐库',click:showMain},{label:'展开音乐抽屉',click:()=>{miniPlayer.open();miniPlayer.expand(true);win.webContents.send('mini:status',{open:true});}},{type:'separator'},{label:'退出',click:()=>app.quit()}]));
+  tray.on('double-click',showMain);
+  ipcMain.on('window:action',(event,action)=>{assertMainSender(event);if(action==='minimize')win.minimize();else if(action==='maximize')win.isMaximized()?win.unmaximize():win.maximize();else if(action==='close')win.close();});
+  ipcMain.on('mini:quit',event=>{if(miniPlayer.owns(event.sender))app.quit();});
   const notifyLyricLock=locked=>{
     if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
   };
@@ -656,7 +665,7 @@ app.whenReady().then(() => {
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
   ipcMain.handle('music:availability',(_e,ids,options)=>{assertMainSender(_e);return onlineMedia.availability(ids,{force:options?.force===true});});
-  ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return discovery.get(options||{})});
+  ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return options?.category==='recent'?recentDiscovery.get(options):discovery.get(options||{})});
   ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('system:choose-directory', async () => {
     const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
@@ -675,7 +684,7 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:organize',(_e,order,name,id)=>{assertMainSender(_e);return categoryStore.organize(order,name,id)});
   ipcMain.handle('mini:open',()=>{const state=miniPlayer.open();persistMiniPlayerEnabled(true);return state});
   ipcMain.handle('mini:close',()=>{const state=miniPlayer.close();persistMiniPlayerEnabled(false);return state});
-  ipcMain.handle('mini:state',(_e,state)=>miniPlayer.update(state));
+  ipcMain.handle('mini:state',(_e,state)=>{assertMainSender(_e);return miniPlayer.update(state)});
   ipcMain.on?.('mini:control',(event,action)=>miniPlayer.control(event.sender,action));
   ipcMain.handle('background:choose',async()=>{
     const result=await dialog.showOpenDialog(win,{title:'选择沉浸歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});
@@ -755,9 +764,9 @@ app.whenReady().then(() => {
     return await runCli('playlist', ['--id',id]);
   });
   ipcMain.handle('music:prepare', async (_e, id) => prepareAudio(id));
-  ipcMain.handle('music:stream',async(event,id)=>{
+  ipcMain.handle('music:stream',async(event,id,options)=>{
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可播放在线歌曲');
-    return beginStream(id);
+    return beginStream(id,options);
   });
   ipcMain.handle('music:stop-stream',(event)=>{
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可停止在线歌曲');

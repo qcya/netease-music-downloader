@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   onBackendStatus:callback=>{const listener=(_event,value)=>callback(value);ipcRenderer.on('backend:status',listener);return ()=>ipcRenderer.removeListener('backend:status',listener);},
+  windowAction:action=>ipcRenderer.send('window:action',action),
   appInfo:()=>ipcRenderer.invoke('app:info'),
   openReleasePage:()=>ipcRenderer.invoke('app:release-page'),
   mediaAvailability:(ids,options)=>ipcRenderer.invoke('music:availability',ids,options),
@@ -61,7 +62,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   removeFavorite:id=>ipcRenderer.invoke('favorites:remove',id),
   retryFavoriteLyrics:id=>ipcRenderer.invoke('favorites:retry-lyrics',id),
   prepareAudio: id => ipcRenderer.invoke('music:prepare', id),
-  streamAudio: id => ipcRenderer.invoke('music:stream', id),
+  streamAudio: (id,options) => ipcRenderer.invoke('music:stream', id,options),
   stopOnlinePlayback:()=>ipcRenderer.invoke('music:stop-stream'),
   fetchLyricsMemory:id=>ipcRenderer.invoke('music:lyric-memory',id),
   setPlaybackState:playing=>ipcRenderer.invoke('music:playback-state',!!playing),

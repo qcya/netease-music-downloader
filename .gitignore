@@ -64,3 +64,8 @@ assets/immersive-background.mp4
 
 # Generated build identity
 /build-info.json
+
+# Local validation output
+.validation/
+*.tmp.py
+.superpowers/

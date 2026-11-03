@@ -16,8 +16,9 @@ class Window {
   static getAllWindows(){return []}
 }
 const fake={
+  Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
   app:{isPackaged:false,getPath:k=>path.join(tmp,k),setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}},
-  BrowserWindow:Window, ipcMain:{handle:(key,cb)=>handlers.set(key,cb)},
+  BrowserWindow:Window, ipcMain:{handle:(key,cb)=>handlers.set(key,cb),on(){}},
   dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
   shell:{openPath:async()=>'',openExternal:async()=>true},
   protocol:{registerSchemesAsPrivileged(){},handle(){}}

@@ -86,6 +86,7 @@ async function startFixture() {
       if(u.searchParams.get('type')==='1000')payload={code:200,result:{playlists:[{id:800000+[...term].reduce((n,c)=>n+c.codePointAt(0),0),name:term+' 验收精选',trackCount:songs.length}]}};
       else payload={code:200,result:{songs:catalog.has(term)?[catalog.get(term)]:songs.filter(s=>s.ar.some(a=>a.name.includes(term))).slice(Number(u.searchParams.get('offset')||0),Number(u.searchParams.get('offset')||0)+60)}};
     }
+    else if(u.pathname==='/top/song')payload={code:200,data:songs.slice(0,20).map((s,i)=>({...s,publishTime:Date.now()-(i+1)*86400000}))};
     else if(u.pathname==='/top/playlist'||u.pathname==='/personalized')payload={code:200,playlists,result:playlists};
     else if(u.pathname==='/playlist/track/all')payload={code:200,songs:songs.slice(Number(u.searchParams.get('offset')||0),Number(u.searchParams.get('offset')||0)+Number(u.searchParams.get('limit')||200)),total:songs.length};
     else if(u.pathname==='/playlist/detail')payload={code:200,playlist:{tracks:songs.slice(0,10),trackCount:songs.length,trackIds:songs.map(x=>({id:x.id}))}};
@@ -213,7 +214,12 @@ async function main() {
     await realClick('.nav-item[data-view=home]');
     await realClick('#home-discover-tab');
     await wait('!document.getElementById("discovery-refresh").disabled','Initial discovery request never settled',200);
-    await realClick('#discovery-refresh');
+    await realClick('[data-category="recent"]');
+    await wait('document.querySelectorAll(".discovery-song").length===8 && document.querySelector(".discovery-song")?.dataset.songId.startsWith("700")','Recent IPC did not render dated fixture songs',200);
+    assert.equal(await c.run('document.querySelector(".discovery-reason").textContent.startsWith("发行于")'),true);
+    assert.equal(await c.run('document.getElementById("discovery-playlists").hidden'),true);
+    await realClick('[data-category="all"]');
+    await wait('!document.getElementById("discovery-refresh").disabled','Taste category did not settle',200);
     await wait('document.querySelectorAll(".discovery-song").length===8 && document.querySelector(".discovery-song")?.dataset.songId.startsWith("700")','Real recommendation IPC did not render fixture songs');
     assert.equal(await c.run('document.querySelectorAll(".discovery-playlist").length'),5);
     assert.equal(fixture.downloads(),0,'opening recommendations must never download or autoplay');

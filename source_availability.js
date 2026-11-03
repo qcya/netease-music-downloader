@@ -9,8 +9,8 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
   }
   async function lookup(ids,ctx,signal){
     const result=new Map(ids.map(id=>[id,{id,state:'unknown',reason:'音源检测失败，可重试',checkedAt:now()}]));
-    const endpoints=ctx.bases.length?ctx.bases.map(b=>b.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level=standard'):
-      ['https://music.163.com/api/song/enhance/player/url?ids='+encodeURIComponent('['+ids.join(',')+']')+'&br=128000'];
+    const endpoints=[...ctx.bases.map(b=>b.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level=standard'),
+      'https://music.163.com/api/song/enhance/player/url?ids='+encodeURIComponent('['+ids.join(',')+']')+'&br=128000'];
     for(const endpoint of endpoints){
       if(signal?.aborted)throw Error('已切换歌曲');
       try{
@@ -24,7 +24,11 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
           }
           const trial=!!row.freeTrialInfo||!!row.trialInfo||row.freeTrialPrivilege?.resConsumable===true&&row.freeTrialPrivilege?.userConsumable===false;
           const available=!trial&&trusted(url);
+          const trialAvailable=trial&&trusted(url),segment=row.freeTrialInfo||row.trialInfo;
+          const trialSeconds=segment?Math.max(0,Math.min(600,(Number(segment.end)-Number(segment.start))/1000))||0:0;
+          if(result.get(id).trialAvailable&&!available&&!trialAvailable)continue;
           result.set(id,{id,state:available?'available':'unavailable',reason:available?'当前接口提供完整音源':trial?'仅提供试听片段':'暂无完整在线播放音源',checkedAt:now(),...(available?{url}:{}),ttl:available?Math.min(120000,Math.max(1000,Number(row.expi||180)*1000-30000)):60000});
+          if(trialAvailable)Object.assign(result.get(id),{trialAvailable:true,trialUrl:url,trialSeconds});
         }
       }catch(e){if(signal?.aborted)throw e;}
       if([...result.values()].every(x=>x.state==='available'))break;
@@ -50,8 +54,8 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
     return unique.map(id=>found.get(id));
   }
   return {
-    async resolve(id,signal){return (await get([id],{signal}))[0];},
-    async check(ids,options){return (await get(ids,options)).map(({id,state,reason,checkedAt})=>({id,state,reason,checkedAt}));},
+    async resolve(id,signal){return (await get([id],{signal,force:true}))[0];},
+    async check(ids,options){return (await get(ids,options)).map(({id,state,reason,checkedAt,trialAvailable,trialSeconds})=>({id,state,reason,checkedAt,...(trialAvailable?{trialAvailable,trialSeconds}:{})}));},
     clear(){cache.clear();}
   };
 }

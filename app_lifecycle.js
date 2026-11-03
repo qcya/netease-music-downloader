@@ -3,7 +3,7 @@
  * A portable Electron build must not remain invisible when Chromium omits
  * ready-to-show; neither should hidden tool windows keep the app running.
  */
-function wireMainWindow({window,app,onShown,onFailure,closeChildren,timeoutMs=10000}){
+function wireMainWindow({window,app,onShown,onFailure,closeChildren,shouldHide=()=>false,onHide,timeoutMs=10000}){
   let shown=false,closing=false,failed=false;
   const alive=()=>window&&!window.isDestroyed?.();
   function closeTools(){
@@ -34,7 +34,10 @@ function wireMainWindow({window,app,onShown,onFailure,closeChildren,timeoutMs=10
   window.webContents.on('render-process-gone',(_event,details)=>{
     fail('界面进程异常退出',new Error(details?.reason||'render-process-gone'));
   });
-  window.on?.('close',closeTools);
+  window.on?.('close',event=>{
+    if(shown&&!failed&&shouldHide()){event?.preventDefault();window.hide();onHide?.();return;}
+    closeTools();
+  });
   window.on?.('closed',()=>{
     closeTools();
     if(process.platform!=='darwin')app.quit();

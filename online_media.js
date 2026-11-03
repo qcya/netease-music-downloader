@@ -25,14 +25,15 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   finally{void reader.cancel().catch(()=>{});}
  }
  const sources=createSourceAvailability({json,getBases:bases,trusted,now});
- async function open(id){
+ async function open(id,{allowTrial=false}={}){
   const sid=idOf(id);stop();const serial=revision,control=new AbortController();resolving=control;
   try{
    const chosen=await sources.resolve(sid,control.signal);
    if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
-   if(chosen.state!=='available')throw Error(chosen.reason+'；不会自动下载或缓存。');
-   const token=randomUUID();current={url:chosen.url,id:sid,token,controllers:new Set()};
-   return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false};
+   const previewOnly=chosen.state!=='available'&&allowTrial===true&&chosen.trialAvailable===true;
+   if(chosen.state!=='available'&&!previewOnly)throw Error(chosen.reason+'；不会自动下载或缓存。');
+   const token=randomUUID();current={url:previewOnly?chosen.trialUrl:chosen.url,id:sid,token,controllers:new Set()};
+   return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false,previewOnly,trialSeconds:previewOnly?chosen.trialSeconds:0};
   }finally{if(resolving===control)resolving=null;}
  }
  function isAudio(bytes){

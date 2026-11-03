@@ -24,13 +24,14 @@ class Window {
   static getAllWindows(){return []}
 }
 const electron = {
+  Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
   app:{
     isPackaged:false,
     getPath(k){if(k==='userData')return path.join(temp,'userData');if(k==='music')return path.join(temp,'music');return temp;},
     setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}
   },
   BrowserWindow:Window,
-  ipcMain:{handle(k,cb){handlers.set(k,cb)}},
+  ipcMain:{handle(k,cb){handlers.set(k,cb)},on(){}},
   dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
   shell:{openPath:async()=>'',openExternal:async()=>true,trashItem:async file=>fs.rmSync(file)},
   protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){if(scheme==='music-media')mediaHandler=cb;else if(scheme==='music-preview')previewHandler=cb;}}

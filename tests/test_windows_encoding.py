@@ -42,19 +42,15 @@ class WindowsEncoding(unittest.TestCase):
         self.assertIn(b'set "PYTHONUTF8=1"',raw)
         self.assertIn(b'call npm start',raw)
 
-    def test_build_workflow_release_once_and_manual(self):
+    def test_build_workflow_verifies_preview_without_publishing(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/windows-build.yml').read_text(encoding='utf-8')
         self.assertIn('workflow_dispatch:', workflow)
         self.assertIn('  push:', workflow)
-        self.assertIn("      - '.github/workflows/windows-build.yml'", workflow)
-        self.assertIn('  contents: write', workflow)
+        self.assertNotIn('    paths:', workflow, 'source changes must trigger regression checks')
+        self.assertIn('  contents: read', workflow)
         version = json.loads((root / 'package.json').read_text(encoding='utf-8'))['version']
-        self.assertIn(f'Publish GitHub Release v{version}', workflow)
-        release_step = workflow.split(f'      - name: Publish GitHub Release v{version}', 1)[1]
-        self.assertIn("if: success() && github.event_name == 'push'", release_step,
-                      'publishing must require successful verification and a push event')
-        self.assertNotIn('if: always()', release_step)
+        self.assertNotIn('gh release create', workflow, 'preview builds must not publish automatically')
         self.assertIn(f'MusicDownloader-{version}-portable.exe.sha256', workflow)
         self.assertIn('Run all regression tests', workflow)
 

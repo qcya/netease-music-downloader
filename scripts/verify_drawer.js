@@ -1,0 +1,43 @@
+'use strict';
+// Real Electron integration test, using an isolated library of generated silence.
+const {app,BrowserWindow}=require('electron'),fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.join(__dirname,'..'),dir=path.join(root,'.validation/drawer-test-'+Date.now()),music=path.join(dir,'music');
+fs.mkdirSync(music,{recursive:true});app.setPath('userData',dir);
+fs.writeFileSync(path.join(dir,'settings.json'),JSON.stringify({downloadDir:music,disclaimerAcceptedVersion:1,miniPlayerEnabled:true,desktopLyricsEnabled:false}));
+const wav=Buffer.alloc(44+44100*2*25);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(44100,24);wav.writeUInt32LE(88200,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
+for(const name of ['晨间练习.wav','夜航练习.wav'])fs.writeFileSync(path.join(music,name),wav);
+const errors=[];
+app.on('web-contents-created',(_e,web)=>web.on('console-message',(_event,level,message)=>{if(level>=3&&!message.includes('ERR_NAME_NOT_RESOLVED'))errors.push(message);}));
+require('../main');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function wait(check,label){for(let n=0;n<150;n++){if(await check())return;await sleep(100);}throw Error(label);}
+(async()=>{
+ await app.whenReady();let main,mini;
+ await wait(()=>{main=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/index.html'));mini=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/mini-player.html'));return !!(main&&mini);},'windows missing');
+ const run=(w,code)=>w.webContents.executeJavaScript(code,true);
+ await wait(()=>run(main,'typeof musicBridge!=="undefined" && !!document.getElementById("window-close")'),'main not ready');
+ await wait(()=>run(mini,'typeof miniBridge!=="undefined"'),'drawer not ready');
+ await run(mini,"miniBridge.control({type:'expand'});miniBridge.control({type:'pin'});document.getElementById('tab-library').click()");
+ await wait(()=>run(mini,"document.querySelectorAll('.song').length===2"),'local library missing');
+ await run(mini,"document.querySelector('.song').click()");
+ await wait(()=>run(main,"!document.getElementById('music-audio').paused && document.getElementById('music-audio').currentTime>0"),'local playback did not start');
+ const before=await run(main,"document.getElementById('music-audio').currentTime");
+ main.close();await sleep(500);assert.equal(main.isDestroyed(),false);assert.equal(main.isVisible(),false);
+ assert.ok(await run(main,`document.getElementById('music-audio').currentTime>${before}`),'hide interrupted playback');
+ await run(mini,"miniBridge.control({type:'volume',value:.25});miniBridge.control({type:'seek',value:5})");
+ await wait(()=>run(main,"document.getElementById('music-audio').volume===.25 && document.getElementById('music-audio').currentTime>=5"),'transport did not reach main audio');
+ await run(mini,"miniBridge.control('toggle')");await wait(()=>run(main,"document.getElementById('music-audio').paused"),'pause failed');
+ await run(mini,"document.getElementById('filter').value='夜航';document.getElementById('filter').dispatchEvent(new Event('input'))");
+ assert.equal(await run(mini,"document.querySelectorAll('.song').length"),1);
+ await run(mini,"document.getElementById('filter').value='';document.getElementById('filter').dispatchEvent(new Event('input'))");
+ await sleep(400);fs.writeFileSync(path.join(root,'.validation/drawer.png'),(await mini.webContents.capturePage()).toPNG());
+ await run(mini,"document.getElementById('collapse').click()");await sleep(350);assert.equal(mini.getBounds().width,40);
+ await run(mini,"document.getElementById('handle').click()");await sleep(350);assert.ok(mini.getBounds().width>300);
+ await run(mini,"document.getElementById('show-main').click()");await sleep(300);assert.equal(main.isVisible(),true);
+ assert.ok(await run(main,"document.getElementById('player-dock').getBoundingClientRect().bottom<=innerHeight+1"),'main transport extends below viewport');
+ fs.writeFileSync(path.join(root,'.validation/library.png'),(await main.webContents.capturePage()).toPNG());
+ if(errors.length)throw Error('Renderer errors: '+errors.join('\n'));
+ console.log('PASS: real Electron drawer local list, selection, background playback, seek, volume, pause, filter, collapse, expand, restore; no renderer errors.');
+ fs.writeFileSync(path.join(root,'.validation/drawer-result.json'),JSON.stringify({ok:true,checks:['local selection','hide continues playback','seek','volume','pause','filter','collapse','expand','restore','transport visible'],rendererErrors:errors},null,2));
+ await run(mini,'miniBridge.quit()');
+})().catch(e=>{console.error(e.stack);app.exit(1);});

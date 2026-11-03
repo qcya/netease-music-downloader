@@ -27,7 +27,12 @@
     }
     return result;
   }
-  const api = {ordered, reconcile};
+  function libraryFiles(files,lists,meta,selected='all'){
+    const safe=files.filter(f=>!f.conflict);if(selected==='all')return safe;
+    const byName=new Map(safe.map(f=>[f.name,f]));
+    return ordered(lists.flatMap(l=>l.tracks||[]),meta).filter(name=>(meta.assignments[name]||'default')===selected).map(name=>byName.get(name)).filter(Boolean);
+  }
+  const api = {ordered, reconcile, libraryFiles};
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.MusicPlaylistQueue = api;
 })(typeof window !== 'undefined' ? window : null);

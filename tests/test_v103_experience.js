@@ -84,6 +84,9 @@ test('mini player is closed by default, receives media state and validates contr
   isDestroyed(){return this.destroyed}
   loadFile(){this.loaded?.()}
   show(){}
+  showInactive(){}
+  setBounds(bounds){this.bounds=bounds}
+  getBounds(){return this.bounds||{x:0,y:0,width:40,height:132}}
   close(){this.destroyed=true;this.closed?.()}
   on(ev,cb){if(ev==='closed')this.closed=cb}
  }

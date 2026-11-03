@@ -9,12 +9,13 @@
     function prune(){for(const [id,set] of bindings){for(const b of set)if(!b.host.isConnected){observer?.unobserve(b.host);set.delete(b);}if(!set.size){bindings.delete(id);queued.delete(id);if(states.get(id)?.state==='checking')states.delete(id);}}}
     function paint(b){
       const value=states.get(b.id)||{state:'checking'},host=b.host;host.replaceChildren();host.dataset.availability=value.state;
-      if(value.state==='available'){
+      if(value.state==='available'||value.trialAvailable){
         const button=doc.createElement('button');button.type='button';button.className=b.className;button.textContent='在线播放';
         button.title='在线播放，不保存音频';button.setAttribute('aria-label','在线播放 '+(b.song.name||''));
+        if(value.trialAvailable){button.textContent=value.trialSeconds?'试听 '+value.trialSeconds+' 秒':'试听片段';button.title='接口仅提供试听片段，不是完整版';button.setAttribute('aria-label','试听片段 '+(b.song.name||''));}
         button.onclick=async()=>{
           button.disabled=true;button.textContent='准备中…';
-          try{const started=await b.onPlay();if(started===false)failed(b.id);}
+          try{const started=await b.onPlay({allowTrial:value.trialAvailable===true});if(started===false)failed(b.id);}
           catch(e){failed(b.id);notify(e.message||String(e),true);}
           finally{if(host.isConnected)paint(b);}
         };
@@ -22,7 +23,7 @@
       }
       const label=doc.createElement('span');label.className='stream-status';label.textContent=value.state==='unavailable'?'暂不可播':value.state==='checking'?'检查音源…':'未确认音源';
       label.title=value.reason||'确认完整音源后才显示在线播放按钮';host.append(label);
-      if(value.state==='unknown'){
+      if(value.state==='unknown'||value.state==='unavailable'){
         const retry=doc.createElement('button');retry.type='button';retry.className='stream-retry';retry.textContent='重试检测';
         retry.onclick=()=>request(b.id,true);host.append(retry);
       }

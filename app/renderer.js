@@ -85,7 +85,7 @@
     const download=node('button','track-action download');download.type='button';download.title='下载这首歌曲';download.setAttribute('aria-label','下载 '+(track.name||''));download.innerHTML=icon('download');
     download.addEventListener('click',()=>downloadSongs([String(track.id)]));
     const play=node('span','');
-    availabilityUI.bind(play,track,{className:'track-action online-play',onPlay:()=>playOnlineSong(track)});
+    availabilityUI.bind(play,track,{className:'track-action online-play',onPlay:options=>playOnlineSong(track,null,false,null,options)});
     actions.append(play);actions.append(download);ctrl.append(toggle,actions);
     const job=node('div','track-job-state'); job.dataset.songId=String(track.id);
     const existing=state.downloadJobs.get(String(track.id));
@@ -265,10 +265,16 @@
     finally{restoringSession=false}
     showToast('已恢复上次播放的歌曲与进度（保持暂停）。');
   }
+  let drawerLibrary=false,drawerFiles=[],drawerRows=[],drawerPlaylists=[],drawerList='all',drawerRequest=0;
   function updateMiniPlayer(){
     if(!state.miniOpen)return;
-    void bridge.updateMiniPlayer({title:state.playerInfo?.name||'还没有播放歌曲',
-      artist:state.playerInfo?.artists||'',playing:!audio().paused&&!audio().ended}).catch(()=>{});
+    const q=state.playQueue;
+    drawerRows=drawerLibrary?drawerFiles.map(f=>({key:f.name,title:songName(f),artist:'本地音乐',active:f.name===state.currentLocalName})):
+      (q?.tracks||[]).map((key,i)=>({key,title:q.kind==='online'?(onlineMetadata.get(key)?.name||key):songName({name:key}),artist:q.kind==='online'?(onlineMetadata.get(key)?.artists||''):'本地音乐',active:i===q.index}));
+    void bridge.updateMiniPlayer({title:state.playerInfo?.name||'音乐，随手可及',
+      artist:state.playerInfo?.artists||(state.currentLocalName?'本地音乐':'从歌单选一首开始'),playing:!audio().paused&&!audio().ended,
+      cover:state.playerInfo?.cover_url,time:audio().currentTime,duration:audio().duration,volume:audio().volume,mode:state.playMode,
+      previewOnly:state.playerInfo?.previewOnly,lyric:state.lyrics[state.lyricIndex]?.text||'',queue:drawerRows,playlists:drawerPlaylists}).catch(()=>{});
   }
   async function toggleMiniPlayer(force){
     const enable=typeof force==='boolean'?force:!state.miniOpen;
@@ -650,7 +656,7 @@
   }
   function startDiscovery(){
     if(!discoveryUI){
-      discoveryUI=window.MusicDiscovery.create({document,bridge,availability:availabilityUI,notify:showToast,onSong:(song,pool)=>playOnlineSong(song,null,false,pool),onDownload:song=>downloadSongs([song.id]),
+      discoveryUI=window.MusicDiscovery.create({document,bridge,availability:availabilityUI,notify:showToast,onSong:(song,pool,options)=>playOnlineSong(song,null,false,pool,options),onDownload:song=>downloadSongs([song.id]),
         onLocalRandom:playRandomLocal,onPlaylist:async list=>{
           if(state.busy){showToast('正在读取歌曲，请等当前操作结束。');return;}
           showHomeContent('search');$('#playlist-input').value=list.id;
@@ -668,7 +674,7 @@
     }
     if(state.settings?.disclaimerAcceptedVersion)void discoveryUI.init();
   }
-  async function playOnlineSong(song,queue=null,automatic=false,pool=null){
+  async function playOnlineSong(song,queue=null,automatic=false,pool=null,options={}){
     if(!song?.id){showToast('在线歌曲信息无效。',true);return false;}
     if(!automatic)state.advanceSerial++;
     const token=++state.playToken;discoveryPlaySerial++;
@@ -682,9 +688,11 @@
       :{...window.MusicPlaybackNavigation.createQueue(candidates.map(t=>String(t.id)),candidates.findIndex(t=>String(t.id)===sid),state.playMode),id:'online',kind:'online'};
     clearLyrics('正在获取歌词…');updatePlayerControls();setStatus('正在连接在线音源…');
     try{
-      const info=await bridge.streamAudio(sid);
+      const info=await bridge.streamAudio(sid,options);
       if(token!==state.playToken)return false;
-      return await startAudio({...song,...info,name:song.name,artists:song.artists},info.url,token,sid)===true;
+      const started=await startAudio({...song,...info,name:song.name,artists:song.artists},info.url,token,sid)===true;
+      if(started&&token===state.playToken&&info.previewOnly){state.playerInfo.previewOnly=true;$('#player-artist').textContent='试听片段 · '+song.artists;setStatus('正在播放接口提供的试听片段，不是完整歌曲。');updateMiniPlayer();}
+      return started;
     }catch(e){if(token===state.playToken){clearLyrics('在线播放失败');showToast(errMessage(e),true);setStatus('在线播放失败，不会自动下载或缓存。','error');}return false;}
     finally{if(token===state.playToken){state.preparing=false;updatePlayerControls();}}
   }
@@ -1161,7 +1169,7 @@
         $('#player-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
       if(Number.isFinite(audio().duration)&&audio().duration>0&&!$('#immersive-seek').matches(':active'))$('#immersive-seek').value=String(Math.round(audio().currentTime/audio().duration*1000));
       syncLyrics();
-      savePlaybackSession();
+      savePlaybackSession();updateMiniPlayer();
     });
     audio().addEventListener('loadedmetadata',()=>{$('#time-duration').textContent=timeLabel(audio().duration);$('#immersive-duration').textContent=timeLabel(audio().duration);});
     for(const event of ['play','pause','ended'])audio().addEventListener(event,()=>{updatePlayerControls();if(audio().paused)clockOff();else clockOn();bridge.setPlaybackState(!audio().paused).catch(()=>{});savePlaybackSession(true)});
@@ -1202,7 +1210,28 @@
         event.preventDefault();audio().paused?audio().play().catch(()=>{}):audio().pause();
       }
     });
-    bridge.onMiniControl(action=>{
+    for(const action of ['minimize','maximize','close'])$('#window-'+action)?.addEventListener('click',()=>bridge.windowAction(action));
+    bridge.onMiniControl(async action=>{
+      if(action&&typeof action==='object'){
+        if(action.type==='sync'){state.miniOpen=true;drawerLibrary=false;drawerRequest++;}
+        else if(action.type==='library'){
+          drawerLibrary=true;drawerList=action.playlist||'all';const request=++drawerRequest;
+          try{const [files,meta,lists]=await Promise.all([bridge.listFiles(),bridge.playlistCategoriesList(),bridge.playlistsList()]);
+            if(request!==drawerRequest)return;
+            drawerPlaylists=[{id:'default',name:meta.defaultName||'未分类'},...meta.categories];
+            drawerFiles=window.MusicPlaylistQueue.libraryFiles(files,lists,meta,drawerList);
+          }catch(e){showToast(errMessage(e),true);}
+        }
+        else if(action.type==='queue'){drawerRequest++;drawerLibrary=false;}
+        else if(action.type==='seek'&&Number.isFinite(audio().duration))audio().currentTime=Math.min(action.value,audio().duration);
+        else if(action.type==='volume'){audio().volume=action.value;$('#player-volume').value=String(action.value*100);$('#immersive-volume').value=String(action.value*100);}
+        else if(action.type==='mode')changePlaybackMode(action.value);
+        else if(action.type==='select'&&drawerRows.some(r=>r.key===action.key)){
+          if(drawerLibrary)await playLocalFile({name:action.key},{id:drawerList==='all'?'local':drawerList,tracks:drawerFiles.map(f=>f.name),index:drawerFiles.findIndex(f=>f.name===action.key)});
+          else{const q=state.playQueue,index=q?.tracks.indexOf(action.key);if(index>=0)await(q.kind==='online'?playOnlineSong(onlineMetadata.get(action.key),{...q,index}):playLocalFile({name:action.key},{...q,index}));}
+        }
+        updateMiniPlayer();return;
+      }
       if(action==='previous')void advancePlaylist(-1,'manual');
       else if(action==='next')void advancePlaylist(1,'manual');
       else if(action==='toggle'&&audio().src){audio().paused?audio().play().catch(e=>showToast(errMessage(e),true)):audio().pause()}

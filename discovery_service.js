@@ -21,7 +21,7 @@ function normalizeSong(raw) {
   if(duration>0&&duration<=20)return null;
   const album=item.al||item.album||{},artists=item.ar||item.artists;
   return {id,name,artists:Array.isArray(artists)?artists.map(a=>text(a?.name,80)).filter(Boolean).join(' / '):text(item.artists||item.artist,120),
-    album:text(album.name),duration_seconds:Number.isFinite(duration)?Math.max(0,Math.round(duration)):0,
+    album:text(album.name),publishedAt:Math.max(0,Number(item.publishedAt||item.publishTime||album.publishTime)||0),duration_seconds:Number.isFinite(duration)?Math.max(0,Math.round(duration)):0,
     cover_url:cover(album.picUrl||item.picUrl||item.coverUrl)};
 }
 function normalizePlaylist(item) {
