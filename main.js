@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen, Notification } = require('electron');
 const fs = require('node:fs');
 const {createOnlineMedia}=require('./online_media');
 const {effectiveMusicApis}=require('./music_providers');
@@ -17,6 +17,7 @@ const { importMusic } = require('./local_import.js');
 const {createTopPanel}=require('./top_panel');
 const {wireMainWindow}=require('./app_lifecycle.js');
 const {normalizePosition}=require('./lyric_position.js');
+const {createFirstPositionPolicy}=require('./lyric_first_position.js');
 const {normalizeLyrics,DEFAULT_LYRICS}=require('./lyric_preferences.js');
 const {embeddedBackend}=require('./backend_runtime.js');
 const {createLogger}=require('./app_logger.js');
@@ -578,6 +579,7 @@ async function fetchLyrics(id, force=false) {
   try{return await task;}finally{if(lyricsPending.get(sid)===task)lyricsPending.delete(sid)}
 }
 
+const firstPositionPolicy=createFirstPositionPolicy({readState:()=>readJSON(path.join(app.getPath('userData'),'lyric-position-policy.json'),null),writeState:state=>writeJSONAtomic(path.join(app.getPath('userData'),'lyric-position-policy.json'),state),lock:()=>persistFloatingLyricsLock(true)});
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,onCloseRequest:()=>persistDesktopLyricsEnabled(false),onOpenSettings:()=>{topPanel.unfold();if(win&&!win.isDestroyed())win.webContents.send('lyrics:open-settings');},screen:require('electron').screen});
 const topPanel=createTopPanel({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,getSaved:()=>readJSON(path.join(app.getPath('userData'),'panel-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'panel-layout.json'),prefs)});
 const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,restorePanel:()=>topPanel.unfold()});
@@ -670,6 +672,7 @@ app.on('second-instance',()=>{
   }
 });
 app.whenReady().then(() => {
+  try{firstPositionPolicy.start()}catch(e){console.warn('桌面歌词首次定位状态不可用：',e.message)}
   const logger=createLogger(app.getPath('userData'));logger.info('start',`version=${app.getVersion?.()||'dev'} packaged=${app.isPackaged}`);
   process.on('uncaughtException',e=>reportStartupFailure('主进程未捕获的异常',e));
   process.on('unhandledRejection',e=>reportStartupFailure('主进程发生异常',e));
@@ -716,10 +719,20 @@ app.whenReady().then(() => {
   const notifyLyricLock=locked=>{
     if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
   };
-  floatingLyrics.setLockChange(locked=>{persistFloatingLyricsLock(locked);notifyLyricLock(locked)});
-  ipcMain.on?.('lyrics:drag-begin',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragBegin()});
+  const rememberLyricChoice=()=>{try{firstPositionPolicy.userChoice()}catch(e){console.warn('桌面歌词定位状态保存失败：',e.message)}};
+  let dragOrigin=null,dragCursor=null;
+  floatingLyrics.setLockChange(locked=>{persistFloatingLyricsLock(locked);rememberLyricChoice();notifyLyricLock(locked)});
+  ipcMain.on?.('lyrics:drag-begin',event=>{if(floatingLyrics.owns(event.sender)){dragOrigin=floatingLyrics.dragBegin()?floatingLyrics.position():null;dragCursor=dragOrigin?screen.getCursorScreenPoint():null;}});
+  ipcMain.on?.('lyrics:shape',(event,rects)=>{if(floatingLyrics.owns(event.sender)&&Array.isArray(rects)&&rects.length<=64)floatingLyrics.setLyricShape(rects)});
   ipcMain.on?.('lyrics:drag-move',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragMove()});
-  ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.dragEnd()});
+  ipcMain.on?.('lyrics:drag-end',event=>{if(floatingLyrics.owns(event.sender)){
+    floatingLyrics.dragEnd();const after=floatingLyrics.position(),cursor=screen.getCursorScreenPoint();
+    try{if(dragCursor&&(cursor.x!==dragCursor.x||cursor.y!==dragCursor.y)&&firstPositionPolicy.positionChanged(dragOrigin,after)){
+      const notice='位置已保存，下次启动自动锁定；需要调整时可在设置解锁。';
+      if(win&&!win.isDestroyed())win.webContents.send('lyrics:status',{open:true,notice});
+      if(Notification?.isSupported?.())new Notification({title:'桌面歌词',body:notice}).show();
+    }}catch(e){console.warn('桌面歌词定位状态保存失败：',e.message)}finally{dragOrigin=dragCursor=null;}
+  }});
   ipcMain.on?.('lyrics:context-menu',event=>{if(floatingLyrics.owns(event.sender))floatingLyrics.showMenu()});
   ipcMain.handle('settings:get', () => config());
   ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
@@ -843,7 +856,7 @@ app.whenReady().then(() => {
   ipcMain.handle('lyrics:close',()=>{const state=floatingLyrics.close();persistDesktopLyricsEnabled(false);return state});
   ipcMain.handle('lyrics:reset-position',()=>floatingLyrics.resetPosition());
   ipcMain.handle('lyrics:position',()=>config().floatingLyricsPosition);
-  ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);const state=floatingLyrics.lock(wanted);notifyLyricLock(wanted);return state});
+  ipcMain.handle('lyrics:lock',(_e,lock)=>{const wanted=persistFloatingLyricsLock(lock);rememberLyricChoice();const state=floatingLyrics.lock(wanted);notifyLyricLock(wanted);return state});
   ipcMain.handle('lyrics:update',(_e,info)=>floatingLyrics.update(info));
   ipcMain.handle('lyrics:status',()=>floatingLyrics.status());
   ipcMain.handle('lyrics:preferences',()=>config().floatingLyrics);

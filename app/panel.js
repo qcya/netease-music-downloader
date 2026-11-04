@@ -341,7 +341,7 @@
  const openFullscreen=()=>bridge.openFullscreen(fullscreenState());
  $('open-fullscreen').onclick=openFullscreen;$('lyric-line').onclick=openFullscreen;
  $('lyrics-toggle').onclick=safe(async()=>{if(!settings)settings=await bridge.getSettings();if(settings.desktopLyricsEnabled){await bridge.closeFloatingLyrics();settings.desktopLyricsEnabled=false;}else{settings.desktopLyricsEnabled=true;await bridge.showFloatingLyrics();pushDesktopLyrics();}updateLyricsButton();});
- bridge.onFloatingLyricsStatus(s=>{if(s.open===false&&settings){settings.desktopLyricsEnabled=false;updateLyricsButton();if(s.error)status(s.error,true);}});
+ bridge.onFloatingLyricsStatus(s=>{if(s.notice)status(s.notice);if(s.open===false&&settings){settings.desktopLyricsEnabled=false;updateLyricsButton();if(s.error)status(s.error,true);}});
  bridge.onFullscreenActive(active=>{fullscreenActive=active;publishFullscreen();});
  bridge.onFullscreenControl(safe(message=>{
   if(message.action==='retry-lyrics'){const t=player.state().track;if(t)return loadLyrics(t,player.serial());}

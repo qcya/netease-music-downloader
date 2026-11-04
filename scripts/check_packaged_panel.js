@@ -38,6 +38,14 @@ const server=http.createServer((req,res)=>{
  const overlay=await connect(await wait(async()=>(await pages(port)).find(p=>p.url.endsWith('/floating-lyrics.html')),'desktop lyrics missing'));
  try{
   await wait(()=>overlay.run("document.getElementById('lyric').textContent==='本地测试歌词'"),'desktop lyrics did not receive current lyric');
+  await run("document.getElementById('music-audio').pause()");
+  const original='很长的原文歌词'.repeat(20),translated='很长的翻译歌词'.repeat(20);
+  await run(`musicBridge.updateFloatingLyrics(${JSON.stringify({title:'测试',line:original,translation:translated})})`);
+  await wait(async()=>{const result=await overlay.run("(()=>{const result=[];for(const id of ['lyric','translate']){const el=document.getElementById(id),r=document.createRange();r.selectNodeContents(el);const rects=Array.from(r.getClientRects());result.push({text:el.textContent,available:el.clientWidth,whiteSpace:getComputedStyle(el).whiteSpace,rects:rects.map(v=>({width:v.width}))})}return result})()");return result[0].text===original&&result[1].text===translated&&result.every(v=>v.whiteSpace==='pre'&&v.rects.length===1&&v.rects[0].width<=v.available+0.75);},'long desktop lyrics must fit as two complete single lines');
+  await run("musicBridge.updateFloatingLyrics({title:'测试',line:'短歌词',translation:'翻译'})");
+  await wait(async()=>{const s=await overlay.run("(()=>({text:document.getElementById('lyric').textContent,shape:textShape(),width:innerWidth}))()");return s.text==='短歌词'&&s.shape.length===2&&s.shape.every(r=>r.x>40&&r.x+r.width<s.width-40);},'short desktop lyrics hit regions must stay near the text');
+  await run("musicBridge.updateFloatingLyrics({title:'本地轨道',line:'本地测试歌词'})");
+  await wait(()=>overlay.run("document.getElementById('lyric').textContent==='本地测试歌词'"),'desktop lyrics fixture not restored');await run("document.getElementById('music-audio').play()");
   await run("document.getElementById('settings-button').click()");await wait(()=>run("!document.getElementById('settings-view').hidden"),'settings did not open');
   for(const locked of [true,false]){
    await run(`if(document.getElementById('lock-lyrics').checked!==${locked})document.getElementById('lock-lyrics').click()`);

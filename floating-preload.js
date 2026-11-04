@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('floatingBridge',Object.freeze({
   close:()=>ipcRenderer.invoke('lyrics:close'),
   lock:locked=>ipcRenderer.invoke('lyrics:lock',!!locked),
   resize:height=>ipcRenderer.invoke('lyrics:resize',height),
+  setShape:rects=>ipcRenderer.send('lyrics:shape',rects),
   dragBegin:()=>ipcRenderer.send('lyrics:drag-begin'),
   dragMove:()=>ipcRenderer.send('lyrics:drag-move'),
   dragEnd:()=>ipcRenderer.send('lyrics:drag-end'),

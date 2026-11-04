@@ -1,9 +1,19 @@
 'use strict';
 const path=require('node:path');
 const {normalizePosition,resolvePosition}=require('./lyric_position.js');
+function sanitizeLyricShape(rects,width,height){
+ const out=[];if(Array.isArray(rects))for(const r of rects.slice(0,64)){
+  if(!r||![r.x,r.y,r.width,r.height].every(Number.isFinite)||r.width<=0||r.height<=0)continue;
+  const x=Math.max(0,Math.floor(r.x)),y=Math.max(0,Math.floor(r.y));
+  const right=Math.min(width,Math.ceil(r.x+r.width)),bottom=Math.min(height,Math.ceil(r.y+r.height));
+  if(right>x&&bottom>y)out.push({x,y,width:right-x,height:bottom-y});
+ }
+ return out.length?out:[{x:0,y:0,width:1,height:1}];
+}
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
 function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,getSavedPosition,onBoundsChanged,onCloseRequest,onOpenSettings,screen}){
- let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null;
+ let floating=null,locked=false,currentHeight=88,currentWidth=800,dragStart=null,loaded=false,lastText=null;
+ let lyricShape=null,pendingShape=null,dragShape=null;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
  function reconcileVisibility(){
@@ -24,6 +34,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   if(exists()){reconcileVisibility();return {open:true};}
   const s=safeSettings();
   const width=Math.round(Number(s.width)||800);
+  currentWidth=width;
   const saved=getSavedPosition?.();
   const location=resolvePosition(saved,screen,width,currentHeight);
   floating=new BrowserWindow({...(location||{}),width,height:currentHeight,minWidth:420,maxWidth:1400,minHeight:56,maxHeight:560,
@@ -49,7 +60,7 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   const loading=floating.loadFile(path.join(baseDir,'app','floating-lyrics.html'));
   loading?.catch?.(e=>fail(e.message));
   floating.setBackgroundColor?.('#00000000');
-  floating.on('closed',()=>{dragStart=null;floating=null;loaded=false;lastText=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
+  floating.on('closed',()=>{dragStart=null;floating=null;loaded=false;lastText=null;lyricShape=pendingShape=dragShape=null;const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:false})});
   floating.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   floating.webContents.on('will-navigate',e=>e.preventDefault());
   return {open:true};
@@ -100,11 +111,13 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function applySettings(s){if(!exists())return;
   floating.setAlwaysOnTop(s.alwaysOnTop!==false);
   const b=floating.getBounds(),work=screen?.getDisplayMatching?.(b)?.workArea;
-  const width=work?Math.min(s.width,work.width-24):s.width;
-  if(b.width!==width){
-    floating.setSize(width,b.height);
+  const width=Math.round(work?Math.min(s.width,work.width-24):s.width);
+  if(currentWidth!==width){
+    currentWidth=width;
+    floating.setBounds({...b,width:currentWidth,height:currentHeight});
     const location=resolvePosition(position(),screen,width,b.height);
-    if(location&&typeof floating.setPosition==='function')floating.setPosition(location.x,location.y,false);
+    const actual=floating.getBounds();
+    if(location&&(actual.x!==location.x||actual.y!==location.y))floating.setBounds({x:location.x,y:location.y,width:currentWidth,height:currentHeight},false);
   }
   floating.webContents.send('lyrics:settings',s);
   lock(!!s.mouseThrough);
@@ -117,15 +130,25 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   const maxH=work?Math.max(56,work.height-24):560;
   const next=Math.min(h,maxH);
   const y=work?Math.min(Math.max(b.y,work.y),work.y+work.height-next):b.y;
-  floating.setBounds({...b,y,height:next});floating.setBackgroundColor?.('#00000000');currentHeight=next;return true;
+  currentHeight=next;floating.setBounds({...b,y,width:currentWidth,height:currentHeight});floating.setBackgroundColor?.('#00000000');return true;
  }
- function dragBegin(){if(!exists()||locked)return false;dragStart={cursor:screen.getCursorScreenPoint(),bounds:floating.getBounds()};return true;}
+ function setLyricShape(rects){
+  if(!exists()||process.platform!=='win32'||typeof floating.setShape!=='function')return false;
+  const b=floating.getBounds(),next=sanitizeLyricShape(rects,b.width,b.height);
+  if(dragStart){if(!dragShape)dragShape=lyricShape||next;pendingShape=next;floating.setShape([...dragShape,...next]);}
+  else{lyricShape=next;pendingShape=dragShape=null;floating.setShape(next);}
+  return true;
+ }
+ function applyPendingShape(){if(exists()&&pendingShape&&typeof floating.setShape==='function'){lyricShape=pendingShape;floating.setShape(lyricShape);}pendingShape=dragShape=null;}
+ function dragBegin(){if(!exists()||locked)return false;const cursor=screen.getCursorScreenPoint();dragStart={cursor,bounds:floating.getBounds(),lastCursor:cursor};return true;}
  function dragMove(){if(!exists()||locked||!dragStart)return false;
    const cursor=screen.getCursorScreenPoint(),b=dragStart.bounds;
+   if(cursor.x===dragStart.lastCursor.x&&cursor.y===dragStart.lastCursor.y)return true;
+   dragStart.lastCursor=cursor;
    const nextX=Math.round(b.x+cursor.x-dragStart.cursor.x),nextY=Math.round(b.y+cursor.y-dragStart.cursor.y);
-   floating.setPosition(nextX,nextY,false);return true;
+   floating.setBounds({x:nextX,y:nextY,width:currentWidth,height:currentHeight},false);return true;
  }
- function dragEnd(){const wasDragging=!!dragStart;dragStart=null;if(wasDragging)rememberPosition();return true;}
+ function dragEnd(){const wasDragging=!!dragStart;dragStart=null;applyPendingShape();if(wasDragging)rememberPosition();return true;}
  function showMenu(){if(!exists()||locked)return false;
    const menu=Menu.buildFromTemplate([
      {label:'锁定位置（解锁请返回软件设置）',click:()=>lockAndSave(true)},
@@ -142,6 +165,6 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function setLockChange(callback){onLockChange=callback;}
  function lockAndSave(value){const result=lock(value);if(onLockChange)onLockChange(locked);return result;}
  function owns(webContents){return exists()&&webContents?.id===floating.webContents.id;}
- return {open,close,status,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,dragBegin,dragMove,dragEnd,resetPosition,position,showMenu,exists,owns,setMainFocused};
+ return {open,close,status,lock,lockAndSave,setLockChange,update,applySettings,resizeTo,setLyricShape,dragBegin,dragMove,dragEnd,resetPosition,position,showMenu,exists,owns,setMainFocused};
 }
-module.exports={createFloatingLyricsController};
+module.exports={createFloatingLyricsController,sanitizeLyricShape};

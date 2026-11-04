@@ -25,7 +25,7 @@ test('validates saved coordinates; restores negative monitor coords; rescues off
  assert.deepEqual(resolvePosition({x:7000,y:3000},screen,800,88),{x:560,y:80});
  assert.deepEqual(resolvePosition(null,screen,800,88),{x:560,y:80});
 });
-function mockController(initial){
+function mockController(initial,{dpiRounding=false}={}){
  let saved=initial,latest,menuItems,closeRequests=0,settingsRequests=0;
  const events=[];
  class Window {
@@ -44,8 +44,8 @@ function mockController(initial){
    setBackgroundColor(){}
    on(name,fn){if(name==='closed')this.onClosed=fn}
    getBounds(){return {...this.bounds}}
-   setPosition(x,y){this.bounds.x=x;this.bounds.y=y}
-   setBounds(v){this.bounds={...v}}
+   setPosition(x,y){this.bounds.x=x;this.bounds.y=y;if(dpiRounding)this.bounds.width++}
+   setBounds(v){this.bounds={...v,width:v.width+(dpiRounding?1:0)}}
    setSize(w,h){this.bounds.width=w;this.bounds.height=h}
    setAlwaysOnTop(){}
    setIgnoreMouseEvents(){}
@@ -82,6 +82,17 @@ test('drag is persisted once at mouse up; lyric toggle or lock keeps exact locat
  c.ctrl.open();
  assert.deepEqual(c.ctrl.position(),{x:820,y:185},'reopening caption must not reset saved position');
  c.ctrl.close();
+});
+test('stationary cursor and repeated lyric resize do not expand the window at 150% scaling',()=>{
+ const c=mockController(null,{dpiRounding:true});c.ctrl.open();screen.cursor={x:700,y:150};c.ctrl.dragBegin();
+ for(let i=0;i<30;i++)c.ctrl.dragMove();
+ assert.equal(c.window.bounds.width,800,'stationary cursor must not repeatedly move the window');
+ screen.cursor={x:780,y:200};c.ctrl.dragMove();
+ for(let i=0;i<30;i++)c.ctrl.dragMove();
+ assert.ok(c.window.bounds.width<=801,'moving then holding must not accumulate rounding');
+ for(let i=0;i<30;i++)c.ctrl.resizeTo(i%2?88:122);
+ assert.ok(c.window.bounds.width<=801,'lyric height changes must keep a stable width');
+ c.ctrl.dragEnd();c.ctrl.close();
 });
 test('explicit reset alone clears remembered position and relocates current window',()=>{
  const c=mockController({x:-900,y:180});
