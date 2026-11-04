@@ -1,9 +1,9 @@
 'use strict';
 // Short-lived metadata only. Never fetches, buffers or saves audio bytes.
-function createSourceAvailability({json, getBases, trusted, now=Date.now, getAuthState=()=>({enabled:false,revision:0}), authLookup=null}) {
+function createSourceAvailability({json, getBases, trusted, now=Date.now}) {
   const cache=new Map(),pending=new Map();
   const validID=value=>{const id=String(value);if(!/^\d{1,20}$/.test(id))throw Error('无效歌曲 ID');return id;};
-  function context(){const bases=getBases(),auth=getAuthState();return {bases,auth,key:JSON.stringify([bases,!!auth?.enabled,auth?.revision||0])};}
+  function context(){const bases=getBases();return {bases,key:JSON.stringify(bases)};}
   function remember(key,row){
     cache.set(key,row);while(cache.size>256)cache.delete(cache.keys().next().value);return row;
   }
@@ -21,12 +21,6 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now, getAut
       result.set(id,{id,state:available?'available':'unavailable',reason:available?'当前接口提供完整音源':trialAvailable?'仅提供试听片段':trial?'接口标记有试听权限，但未提供可播放地址':'当前在线播放接口未返回可用地址（不代表无法下载）',checkedAt:now(),...(available?{url}:{}),ttl:available?Math.min(120000,Math.max(1000,Number(row.expi||180)*1000-30000)):60000});
       if(trialAvailable)Object.assign(result.get(id),{trialAvailable:true,trialUrl:url,trialSeconds});
     }
-    if(ctx.auth?.enabled&&typeof authLookup==='function'){
-      for(const level of extended?['standard','higher','exhigh','lossless']:['standard']){
-        let cursor=0;const workers=Array.from({length:Math.min(3,ids.length)},async()=>{while(cursor<ids.length){const id=ids[cursor++];if(result.get(id).state==='available')continue;if(signal?.aborted)throw Error('已切换歌曲');try{const data=await authLookup(id,level,signal);if(data?.code&&data.code!==200||!Array.isArray(data?.data))continue;apply(id,data.data.find(x=>x&&String(x.id)===id));}catch(e){if(signal?.aborted)throw e;}}});
-        await Promise.all(workers);if(context().key!==ctx.key)throw Error('账号状态已变化，请重试');if([...result.values()].every(x=>x.state==='available'))break;
-      }
-    }
     const endpoints=[...ctx.bases.map(b=>b.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level=standard'),
       'https://music.163.com/api/song/enhance/player/url?ids='+encodeURIComponent('['+ids.join(',')+']')+'&br=128000'];
     if(extended)for(const level of ['higher','exhigh','lossless'])for(const base of ctx.bases)endpoints.push(base.replace(/\/$/,'')+'/song/url/v1?id='+ids.join(',')+'&level='+level);
@@ -43,7 +37,7 @@ function createSourceAvailability({json, getBases, trusted, now=Date.now, getAut
       }catch(e){if(signal?.aborted)throw e;}
       if([...result.values()].every(x=>x.state==='available'))break;
     }
-    if(context().key!==ctx.key)throw Error('账号状态已变化，请重试');
+    if(context().key!==ctx.key)throw Error('音源配置已变化，请重试');
     const rows=[...result.values()];
     if(context().key===ctx.key&&!signal?.aborted)for(const row of rows)remember(ctx.key+':'+row.id,{...row,expiresAt:now()+(row.ttl||5000)});
     return rows;

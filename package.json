@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.0.0-preview.14",
+  "version": "2.1.0",
   "private": true,
   "description": "音乐下载器：顶部悬绳播放器、淡蓝粉白界面与独立全屏歌词",
   "main": "main.js",
@@ -27,10 +27,6 @@
       "taste_discovery.js",
       "app_logger.js",
       "online_media.js",
-      "netease_account.js",
-      "official_login_window.js",
-      "netease_api_client.js",
-      "netease_api_worker.js",
       "build-info.json",
       "discovery_service.js",
       "popular_playlists.js",
@@ -90,9 +86,6 @@
     "electronDownload": {
       "mirror": "https://npmmirror.com/mirrors/electron/"
     }
-  },
-  "dependencies": {
-    "@neteasecloudmusicapienhanced/api": "4.41.1"
   },
   "overrides": {
     "basic-ftp": "6.2.5"
