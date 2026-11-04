@@ -89,7 +89,7 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   if(lyricCache.has(key))return {...lyricCache.get(key),fromMemory:true};
   if(lyricPending.has(key))return lyricPending.get(key);
   const task=(async()=>{
-   const endpoints=configured.length?configured.flatMap(b=>['/lyric/new?id=','/lyric?id='].map(p=>b.replace(/\/$/,'')+p+sid)):[OFFICIAL+'/api/song/lyric?id='+sid+'&lv=-1&kv=-1&tv=-1'];
+   const endpoints=[...configured.flatMap(b=>['/lyric/new?id=','/lyric?id='].map(p=>b.replace(/\/$/,'')+p+sid)),OFFICIAL+'/api/song/lyric?id='+sid+'&lv=-1&kv=-1&tv=-1'];
    let received=false;
    for(const endpoint of endpoints){try{const data=await json(endpoint);if(data.code!==200)continue;received=true;
     const lrc=typeof data.lrc?.lyric==='string'?data.lrc.lyric:'',translated_lrc=typeof data.tlyric?.lyric==='string'?data.tlyric.lyric:'';

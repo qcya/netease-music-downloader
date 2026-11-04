@@ -40,6 +40,8 @@ const server=http.createServer((req,res)=>{
  await run("document.getElementById('open-fullscreen').click()");
  const fullscreen=await connect(await wait(async()=>(await pages(port)).find(p=>p.url.endsWith('/fullscreen.html')),'packaged fullscreen unavailable'));
  try{
+  await wait(()=>fullscreen.run("document.getElementById('background-video').readyState>=2&&!document.getElementById('background-video').paused"),'packaged original background unavailable');
+  await fullscreen.run('document.fonts.ready');assert.ok(await fullscreen.run("document.fonts.check('16px Starry')"));
   await wait(()=>fullscreen.run("document.getElementById('title').textContent==='轨道测试音频'&&document.querySelectorAll('.lyric').length===2"),'packaged fullscreen lyrics missing');
   assert.ok(await fullscreen.run("document.getElementById('state').textContent.includes('试听片段')"),'fullscreen must label trial audio');
   await fullscreen.run("document.querySelectorAll('.lyric')[1].click()");await wait(()=>run("document.getElementById('music-audio').currentTime>=5"),'packaged fullscreen seek failed');
@@ -53,19 +55,24 @@ const server=http.createServer((req,res)=>{
  trial=false;
  assert.equal(await run("getComputedStyle(document.querySelector('footer')).userSelect"),'none');assert.equal(await run("getComputedStyle(document.getElementById('query')).userSelect"),'text');
  await run("document.querySelector('.row-action').click()");await wait(()=>run("document.getElementById('status').textContent.startsWith('下载完成')"),'download failed');
+ await run("document.getElementById('tasks-button').click()");await wait(()=>run("document.querySelector('#task-list strong')?.textContent==='轨道测试音频'"),'task must show song name, not ID');
+ await run("document.querySelector('#tasks-view .back-button').click()");
  assert.ok(fs.readdirSync(music).some(n=>n.includes('99000001')),'embedded backend did not write downloaded fixture');
  await run("document.querySelector('.row-play').click()");await wait(()=>run("document.getElementById('music-audio').src.startsWith('file:')&&!document.getElementById('music-audio').paused"),'downloaded song was not reused for playback');
  await run("document.getElementById('load-online-playlist').click()");await wait(()=>run("document.getElementById('dialog').open"),'playlist prompt missing');
  await run("document.getElementById('dialog-input').value='https://music.163.com/#/playlist?id=99000001';document.getElementById('dialog-confirm').click()");await wait(()=>run("document.getElementById('status').textContent.startsWith('歌单已载入')"),'online playlist failed');
  await run("document.getElementById('play').click();musicBridge.panelAction({type:'height',value:620})");await sleep(300);assert.equal(await run('innerHeight'),620);
  async function drag(target,x,y,dx){
-  await target.send('Input.dispatchMouseEvent',{type:'mousePressed',x,y,button:'left',buttons:1,clickCount:1});await sleep(80);
-  await target.send('Input.dispatchMouseEvent',{type:'mouseMoved',x:x+dx,y,button:'left',buttons:1});await sleep(120);
-  await target.send('Input.dispatchMouseEvent',{type:'mouseReleased',x,y,button:'left',buttons:0,clickCount:1});await sleep(100);
+  const bridge=target===charm?'charmBridge.action':'musicBridge.panelAction';
+  const start=await target.run('({x:screenX,y:screenY})');
+  const send=m=>target.run(bridge+'('+JSON.stringify(m)+')');
+  await send({type:'begin',kind:target===charm?'pull':'move',x:start.x+x,y:start.y+y});
+  for(let i=1;i<=8;i++)await send({type:'move',x:start.x+x+dx*i/8,y:start.y+y});
+  await send({type:'end'});await sleep(100);
  }
  let oldX=await run('screenX');await drag(client,150,25,-60);assert.equal(await run('screenX'),oldX-60);
  await run("musicBridge.panelAction({type:'collapse'})");await sleep(200);oldX=await charm.run('screenX');await drag(charm,38,105,-100);assert.equal(await charm.run('screenX'),oldX-100);
  await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
- const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','local playback','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','expanded and collapsed horizontal drag']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+ const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','local playback','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','expanded and collapsed multi-step drag geometry','original video background','custom font','named download task']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  if(process.env.ORBIT_KEEP_OPEN!=='1')await run("musicBridge.windowAction('quit')").catch(()=>{});
 })().catch(async e=>{console.error(e.stack);console.error('Requests',requests);if(client)console.error(await client.run('document.body.innerText').catch(()=>''));process.exitCode=1;}).finally(()=>{client?.close();charm?.close();server.close();});

@@ -27,7 +27,7 @@ function createFullscreenPlayer({BrowserWindow,screen,baseDir,getMainWindow,rest
  function control(sender,message){
   if(!owns(sender)||!message)return;
   if(message.action==='close'){window.close();return;}
-  if(!['toggle','previous','next','seek','volume'].includes(message.action))return;
+  if(!['toggle','previous','next','seek','volume','retry-lyrics'].includes(message.action))return;
   if(['seek','volume'].includes(message.action)&&!Number.isFinite(message.value))return;
   const main=getMainWindow();if(alive(main))main.webContents.send('fullscreen:control',{action:message.action,value:message.value});
  }

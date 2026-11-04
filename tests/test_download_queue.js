@@ -3,6 +3,11 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createDownloadQueue}=require('../download_queue');
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+test('completed task replaces legacy numeric name with returned song metadata',async()=>{
+ const events=[],pool=createDownloadQueue({onState:e=>events.push(e)});
+ await pool.enqueue('named',{id:'123',name:'123'},async()=>({ok:true,song:{id:'123',name:'晴天',artists:'周杰伦'}}));
+ const done=events.find(e=>e.status==='completed');assert.equal(done.name,'晴天');assert.equal(done.artists,'周杰伦');
+});
 
 test('bounded concurrency: exactly 3 active, remaining songs queued',async()=>{
   let running=0,peak=0;

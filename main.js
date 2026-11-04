@@ -38,9 +38,10 @@ const favoriteRequests = new Map();
 const previewRequests = new Map();
 const downloadQueue = createDownloadQueue({limit:3, onState:task => {
   const old=downloadHistory.get(task.key)||{};
-  downloadHistory.set(task.key,{...old,...task,time:Date.now()});
+  const named={...old,...task,name:task.name||old.name||'',artists:task.artists||old.artists||'',time:Date.now()};
+  downloadHistory.set(task.key,named);
   if(downloadHistory.size>500)downloadHistory.delete(downloadHistory.keys().next().value);
-  if(win && !win.isDestroyed()) win.webContents.send('download:task',task);
+  if(win && !win.isDestroyed()) win.webContents.send('download:task',named);
   if(historyFlushTimer)clearTimeout(historyFlushTimer);
   historyFlushTimer=setTimeout(()=>{try{writeJSONAtomic(historyFile(),[...downloadHistory.values()].slice(-300))}catch(e){console.warn('历史保存失败',e.message)}},500);
 }});
@@ -469,11 +470,12 @@ async function runCli(cmd, args = [], opts = {}) {
 
 /** One Python process per track, up to three processes active globally.
  * All file downloads for a given destination/ID/quality are coalesced. */
-function downloadTrack(id, targetDir, quality, purpose='download') {
+function downloadTrack(id, targetDir, quality, purpose='download',info={}) {
   const [sid] = songIds([id]);
   const directory=path.resolve(targetDir);
   const key=[directory,quality,sid].join('\0');
-  const meta={id:sid, purpose, name:sid};
+  const meta={id:sid,purpose,name:typeof info.name==='string'?info.name.slice(0,300):'',artists:typeof info.artists==='string'?info.artists.slice(0,300):''};
+  if(meta.name)meta.song={id:sid,name:meta.name,artists:meta.artists};
   return downloadQueue.enqueue(key,meta,async(signal,reportProgress)=>{
     const data=await runCli('download',['--id',sid,'--quality',quality,'--out',directory],
       {progress:true,songId:sid,timeoutMs:240_000,signal,onProgress:reportProgress});
@@ -488,6 +490,31 @@ function songIds(ids) {
   const result = [...new Set(ids.map(String))];
   if (result.some(x => !/^\d{1,20}$/.test(x))) throw new Error('无效歌曲 ID');
   return result;
+}
+
+let resolvingHistory=false;
+function saveNamedHistory(row,info){
+ const current=downloadHistory.get(row.key);if(!current||!info?.name)return;
+ const updated={...current,name:String(info.name),artists:String(info.artists||''),song:info};downloadHistory.set(row.key,updated);
+ if(win&&!win.isDestroyed())win.webContents.send('download:task',updated);
+ if(historyFlushTimer)clearTimeout(historyFlushTimer);
+ historyFlushTimer=setTimeout(()=>{try{writeJSONAtomic(historyFile(),[...downloadHistory.values()].slice(-300));}catch{}},500);
+}
+async function namedDownloadHistory(){
+ const unnamed=()=>[...downloadHistory.values()].filter(r=>!r.song?.name&&(!r.name||r.name===String(r.id)));
+ if(unnamed().length){
+  const files=await libraryRoots.files();
+  for(const row of unnamed()){
+   const local=files.find(f=>!f.conflict&&new RegExp('\\['+String(row.id).replace(/\D/g,'')+'\\]\\.[^.]+$').test(f.name));
+   if(local)saveNamedHistory(row,{name:local.name.replace(/^\[歌单\]\s*/,'').replace(/\s*\[\d+\]\.[^.]+$/,''),artists:''});
+   else if(row.song?.name)saveNamedHistory(row,row.song);
+  }
+ }
+ if(!resolvingHistory&&unnamed().length){
+  resolvingHistory=true;const pending=unnamed().reverse();
+  void Promise.all(Array.from({length:3},async()=>{while(pending.length&&!exiting){const row=pending.shift();if(!validId(row.id))continue;try{const result=await runCli('song',['--id',String(row.id)],{timeoutMs:12000});saveNamedHistory(row,result.song);}catch{}}})).finally(()=>{resolvingHistory=false;});
+ }
+ return [...downloadHistory.values()].map(row=>({...row,progress:row.status==='running'?row.progress:null})).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300);
 }
 async function prepareAudioImpl(id) {
   const [sid] = songIds([id]);
@@ -568,8 +595,8 @@ async function beginStream(id,options){
 
 function createWindow() {
   win = new BrowserWindow({
-    width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,backgroundMaterial:'none',transparent:false,roundedCorners:true,
-    title:'音乐下载器 · 下拉播放器',icon:appIcon(),backgroundColor:'#e5f3ff',
+    width:420,height:740,resizable:false,maximizable:false,minimizable:false,alwaysOnTop:true,skipTaskbar:true,transparent:true,hasShadow:false,
+    title:'音乐下载器 · 下拉播放器',icon:appIcon(),backgroundColor:'#00000000',
     show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -666,6 +693,21 @@ app.whenReady().then(() => {
   ipcMain.on('fullscreen:open',(event,state)=>{assertMainSender(event);fullscreenPlayer.open(state);});
   ipcMain.on('fullscreen:update',(event,state)=>{assertMainSender(event);fullscreenPlayer.update(state);});
   ipcMain.on('fullscreen:control',(event,message)=>fullscreenPlayer.control(event.sender,message));
+  ipcMain.handle('fullscreen:preferences',event=>{
+    if(!fullscreenPlayer.owns(event.sender))throw Error('仅全屏窗口可读取播放外观');
+    const file=config().playerBackgroundPath||path.join(__dirname,'assets/immersive-background-1080p.mp4');
+    const exists=BACKGROUND_EXTS.has(path.extname(file).toLowerCase())&&fs.existsSync(file)&&fs.statSync(file).isFile();
+    return {lyrics:config().floatingLyrics,background:exists?{kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:pathToFileURL(file).href}:{kind:'missing'}};
+  });
+  ipcMain.handle('background:choose',async event=>{
+    assertMainSender(event);const result=await dialog.showOpenDialog(win,{title:'选择全屏歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});
+    if(result.canceled||!result.filePaths?.length)return null;
+    const file=path.resolve(result.filePaths[0]),ext=path.extname(file).toLowerCase(),stat=await fs.promises.stat(file);
+    if(!BACKGROUND_EXTS.has(ext)||!stat.isFile()||stat.size>2*1024*1024*1024)throw Error('背景格式不支持或文件超过 2 GB');
+    const store=path.join(app.getPath('userData'),'player-backgrounds');await fs.promises.mkdir(store,{recursive:true});
+    const installed=path.join(store,randomUUID()+ext);await fs.promises.copyFile(file,installed);writeConfig({...config(),playerBackgroundPath:installed});return {path:installed};
+  });
+  ipcMain.handle('background:clear',event=>{assertMainSender(event);writeConfig({...config(),playerBackgroundPath:''});return true;});
   ipcMain.on('window:action',(event,action)=>{assertMainSender(event);if(action==='quit')app.quit();else if(action==='close')topPanel.collapse();});
   const notifyLyricLock=locked=>{
     if(win&&!win.isDestroyed())win.webContents.send('lyrics:lock-status',{locked:!!locked});
@@ -722,7 +764,8 @@ app.whenReady().then(() => {
     return await runCli('search',['--query',query.trim(),'--limit','40','--page',String(page)]);
   });
   ipcMain.handle('music:song-info', async (_e, id) => { const [sid] = songIds([id]); return (await runCli('song',['--id',sid],{timeoutMs:25000})).song; });
-  ipcMain.handle('music:download', async (_e, ids) => {
+  ipcMain.handle('music:download', async (_e, ids, metadata=[]) => {
+    assertMainSender(_e);
     logger.info('download_batch',`count=${Array.isArray(ids)?ids.length:0}`);
     const valid = songIds(ids);
     const s = config();
@@ -733,7 +776,8 @@ app.whenReady().then(() => {
         // 下载前先检查可复用缓存，避免抢占下载并发槽位。
         const copied=cachedToDownloads(id,s.downloadDir,s.quality);
         if(copied) return copied;
-        return await downloadTrack(id,s.downloadDir,s.quality,'download');
+        const info=Array.isArray(metadata)?metadata.slice(0,100).find(row=>row&&String(row.id)===id)||{}:{};
+        return await downloadTrack(id,s.downloadDir,s.quality,'download',info);
       } catch(e) {
         return {ok:false,song:{id},status:'error',error:String(e?.message||e)};
       }
@@ -742,7 +786,7 @@ app.whenReady().then(() => {
     return {ok:success===valid.length,requested_count:valid.length,success_count:success,
       failed_count:valid.length-success,results:results.map(row=>({...row,localName:row.ok&&typeof row.path==='string'?path.basename(row.path):null})),output_dir:s.downloadDir};
   });
-  ipcMain.handle('download:history',()=>[...downloadHistory.values()].map(row=>({...row,progress:row.status==='running'?row.progress:null})).sort((a,b)=>(b.time||0)-(a.time||0)).slice(0,300));
+  ipcMain.handle('download:history',event=>{assertMainSender(event);return namedDownloadHistory();});
   ipcMain.handle('download:cancel',(_e,id)=>{if(!validId(id))throw new Error('无效歌曲 ID');return downloadQueue.cancelSong(id)});
   ipcMain.handle('download:retry',async(_e,id)=>{
     const [sid]=songIds([id]);const s=config();fs.mkdirSync(s.downloadDir,{recursive:true});

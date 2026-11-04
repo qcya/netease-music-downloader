@@ -1,4 +1,4 @@
-﻿/* Flat light blue, white surfaces and pink accents. Only song titles shimmer. */
+/* Flat light blue, white surfaces and pink accents. Only song titles shimmer. */
 :root{--cyan:#419ccf;--pink:#ce609d;--muted:#64839b;--line:#b8d7ea;color:#294968;color-scheme:light;font-family:'Segoe UI','Microsoft YaHei UI',sans-serif}
 html,body{background:#e5f3ff;user-select:none;-webkit-user-select:none}input,textarea,[contenteditable=true]{user-select:text;-webkit-user-select:text}img{-webkit-user-drag:none}
 .panel{background:#e5f3ff;border:0;border-radius:0;box-shadow:none}.panel:before,.panel:after{display:none}
@@ -15,3 +15,5 @@ h1{font-size:23px;font-weight:650;letter-spacing:.3px;background:linear-gradient
 @keyframes neon-flow{from{background-position:0% 50%}to{background-position:240% 50%}}
 @media(max-height:590px){header{height:44px}.player{padding-top:5px;padding-bottom:6px}.orbital-art{width:70px;height:70px;flex-basis:70px}.disc{width:57px;height:57px}.transport #play{width:36px;height:36px}h1{font-size:18px}}
 @media(prefers-reduced-motion:reduce){h1{animation:none}}
+
+html,body{background:transparent}.panel{border-radius:0 0 12px 12px;transform:translateY(-100%);will-change:transform;contain:paint}.panel #resize-grip{padding-bottom:3px}
