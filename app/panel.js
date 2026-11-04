@@ -3,7 +3,7 @@
  const $=id=>document.getElementById(id),bridge=window.musicBridge,audio=$('music-audio');
  let settings=null,tab='local',files=[],categories={categories:[],assignments:{},order:[]},lists=[],rows=[],searchPage=1,total=0,batch=0,loadSerial=0,lyrics=[],lyricIndex=-1,currentHeight=740,lastTrackKey='',lastPlaying=false,lastBusy=false,mutedVolume=.75,libraryChoice='all';
  let discoveryPage=1,discoverySongsPage=1,activeDiscovery=null,discoveryList=[],discoveryHasMore=false;
- const availability=new Map(),tasks=new Map(),localArtwork=new Map(),localSongIds=new Map(),localFileVersions=new Map(),coverPending=new Set(),expandedPlaylists=new Set();let seeking=false,taskRenderTimer=null,myPlaylists=[],selection=null;
+ const availability=new Map(),tasks=new Map(),localArtwork=new Map(),localSongIds=new Map(),localFileVersions=new Map(),coverPending=new Set(),expandedPlaylists=new Set();let seeking=false,taskRenderTimer=null,myPlaylists=[],selection=null,availabilityRevision=0,accountProbePending=false;
  const sheet=document.querySelector('.panel');let slide=null;
  bridge.onPanelReveal(({progress,animate})=>{
   const from=getComputedStyle(sheet).transform;slide?.cancel();
@@ -126,8 +126,15 @@
   $('track-list').append(fragment);
  }
  async function probeRows(expected){
+  const revision=availabilityRevision;
   const ids=rows.filter(s=>!s.local).map(s=>s.id);
-  for(let i=0;i<ids.length;i+=40){try{const found=await bridge.mediaAvailability(ids.slice(i,i+40));if(expected!==loadSerial)return;found.forEach(s=>availability.set(s.id,s));renderRows();}catch{}}
+  for(let i=0;i<ids.length;i+=40){try{const found=await bridge.mediaAvailability(ids.slice(i,i+40));if(expected!==loadSerial||revision!==availabilityRevision)return;found.forEach(s=>availability.set(s.id,s));renderRows();}catch{}}
+ }
+ function invalidateSongAvailability(){
+  availabilityRevision++;availability.clear();
+  if(!rows.length||!(tab==='search'||tab==='recent'&&activeDiscovery)){accountProbePending=false;return;}
+  renderRows();accountProbePending=$('browser').hidden;
+  if(!accountProbePending)void probeRows(loadSerial);
  }
  async function refreshLocal(){
   const [newFiles,data]=await Promise.all([bridge.listFiles(),bridge.userPlaylistsList()]);files=newFiles;myPlaylists=data.playlists;
@@ -236,9 +243,9 @@
  });
  document.addEventListener('pointerdown',e=>{if(!e.target.closest('#playlist-context'))closeContextMenu();});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('playlist-context')){e.preventDefault();e.stopImmediatePropagation();closeContextMenu();}},true);
- function hideSheets(){for(const id of ['settings-view','tasks-view','lyrics-view'])$(id).hidden=true;$('browser').hidden=false;}
+ function hideSheets(refresh=true){for(const id of ['settings-view','tasks-view','lyrics-view'])$(id).hidden=true;$('browser').hidden=false;if(refresh&&accountProbePending){accountProbePending=false;if(rows.length&&(tab==='search'||tab==='recent'&&activeDiscovery))void probeRows(loadSerial);}}
  async function loadTab(next=tab){
-  tab=next;const request=++loadSerial;hideSheets();$('query').value='';$('library-tools').hidden=tab!=='local';$('online-tools').hidden=!['search','recent'].includes(tab);$('search-submit').hidden=tab!=='search';$('search-submit').disabled=false;$('pagination').hidden=true;
+  tab=next;const request=++loadSerial;accountProbePending=false;hideSheets(false);$('query').value='';$('library-tools').hidden=tab!=='local';$('online-tools').hidden=!['search','recent'].includes(tab);$('search-submit').hidden=tab!=='search';$('search-submit').disabled=false;$('pagination').hidden=true;
   $('search-form').hidden=false;$('back-discovery').hidden=true;
   $('query').placeholder=tab==='search'?'搜索歌曲、歌手…':tab==='local'?'筛选歌单或歌曲…':'筛选当前列表…';
   for(const button of document.querySelectorAll('[data-tab]'))button.classList.toggle('active',button.dataset.tab===tab);
@@ -366,11 +373,39 @@
    }
   })().finally(()=>{lyricLockWorker=null;});
  };
- $('settings-button').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;setLyricLockDisplay(settings.floatingLyrics.mouseThrough);fillAppearance();showSheet('settings-view');});
+ $('settings-button').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;setLyricLockDisplay(settings.floatingLyrics.mouseThrough);fillAppearance();showSheet('settings-view');void refreshAccount();});
+ let accountRefresh=0;
+ function displayAccount(result){
+  $('account-status').textContent=result.loggedIn?'已登录'+(result.nickname?' · '+result.nickname:''):(result.message||result.error||'未登录');
+  $('account-login').hidden=!!result.loggedIn;$('account-login').disabled=false;$('account-logout').hidden=!(result.loggedIn||result.savedCredential);
+ }
+ async function refreshAccount(){
+  const request=++accountRefresh;
+  if(typeof bridge.accountStatus!=='function'){$('account-status').textContent='账号功能暂不可用';$('account-login').disabled=true;return;}
+  try{const result=await bridge.accountStatus();if(request!==accountRefresh)return;
+   displayAccount(result);
+  }catch{if(request===accountRefresh){$('account-status').textContent='暂时无法获取登录状态';$('account-login').disabled=false;}}
+ }
+ bridge.onAccountStatus?.(result=>{accountRefresh++;displayAccount(result||{});invalidateSongAvailability();});
+ const accountDialog=$('account-dialog');
+ const accountLogin=window.MusicAccountLogin.createAccountLogin({bridge,onState:s=>{
+  if(!accountDialog.open)return;
+  if(s.phase==='starting'){$('account-qr').hidden=true;$('account-qr').removeAttribute('src');}
+  if(s.image){$('account-qr').src=s.image;$('account-qr').hidden=false;}
+  $('account-retry').hidden=!['expired','error'].includes(s.phase);
+  $('account-qr-state').textContent=({starting:'正在获取二维码…',waiting:'等待扫码…',scanned:'已扫码，请在手机上确认。',authenticated:'登录成功',expired:'二维码已过期，请重新获取。',error:'登录未完成，请重试。'})[s.phase]||'';
+  if(s.message&&['error','expired'].includes(s.phase))$('account-qr-state').textContent=s.message;
+  if(s.phase==='authenticated'){invalidateSongAvailability();accountDialog.close();void refreshAccount();status('网易云账号已登录');}
+ }});
+ $('account-login').onclick=()=>{if(!accountDialog.open)accountDialog.showModal();void accountLogin.start();};
+ $('account-retry').onclick=()=>{void accountLogin.start();};
+ $('account-close').onclick=()=>accountDialog.close();
+ accountDialog.addEventListener('close',()=>{void accountLogin.cancel().catch(()=>{});});
+ $('account-logout').onclick=safe(async()=>{$('account-logout').disabled=true;try{await bridge.accountLogout();invalidateSongAvailability();await refreshAccount();status('网易云账号已退出');}finally{$('account-logout').disabled=false;}});
  for(const b of document.querySelectorAll('.back-button'))b.onclick=hideSheets;
  $('choose-dir').onclick=safe(async()=>{const dir=await bridge.chooseDirectory();if(dir)$('download-dir').value=dir;});$('open-dir').onclick=safe(()=>bridge.openDirectory());
  $('save-settings').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.saveSettings({...settings,downloadDir:$('download-dir').value,apiBases:$('api-bases').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean),parallelDownloads:Number($('parallel').value),desktopLyricsEnabled:$('desktop-lyrics').checked,floatingLyrics:readAppearance()});
-  if(settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();pushDesktopLyrics();}else await bridge.closeFloatingLyrics();updateLyricsButton();availability.clear();status('设置已保存');});
+  if(settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();pushDesktopLyrics();}else await bridge.closeFloatingLyrics();updateLyricsButton();invalidateSongAvailability();status('设置已保存');});
 
  function fillAppearance(){
   $('player-bg-path').value=settings.playerBackgroundPath||'原版动态背景';const s=settings.floatingLyrics;

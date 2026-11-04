@@ -5,7 +5,7 @@ const {randomUUID}=require('node:crypto');
 const {createSourceAvailability}=require('./source_availability');
 const OFFICIAL='https://music.163.com';
 const idOf=value=>{const id=String(value);if(!/^\d{1,20}$/.test(id))throw Error('无效歌曲 ID');return id;};
-function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs=12000,now=Date.now}={}){
+function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs=12000,now=Date.now,getAuthState=()=>({enabled:false,revision:0}),authLookup=null}={}){
  let revision=0,current=null,resolving=null;
  const lyricCache=new Map(),lyricPending=new Map();
  const bases=()=>getBases().filter(v=>{try{const u=new URL(v);return !u.username&&!u.password&&(u.protocol==='https:'||(u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)));}catch{return false;}}).slice(0,4);
@@ -24,7 +24,7 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>2*1024*1024)throw Error('元数据响应过大');chunks.push(value);}return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
   finally{void reader.cancel().catch(()=>{});}
  }
- const sources=createSourceAvailability({json,getBases:bases,trusted,now});
+ const sources=createSourceAvailability({json,getBases:bases,trusted,now,getAuthState,authLookup});
  async function open(id,{allowTrial=false}={}){
   const sid=idOf(id);stop();const serial=revision,control=new AbortController();resolving=control;
   try{
@@ -99,6 +99,6 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
    return {id:sid,found:false,lrc:'',translated_lrc:'',fromMemory:true};
   })();lyricPending.set(key,task);try{return await task;}finally{lyricPending.delete(key);}
  }
- return {open,handle,lyrics,stop,availability:(ids,options)=>sources.check(ids,options),close(){stop();lyricCache.clear();sources.clear();},currentURL:()=>current?'music-preview://audio/'+current.token:null};
+ return {open,handle,lyrics,stop,clearAvailability:()=>sources.clear(),availability:(ids,options)=>sources.check(ids,options),close(){stop();lyricCache.clear();sources.clear();},currentURL:()=>current?'music-preview://audio/'+current.token:null};
 }
 module.exports={createOnlineMedia};

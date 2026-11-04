@@ -41,6 +41,8 @@ jobs:
           if ($p.ExitCode) { throw 'Discovery interaction test failed' }
           $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList 'scripts/verify_lyrics_transition.js' -WindowStyle Hidden -PassThru -Wait
           if ($p.ExitCode) { throw 'Desktop lyrics transition test failed' }
+          $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList 'scripts/verify_account_panel.js' -WindowStyle Hidden -PassThru -Wait
+          if ($p.ExitCode) { throw 'Account login and playback test failed' }
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = Join-Path $env:RUNNER_TEMP 'orbit-first-position-test'
           foreach ($phase in @('first','second')) {
             $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('scripts/verify_lyric_first_position_startup.js',$phase) -WindowStyle Hidden -PassThru -Wait
@@ -54,7 +56,7 @@ jobs:
       - name: Verify packaged player and embedded downloader
         shell: pwsh
         run: |
-          $exe = 'dist/MusicDownloader-2.0.0-preview.10-portable.exe'
+          $exe = 'dist/MusicDownloader-2.0.0-preview.11-portable.exe'
           $testDir = Join-Path $env:RUNNER_TEMP 'orbit-packaged-test'
           New-Item -ItemType Directory -Force -Path $testDir | Out-Null
           @{ downloadDir=(Join-Path $testDir 'music'); desktopLyricsEnabled=$false; disclaimerAcceptedVersion=1 } | ConvertTo-Json | Set-Content (Join-Path $testDir 'settings.json') -Encoding utf8
@@ -73,10 +75,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Orbit-Windows-2.0.0-preview.10
+          name: Orbit-Windows-2.0.0-preview.11
           path: |
-            dist/MusicDownloader-2.0.0-preview.10-portable.exe
-            dist/MusicDownloader-2.0.0-preview.10-portable.exe.sha256
+            dist/MusicDownloader-2.0.0-preview.11-portable.exe
+            dist/MusicDownloader-2.0.0-preview.11-portable.exe.sha256
             .validation/panel-result.json
             .validation/panel-*.png
             packaged-result.json
