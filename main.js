@@ -57,7 +57,7 @@ const previewSourceCache=new Map();
 const previewSourcePending=new Map();
 const lyricsPending=new Map();
 let neteaseAccount=null,neteaseApiClient=null,officialLogin=null,accountRevision=0;
-const onlineMedia=createOnlineMedia({getBases:()=>effectiveMusicApis(config().apiBases),fetchImpl:(url,options)=>net.fetch(url,options),getAuthState:()=>({enabled:!!neteaseAccount?.status().loggedIn,revision:accountRevision}),authLookup:(id,level)=>neteaseAccount.songUrl(id,level)});
+const onlineMedia=createOnlineMedia({getBases:()=>effectiveMusicApis(config().apiBases),fetchImpl:(url,options)=>net.fetch(url,options),metingFetchImpl:(url,options)=>globalThis.fetch(url,options),getAuthState:()=>({enabled:!!neteaseAccount?.status().loggedIn,revision:accountRevision}),authLookup:(id,level)=>neteaseAccount.songUrl(id,level)});
 let playbackResolveVersion=0;
 if (protocol?.registerSchemesAsPrivileged) {
   protocol.registerSchemesAsPrivileged([{scheme:'music-media', privileges:{standard:true, secure:true, stream:true, supportFetchAPI:true}},{scheme:'music-preview',privileges:{standard:true,secure:true,stream:true,supportFetchAPI:true}}]);

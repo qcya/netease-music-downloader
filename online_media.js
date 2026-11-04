@@ -5,7 +5,7 @@ const {randomUUID}=require('node:crypto');
 const {createSourceAvailability}=require('./source_availability');
 const OFFICIAL='https://music.163.com';
 const idOf=value=>{const id=String(value);if(!/^\d{1,20}$/.test(id))throw Error('无效歌曲 ID');return id;};
-function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs=12000,now=Date.now,getAuthState=()=>({enabled:false,revision:0}),authLookup=null}={}){
+function createOnlineMedia({fetchImpl=globalThis.fetch,metingFetchImpl=fetchImpl,getBases=()=>[],timeoutMs=12000,now=Date.now,getAuthState=()=>({enabled:false,revision:0}),authLookup=null}={}){
  let revision=0,current=null,resolving=null;
  const lyricCache=new Map(),lyricPending=new Map();
  const bases=()=>getBases().filter(v=>{try{const u=new URL(v);return !u.username&&!u.password&&(u.protocol==='https:'||(u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)));}catch{return false;}}).slice(0,4);
@@ -25,14 +25,52 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   finally{void reader.cancel().catch(()=>{});}
  }
  const sources=createSourceAvailability({json,getBases:bases,trusted,now,getAuthState,authLookup});
+ // A Meting endpoint can return audio without trial metadata. Only a FLAC whose
+ // STREAMINFO duration agrees with independently fetched song metadata is usable.
+ async function metingFallback(sid,signal){
+  let seconds=0;
+  try{const data=await json(OFFICIAL+'/api/song/detail/?ids='+encodeURIComponent('['+sid+']'),signal);
+   const row=data?.songs?.find(x=>String(x.id)===sid);seconds=Number(row?.dt||row?.duration)/1000;
+  }catch(e){if(signal.aborted)throw e;}
+  if(!Number.isFinite(seconds)||seconds<=0)return null;
+  for(const base of bases()){
+   try{
+    const endpoint=base.replace(/\/$/,'')+'/meting/?type=url&id='+encodeURIComponent(sid)+'&br=2000';
+    let uri=endpoint;
+    for(let hops=0;hops<5;hops++){
+     const r=await metingFetchImpl(uri,{headers:{Range:'bytes=0-63','Accept-Encoding':'identity'},signal:AbortSignal.any([signal,AbortSignal.timeout(timeoutMs)]),redirect:'manual',cache:'no-store',credentials:'omit'});
+     if([301,302,303,307,308].includes(r.status)){
+      const location=r.headers.get('location');void r.body?.cancel();if(!location)break;
+      const next=new URL(location,uri).href;if(!trusted(next))break;uri=next;continue;
+     }
+     if((uri!==endpoint&&!trusted(uri))||![200,206].includes(r.status)||!r.body){void r.body?.cancel();break;}
+     const length=r.headers.get('content-length'),size=length===null?null:Number(length);
+     if(size!==null&&(!Number.isSafeInteger(size)||size<=0||size>(r.status===206?65536:1073741824))){void r.body.cancel();break;}
+     if(r.status===206){const m=/^bytes 0-(\d+)\/(\d+)$/.exec(r.headers.get('content-range')||'');
+      if(!m||Number(m[1])>=65536||Number(m[2])<=Number(m[1])||Number(m[2])>1073741824||(size!==null&&size!==Number(m[1])+1)){void r.body.cancel();break;}}
+     const reader=r.body.getReader();let b=Buffer.alloc(0),bad=false;
+     try{while(b.length<42){const part=await reader.read();if(part.done)break;if(part.value.length>65536){bad=true;break;}b=Buffer.concat([b,part.value.subarray(0,42-b.length)]);}}finally{void reader.cancel().catch(()=>{});}
+     if(bad)break;
+     if(b.length<42||b.subarray(0,4).toString()!=='fLaC'||(b[4]&127)!==0||b.readUIntBE(5,3)!==34)break;
+     const value=b.readBigUInt64BE(18),rate=Number(value>>44n),samples=Number(value&((1n<<36n)-1n));
+     const actual=samples/rate;
+     if(rate>0&&samples>0&&Math.abs(actual-seconds)<=Math.max(3,seconds*0.02))return {url:uri,mime:'audio/flac',meting:true,...(uri===endpoint?{metingEndpoint:endpoint}:{})};
+     break;
+    }
+   }catch(e){if(signal.aborted)throw e;}
+  }
+  return null;
+ }
  async function open(id,{allowTrial=false}={}){
   const sid=idOf(id);stop();const serial=revision,control=new AbortController();resolving=control;
   try{
    const chosen=await sources.resolve(sid,control.signal);
    if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
-   const previewOnly=chosen.state!=='available'&&allowTrial===true&&chosen.trialAvailable===true;
-   if(chosen.state!=='available'&&!previewOnly)throw Error(chosen.reason+'；不会自动下载或缓存。');
-   const token=randomUUID();current={url:previewOnly?chosen.trialUrl:chosen.url,id:sid,token,controllers:new Set()};
+   const fallback=chosen.state!=='available'?await metingFallback(sid,control.signal):null;
+   if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
+   const previewOnly=!fallback&&chosen.state!=='available'&&allowTrial===true&&chosen.trialAvailable===true;
+   if(chosen.state!=='available'&&!previewOnly&&!fallback)throw Error(chosen.reason+'；不会自动下载或缓存。');
+   const token=randomUUID();current={url:fallback?.url||(previewOnly?chosen.trialUrl:chosen.url),mime:fallback?.mime,meting:!!fallback?.meting,metingEndpoint:fallback?.metingEndpoint,id:sid,token,controllers:new Set()};
    return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false,previewOnly,trialSeconds:previewOnly?chosen.trialSeconds:0};
   }finally{if(resolving===control)resolving=null;}
  }
@@ -52,15 +90,15 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,getBases=()=>[],timeoutMs
   try{
    let uri=track.url,r;
    for(let hops=0;hops<5;hops++){
-    if(!trusted(uri))return new Response('Unsupported audio host',{status:403});
+     if(!trusted(uri)&&uri!==track.metingEndpoint)return new Response('Unsupported audio host',{status:403});
     const headers={'Accept-Encoding':'identity'};if(range)headers.Range=range;
-    r=await timed(()=>fetchImpl(uri,{method:req.method,headers,redirect:'manual',signal:c.signal,cache:'no-store',credentials:'omit'}));
+     r=await timed(()=>(track.meting?metingFetchImpl:fetchImpl)(uri,{method:req.method,headers,redirect:'manual',signal:c.signal,cache:'no-store',credentials:'omit'}));
     if([301,302,303,307,308].includes(r.status)){const location=r.headers.get('location');void r.body?.cancel();if(!location)return new Response(null,{status:502});uri=new URL(location,uri).href;continue;}break;
    }
    if(!r?.ok){void r?.body?.cancel();return new Response(null,{status:r?.status===416?416:502});}
    const mime=(r.headers.get('content-type')||'').split(';')[0].toLowerCase();
    if(!/^(audio\/(mpeg|mp3|wav|x-wav|wave|flac|ogg|mp4|aac)|application\/octet-stream)$/.test(mime)){void r.body?.cancel();return new Response('Not audio',{status:415});}
-   const headers={'Content-Type':mime,'Cache-Control':'no-store'};
+   const headers={'Content-Type':track.mime||mime,'Cache-Control':'no-store'};
    for(const key of ['content-length','content-range','accept-ranges']){const v=r.headers.get(key);if(v)headers[key]=v;}
    if(r.status===206&&!/^bytes \d+-\d+\/\d+$/.test(headers['content-range']||'')){void r.body?.cancel();return new Response(null,{status:502});}
    if(req.method==='HEAD'){void r.body?.cancel();return new Response(null,{status:r.status,headers});}
