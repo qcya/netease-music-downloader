@@ -747,7 +747,7 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('account:status',async event=>{assertMainSender(event);const state=neteaseAccount.status();return state.state==='unverified'?neteaseAccount.refreshStatus():state});
-  ipcMain.handle('account:web-login',event=>{assertMainSender(event);if(!officialLogin.isOpen())neteaseAccount.cancel();return officialLogin.open()});
+  ipcMain.handle('account:web-login',(event,mode)=>{assertMainSender(event);if(!['qq','phone'].includes(mode))throw Error('请选择登录方式');if(!officialLogin.isOpen()||officialLogin.mode?.()!==mode)neteaseAccount.cancel();return officialLogin.open(mode)});
   ipcMain.handle('account:begin',async event=>{assertMainSender(event);officialLogin.close();const result=await neteaseAccount.startQr();return {...result,expiresIn:Math.max(0,Math.ceil((result.expiresAt-Date.now())/1000))}});
   ipcMain.handle('account:poll',async event=>{assertMainSender(event);const result=await neteaseAccount.pollQr();return {...result,state:result.status==='logged-in'?'authenticated':result.status}});
   ipcMain.handle('account:cancel',event=>{assertMainSender(event);return neteaseAccount.cancel()});

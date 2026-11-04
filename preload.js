@@ -12,7 +12,7 @@ contextBridge.exposeInMainWorld('musicBridge', Object.freeze({
   windowAction:action=>ipcRenderer.send('window:action',action),
   appInfo:()=>ipcRenderer.invoke('app:info'),
   accountStatus:()=>ipcRenderer.invoke('account:status'),
-  accountOpenWebLogin:()=>ipcRenderer.invoke('account:web-login'),
+  accountOpenWebLogin:mode=>ipcRenderer.invoke('account:web-login',mode),
   onAccountWebStatus:cb=>{const f=(_e,state)=>cb(state);ipcRenderer.on('account:web-status',f);return()=>ipcRenderer.removeListener('account:web-status',f);},
   accountBegin:()=>ipcRenderer.invoke('account:begin'),
   accountPoll:()=>ipcRenderer.invoke('account:poll'),
