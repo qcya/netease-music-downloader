@@ -46,6 +46,20 @@ function createNeteaseAccount({api,safeStorage,file,now=Date.now,onChange=()=>{}
   try{return await promise}finally{if(refreshing===entry)refreshing=null;}
  }
  function clearQr(){qr=null;polling=null;}
+ // Only the trusted main-process browser controller may call this. No token is
+ // ever returned: a failed or cancelled login leaves the current account intact.
+ async function importWebCookie(raw){
+  const token=++generation;clearQr();
+  if(typeof raw!=='string'||raw.length>16384)throw Error('网页登录信息无效，请重新登录');
+  const next=extract(raw);if(!next)throw Error('网页尚未完成网易云登录，请继续操作');
+  if(!available())throw Error('系统安全存储不可用，无法安全登录');
+  try{
+   const verify=await api.login_status({cookie:next});if(token!==generation)return {status:'cancelled'};
+   const data=verify?.body?.data;if(Number(data?.code)!==200||!(data.account?.id||data.profile?.userId))throw Error();
+   if(!available())throw Error();const encrypted=safeStorage.encryptString(next);if(!Buffer.isBuffer(encrypted)||!encrypted.length)throw Error();
+   writeAtomic(encrypted);cookie=next;authState='valid';nickname=typeof data.profile?.nickname==='string'?data.profile.nickname.slice(0,80):'';loadError='';generation++;notifyChange();return {status:'logged-in',...status()};
+  }catch{if(token!==generation)return {status:'cancelled'};throw Error('未能验证网易云登录，请重试');}
+ }
  async function startQr(){
   const token=++generation;clearQr();if(!available())throw Error('系统安全存储不可用，无法安全登录');
   try{
@@ -98,6 +112,6 @@ function createNeteaseAccount({api,safeStorage,file,now=Date.now,onChange=()=>{}
    return {code:body.code,data:rows};
   }catch{throw Error('登录账号的音源查询暂时不可用');}
  }
- return {status,refreshStatus,startQr,pollQr,cancel,logout,songUrl};
+ return {status,refreshStatus,startQr,pollQr,importWebCookie,cancel,logout,songUrl};
 }
 module.exports={createNeteaseAccount};

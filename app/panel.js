@@ -377,7 +377,7 @@
  let accountRefresh=0;
  function displayAccount(result){
   $('account-status').textContent=result.loggedIn?'已登录'+(result.nickname?' · '+result.nickname:''):(result.message||result.error||'未登录');
-  $('account-login').hidden=!!result.loggedIn;$('account-login').disabled=false;$('account-logout').hidden=!(result.loggedIn||result.savedCredential);
+  $('account-login').hidden=!!result.loggedIn;$('account-login').disabled=false;$('account-web-login').hidden=!!result.loggedIn;$('account-logout').hidden=!(result.loggedIn||result.savedCredential);
  }
  async function refreshAccount(){
   const request=++accountRefresh;
@@ -398,6 +398,19 @@
   if(s.phase==='authenticated'){invalidateSongAvailability();accountDialog.close();void refreshAccount();status('网易云账号已登录');}
  }});
  $('account-login').onclick=()=>{if(!accountDialog.open)accountDialog.showModal();void accountLogin.start();};
+ $('account-web-login').onclick=async()=>{
+  const button=$('account-web-login');button.disabled=true;
+  try{if(typeof bridge.accountOpenWebLogin!=='function')throw Error();await bridge.accountOpenWebLogin();status('请在网易云官方窗口选择 QQ 或手机号登录，关闭窗口可取消。');}
+  catch{status('登录窗口暂时无法打开，请稍后重试。',true);}
+  finally{button.disabled=false;}
+ };
+ bridge.onAccountWebStatus?.(value=>{
+  if(value?.state==='checking')status('正在确认网易云登录状态…');
+  else if(value?.state==='authenticated')status('网易云账号已登录');
+  else if(value?.state==='cancelled')status('已取消网页登录');
+  else if(value?.state==='error')status(value.message||'网易云官方网页暂时无法打开。',true);
+  else if(value?.state==='waiting'&&value.message)status(value.message);
+ });
  $('account-retry').onclick=()=>{void accountLogin.start();};
  $('account-close').onclick=()=>accountDialog.close();
  accountDialog.addEventListener('close',()=>{void accountLogin.cancel().catch(()=>{});});

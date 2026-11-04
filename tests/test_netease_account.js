@@ -57,3 +57,17 @@ test('concurrent login-state checks share one request without blocking a new ses
  const first=a.refreshStatus(),second=a.refreshStatus();assert.equal(count,1);release({body:{data:{code:200,account:{id:10}}}});assert.equal((await first).state,'valid');assert.equal((await second).state,'valid');
  const pending=a.refreshStatus();a.logout();const signedOut=await a.refreshStatus();assert.equal(signedOut.state,'signed-out');release({body:{data:{code:200,account:{id:10}}}});assert.equal((await pending).state,'signed-out');
 });
+test('web login validates and encrypts only the MUSIC_U credential in the main process',async()=>{
+ const f=fixture(),a=f.create(),secret='web_token_1234567890';let seen;
+ f.deps.api.login_status=async arg=>{seen=arg.cookie;return {body:{data:{code:200,profile:{userId:99,nickname:'网页用户'}}}}};
+ const result=await a.importWebCookie('MUSIC_U='+secret+'; OTHER=unrelated');assert.equal(seen,'MUSIC_U='+secret);assert.equal(result.loggedIn,true);assert.equal(result.nickname,'网页用户');assert.ok(!JSON.stringify(result).includes(secret));assert.ok(!fs.readFileSync(f.file).includes(Buffer.from(secret)));assert.equal(f.changes.length,1);
+});
+test('failed web login and encryption preserve the previous account and never leak credentials',async()=>{
+ const f=fixture(),a=f.create();await a.startQr();await a.pollQr();const previous=fs.readFileSync(f.file),secret='other_secret_1234567';
+ f.deps.api.login_status=async()=>{throw Error('network '+secret)};await assert.rejects(()=>a.importWebCookie('MUSIC_U='+secret),e=>!e.message.includes(secret));assert.equal(a.status().loggedIn,true);assert.deepEqual(fs.readFileSync(f.file),previous);
+ f.deps.api.login_status=async()=>({body:{data:{code:301}}});await assert.rejects(()=>a.importWebCookie('MUSIC_U='+secret),e=>!e.message.includes(secret));assert.deepEqual(fs.readFileSync(f.file),previous);
+ f.deps.api.login_status=async()=>({body:{data:{code:200,account:{id:2}}}});f.deps.safeStorage.encryptString=()=>{throw Error(secret)};await assert.rejects(()=>a.importWebCookie('MUSIC_U='+secret),e=>!e.message.includes(secret));assert.equal(a.status().loggedIn,true);assert.deepEqual(fs.readFileSync(f.file),previous);
+});
+test('cancel, logout and newer web login prevent stale web verification from saving credentials',async()=>{
+ for(const action of ['cancel','logout','newer']){const f=fixture(),a=f.create();let release;f.deps.api.login_status=()=>new Promise(r=>release=r);const pending=a.importWebCookie('MUSIC_U=delayed_1234567890');if(action==='cancel')a.cancel();else if(action==='logout')a.logout();else {f.deps.api.login_status=async()=>({body:{data:{code:200,account:{id:10}}}});await a.importWebCookie('MUSIC_U=newer_token_1234567890');}release({body:{data:{code:200,account:{id:10}}}});assert.equal((await pending).status,'cancelled');assert.equal(a.status().loggedIn,action==='newer');if(action!=='newer')assert.equal(fs.existsSync(f.file),false);}
+});

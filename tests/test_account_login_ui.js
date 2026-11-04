@@ -43,3 +43,12 @@ test('account change while settings are open probes songs on returning to the li
  const h=availabilityHarness(true);h.ctx.invalidate();assert.equal(h.requests.length,0);assert.equal(h.ctx.accountProbePending,true);
  h.ctx.showBrowser();assert.equal(h.requests.length,1);h.requests[0]([{id:'1',state:'available'}]);await flush();assert.equal(h.ctx.availability.get('1').state,'available');
 });
+test('official QQ or phone login opens without requesting credentials and reports failures in Chinese',async()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../app/panel.js'),'utf8');
+ const start=source.indexOf(" $('account-web-login').onclick="),end=source.indexOf(" $('account-retry').onclick",start);assert.ok(start>=0&&end>start);
+ const button={disabled:false},messages=[];let opens=0,fail=false;
+ const context={$:()=>button,bridge:{accountOpenWebLogin:async()=>{opens++;if(fail)throw Error('sensitive internal error')}},status:(...x)=>messages.push(x)};
+ vm.createContext(context);vm.runInContext(source.slice(start,end),context);
+ await button.onclick();assert.equal(opens,1);assert.equal(button.disabled,false);assert.match(messages.at(-1)[0],/QQ|手机号/);assert.match(messages.at(-1)[0],/取消/);
+ fail=true;await button.onclick();assert.equal(button.disabled,false);assert.equal(messages.at(-1)[1],true);assert.doesNotMatch(messages.at(-1)[0],/sensitive/);
+});

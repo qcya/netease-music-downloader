@@ -1,9 +1,10 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen, Notification, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen, Notification, safeStorage, session } = require('electron');
 const fs = require('node:fs');
 const {createOnlineMedia}=require('./online_media');
 const {createNeteaseApiClient}=require('./netease_api_client');
 const {createNeteaseAccount}=require('./netease_account');
+const {createOfficialLoginWindow}=require('./official_login_window');
 const {effectiveMusicApis}=require('./music_providers');
 app.commandLine?.appendSwitch('disable-http-cache');
 const path = require('node:path');
@@ -55,7 +56,7 @@ const remotePreview = new Map();
 const previewSourceCache=new Map();
 const previewSourcePending=new Map();
 const lyricsPending=new Map();
-let neteaseAccount=null,neteaseApiClient=null,accountRevision=0;
+let neteaseAccount=null,neteaseApiClient=null,officialLogin=null,accountRevision=0;
 const onlineMedia=createOnlineMedia({getBases:()=>effectiveMusicApis(config().apiBases),fetchImpl:(url,options)=>net.fetch(url,options),getAuthState:()=>({enabled:!!neteaseAccount?.status().loggedIn,revision:accountRevision}),authLookup:(id,level)=>neteaseAccount.songUrl(id,level)});
 let playbackResolveVersion=0;
 if (protocol?.registerSchemesAsPrivileged) {
@@ -679,6 +680,7 @@ app.whenReady().then(() => {
   neteaseApiClient=createNeteaseApiClient();
   const accountApi=Object.fromEntries(['login_qr_key','login_qr_create','login_qr_check','login_status','song_url_v1'].map(name=>[name,args=>neteaseApiClient.call(name,args)]));
   neteaseAccount=createNeteaseAccount({api:accountApi,safeStorage:safeStorage||{isEncryptionAvailable:()=>false},file:path.join(app.getPath('userData'),'netease-account.enc'),onChange:()=>{accountRevision++;onlineMedia.clearAvailability();if(win&&!win.isDestroyed())win.webContents.send('account:status',neteaseAccount.status());}});
+  officialLogin=createOfficialLoginWindow({BrowserWindow,session,onToken:(value,isCurrent)=>isCurrent()?neteaseAccount.importWebCookie('MUSIC_U='+value):{status:'cancelled'},onStatus:state=>{if(state.state==='cancelled')neteaseAccount.cancel();if(win&&!win.isDestroyed())win.webContents.send('account:web-status',state);}});
   void neteaseAccount.refreshStatus();
   const logger=createLogger(app.getPath('userData'));logger.info('start',`version=${app.getVersion?.()||'dev'} packaged=${app.isPackaged}`);
   process.on('uncaughtException',e=>reportStartupFailure('主进程未捕获的异常',e));
@@ -745,10 +747,11 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:set', (_e, value) => {assertMainSender(_e);return writeConfig(value)});
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('account:status',async event=>{assertMainSender(event);const state=neteaseAccount.status();return state.state==='unverified'?neteaseAccount.refreshStatus():state});
-  ipcMain.handle('account:begin',async event=>{assertMainSender(event);const result=await neteaseAccount.startQr();return {...result,expiresIn:Math.max(0,Math.ceil((result.expiresAt-Date.now())/1000))}});
+  ipcMain.handle('account:web-login',event=>{assertMainSender(event);if(!officialLogin.isOpen())neteaseAccount.cancel();return officialLogin.open()});
+  ipcMain.handle('account:begin',async event=>{assertMainSender(event);officialLogin.close();const result=await neteaseAccount.startQr();return {...result,expiresIn:Math.max(0,Math.ceil((result.expiresAt-Date.now())/1000))}});
   ipcMain.handle('account:poll',async event=>{assertMainSender(event);const result=await neteaseAccount.pollQr();return {...result,state:result.status==='logged-in'?'authenticated':result.status}});
   ipcMain.handle('account:cancel',event=>{assertMainSender(event);return neteaseAccount.cancel()});
-  ipcMain.handle('account:logout',event=>{assertMainSender(event);return neteaseAccount.logout()});
+  ipcMain.handle('account:logout',event=>{assertMainSender(event);officialLogin.close();return neteaseAccount.logout()});
   ipcMain.handle('app:release-page',async(_e)=>{assertMainSender(_e);await shell.openExternal('https://github.com/qcya/netease-music-downloader/releases/latest');return true});
   ipcMain.handle('music:availability',async(_e,ids,options)=>{
     assertMainSender(_e);if(!Array.isArray(ids)||ids.length>40)throw Error('每次最多检测 40 首歌曲');
@@ -971,6 +974,7 @@ app.on('before-quit',()=>{
   try{floatingLyrics.close()}catch{}
   try{topPanel.close()}catch{}
   onlineMedia.close();
+  neteaseAccount?.cancel();officialLogin?.close();
   neteaseApiClient?.close();
   stopBackendChildren();
 });
