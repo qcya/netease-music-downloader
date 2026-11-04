@@ -35,7 +35,8 @@
   document.body.classList.toggle('playing',s.playing);$('title').textContent=s.title||'让音乐降落';$('artist').textContent=s.artist||'从音乐库选一首喜欢的歌';
   if($('cover').getAttribute('src')!==s.cover)$('cover').src=s.cover||'../assets/avatar.png';
   $('state').textContent=(s.error|| (s.busy?'正在连接':s.playing?'正在播放':s.title?'已暂停':'等待播放'))+(s.previewOnly?' · 试听片段':'');
-  $('toggle').textContent=s.playing?'暂停':'播放';$('toggle').disabled=!!s.busy;$('seek').disabled=!s.duration;$('seek').max=String(s.duration||1);
+  $('toggle-icon').setAttribute('d',s.playing?'M8 5h3v14H8ZM15 5h3v14h-3Z':'m9 5 11 7-11 7Z');
+  $('toggle').title=s.playing?'暂停':'播放';$('toggle').setAttribute('aria-label',s.playing?'暂停':'播放');$('toggle').disabled=!!s.busy;$('seek').disabled=!s.duration;$('seek').max=String(s.duration||1);
   if(document.activeElement!==$('seek'))$('seek').value=s.time||0;if(document.activeElement!==$('volume'))$('volume').value=s.volume;
   $('elapsed').textContent=time(s.time);$('duration').textContent=time(s.duration);
   const next=JSON.stringify([s.key,s.lyrics]);

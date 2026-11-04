@@ -1,6 +1,6 @@
 # 音乐下载器
 
-顶部悬绳播放器，Windows 10/11 x64。当前源码版本 **2.0.0-preview.5**，尚未发布到 GitHub Releases。
+顶部悬绳播放器，Windows 10/11 x64。当前源码版本 **2.0.0-preview.6**（预览版）。
 
 启动后，屏幕顶部会出现一条悬绳和原图标挂件。按住挂件向下拉，音乐面板从顶部展开。原来的大主窗口和右侧迷你抽屉已移除。
 
@@ -42,7 +42,7 @@
 
 ## 运行和构建
 
-普通用户运行 `MusicDownloader-2.0.0-preview.5-portable.exe` 即可，已内置下载后端，无需另装 Python。GitHub [Releases](https://github.com/qcya/netease-music-downloader/releases) 中的旧版不含此界面。
+普通用户运行 `MusicDownloader-2.0.0-preview.6-portable.exe` 即可，已内置下载后端，无需另装 Python。GitHub [Releases](https://github.com/qcya/netease-music-downloader/releases) 中的旧版不含此界面。
 
 开发需要 Node.js 22+、Python 3.12：
 
