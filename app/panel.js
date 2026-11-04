@@ -2,7 +2,7 @@
 (()=>{
  const $=id=>document.getElementById(id),bridge=window.musicBridge,audio=$('music-audio');
  let settings=null,tab='local',files=[],categories={categories:[],assignments:{},order:[]},lists=[],rows=[],searchPage=1,total=0,batch=0,loadSerial=0,lyrics=[],lyricIndex=-1,currentHeight=740,lastTrackKey='',lastPlaying=false,lastBusy=false,mutedVolume=.75,libraryChoice='all';
- const availability=new Map(),tasks=new Map();
+ const availability=new Map(),tasks=new Map();let seeking=false,taskRenderTimer=null;
  const sheet=document.querySelector('.panel');let slide=null;
  bridge.onPanelReveal(({progress,animate})=>{
   const from=getComputedStyle(sheet).transform;slide?.cancel();
@@ -44,7 +44,7 @@
   $('cover').onerror=()=>{$('cover').src='../assets/avatar.png';};$('preview-tag').hidden=!s.track?.previewOnly;
   $('track-format').textContent=s.track?.previewOnly?'试听片段':s.track?.local||s.track?.fromLocal?'本地':s.track?'在线':'待播放';
   $('elapsed').textContent=time(s.time);$('duration').textContent=time(s.duration);$('seek').disabled=!s.duration;$('seek').max=String(s.duration||1);
-  if(document.activeElement!==$('seek'))$('seek').value=String(s.time);if(document.activeElement!==$('volume'))$('volume').value=String(s.volume);
+  if(!seeking)$('seek').value=String(s.time);$('volume').value=String(s.volume);
   $('mode').textContent=({sequence:'顺序',shuffle:'随机','repeat-one':'单曲',reverse:'倒序','stop-after':'播完停'})[s.mode];
   if(s.error)status(s.error,true);else if(s.busy)status('正在连接「'+s.track.name+'」…');
   if(lastTrackKey!==s.track?.key||lastPlaying!==s.playing||lastBusy!==s.busy){
@@ -143,7 +143,9 @@
  function renderTasks(){
   $('task-list').replaceChildren();const entries=[...tasks.values()].sort((a,b)=>(b.time||0)-(a.time||0));$('task-badge').hidden=!entries.some(t=>['running','queued'].includes(t.status));
   if(!entries.length){$('task-list').append(empty('还没有下载任务','在搜索结果中点击 ↓ 即可下载。'));return;}
-  for(const t of entries){const item=element('div','task');item.append(element('strong','',t.song?.name||(t.name&&t.name!==String(t.id)?t.name:'正在获取歌曲名称')),element('p','',({running:'正在下载',queued:'排队中',done:'下载完成',completed:'下载完成',failed:'下载失败',cancelled:'已取消'})[t.status]||t.status));if(t.artists||t.song?.artists)item.append(element('p','',t.artists||t.song.artists));if(t.error)item.append(element('p','',t.error));const button=element('button','',t.status==='failed'?'重试':'取消');button.hidden=!['failed','running','queued'].includes(t.status);button.onclick=safe(()=>t.status==='failed'?bridge.retryDownload(String(t.id)):bridge.cancelDownload(String(t.id)));item.append(button);$('task-list').append(item);}
+  for(const t of entries){const item=element('div','task');item.append(element('strong','',t.song?.name||(t.name&&t.name!==String(t.id)?t.name:'歌曲名称暂不可用')),element('p','',({running:'正在下载',queued:'排队中',done:'下载完成',completed:'下载完成',failed:'下载失败',cancelled:'已取消'})[t.status]||t.status));if(t.artists||t.song?.artists)item.append(element('p','',t.artists||t.song.artists));
+   const p=t.progress;if(t.status==='running'&&p&&typeof p.percent==='number'&&Number.isFinite(p.percent)){const percent=Math.max(0,Math.min(100,p.percent)),bar=element('progress','task-progress');bar.max=100;bar.value=percent;bar.setAttribute('aria-label','下载进度');item.append(bar,element('p','',Math.round(percent)+'%'+(Number.isFinite(p.speed)&&p.speed>0?' · '+(p.speed/1048576).toFixed(2)+' MB/s':'')));}
+   if(t.error)item.append(element('p','',t.error));const button=element('button','',t.status==='failed'?'重试':'取消');button.hidden=!['failed','running','queued'].includes(t.status);button.onclick=safe(()=>t.status==='failed'?bridge.retryDownload(String(t.id)):bridge.cancelDownload(String(t.id)));item.append(button);$('task-list').append(item);}
  }
  function gesture(node,kind){
   let held=false;node.addEventListener('pointerdown',e=>{if(e.button!==0||kind==='move'&&e.target.closest('button'))return;held=true;node.setPointerCapture(e.pointerId);bridge.panelAction({type:'begin',kind,native:true,x:window.screenX+e.clientX,y:window.screenY+e.clientY});});
@@ -174,6 +176,7 @@
  });
  $('play').onclick=safe(()=>player.toggle());$('previous').onclick=safe(()=>player.step(-1));$('next').onclick=safe(()=>player.step(1));
  $('mode').onclick=()=>{const modes=['sequence','shuffle','repeat-one','reverse','stop-after'];player.setMode(modes[(modes.indexOf(player.state().mode)+1)%modes.length]);};
+ $('seek').addEventListener('pointerdown',()=>{seeking=true;});for(const name of ['pointerup','pointercancel','lostpointercapture'])$('seek').addEventListener(name,()=>{seeking=false;});
  $('seek').onchange=()=>{if(Number.isFinite(audio.duration))audio.currentTime=Math.min(Number($('seek').value),audio.duration);};
  $('volume').oninput=()=>{audio.volume=Number($('volume').value);};$('mute').onclick=()=>{if(audio.volume){mutedVolume=audio.volume;audio.volume=0;}else audio.volume=mutedVolume;};
  const openFullscreen=()=>bridge.openFullscreen(fullscreenState());
@@ -188,7 +191,7 @@
   if(message.action==='volume')audio.volume=Math.max(0,Math.min(1,message.value));
  }));
  document.addEventListener('dragstart',e=>{if(!e.target.closest('input,textarea,[contenteditable="true"]'))e.preventDefault();});
- $('tasks-button').onclick=safe(async()=>{(await bridge.downloadHistory()).forEach(t=>tasks.set(t.key||t.id,t));renderTasks();showSheet('tasks-view');});
+ $('tasks-button').onclick=safe(async()=>{(await bridge.downloadHistory()).forEach(t=>{const key=t.key||t.id,old=tasks.get(key);if(!old||(old.time||0)<(t.time||0))tasks.set(key,t);});renderTasks();showSheet('tasks-view');});
  $('settings-button').onclick=safe(async()=>{settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;$('lock-lyrics').checked=settings.floatingLyrics.mouseThrough;fillAppearance();showSheet('settings-view');});
  for(const b of document.querySelectorAll('.back-button'))b.onclick=hideSheets;
  $('choose-dir').onclick=safe(async()=>{const dir=await bridge.chooseDirectory();if(dir)$('download-dir').value=dir;});$('open-dir').onclick=safe(()=>bridge.openDirectory());
@@ -210,7 +213,7 @@
  for(const event of ['play','pause','ended'])audio.addEventListener(event,()=>{player.emit();saveSession(player.state(),true);void bridge.setPlaybackState(!audio.paused).catch(()=>{});});
  window.addEventListener('beforeunload',()=>saveSession(player.state(),true));
  audio.onended=()=>{void player.step(1,'ended');};audio.onerror=()=>{if(audio.src)status('这首歌暂时无法播放，可以重新选择或检测音源。',true);};
- bridge.onDownloadTask(t=>{tasks.set(t.key||t.id,{...t,time:Date.now()});renderTasks();});
+ bridge.onDownloadTask(t=>{tasks.set(t.key||t.id,{...t,time:t.time||Date.now()});$('task-badge').hidden=![...tasks.values()].some(v=>['running','queued'].includes(v.status));if(!$('tasks-view').hidden&&!taskRenderTimer)taskRenderTimer=setTimeout(()=>{taskRenderTimer=null;renderTasks();},150);});
  bridge.onBackendStatus(s=>{if(s.ok===false)status(s.message,true);});bridge.onOpenLyricsSettings(()=>$('settings-button').click());
  safe(async()=>{audio.volume=Number.isFinite(session.volume)?Math.max(0,Math.min(1,session.volume)):.75;player.setMode(session.mode);settings=await bridge.getSettings();await loadTab('local');const remembered=rows.find(r=>r.file===session.file);if(remembered)await player.play(remembered,rows,{paused:true,resumeTime:session.time});const info=await bridge.appInfo();$('build-label').textContent='音乐下载器 · '+info.version;if(!settings.disclaimerAcceptedVersion)$('welcome').showModal();if(settings.desktopLyricsEnabled)await bridge.showFloatingLyrics();status('顶部拖动位置 · 底边调节长度');})();
 })();

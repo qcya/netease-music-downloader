@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.0.0-preview.4",
+  "version": "2.0.0-preview.5",
   "private": true,
   "description": "音乐下载器：顶部悬绳播放器、淡蓝粉白界面与独立全屏歌词",
   "main": "main.js",

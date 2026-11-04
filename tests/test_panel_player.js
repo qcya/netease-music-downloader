@@ -10,6 +10,11 @@ test('late online source does not replace a newer local track',async()=>{
 
 const {createPlayer}=require('../app/panel_player');
 function audio(){return {paused:true,src:'',currentTime:0,duration:30,volume:.75,pause(){this.paused=true},removeAttribute(){this.src=''},load(){},async play(){this.paused=false}};}
+test('stopping while a source is resolving clears busy and ignores its late result',async()=>{
+ let release;const pending=new Promise(r=>release=r),a=audio(),p=createPlayer({audio:a,bridge:{stopOnlinePlayback:async()=>{},streamAudio:()=>pending}});
+ const request=p.play({key:'online:1',id:'1'});await new Promise(r=>setImmediate(r));assert.equal(p.state().busy,true);
+ p.stop();assert.equal(p.state().busy,false);release({url:'late'});await request;assert.notEqual(a.src,'late');
+});
 test('natural completion skips an unavailable candidate and starts the next usable song',async()=>{
  const rows=['a','bad','c'].map(id=>({key:'online:'+id,id,name:id})),attempts=[];
  const a=audio(),p=createPlayer({audio:a,bridge:{stopOnlinePlayback:async()=>{},streamAudio:async id=>{attempts.push(id);if(id==='bad')throw Error('unavailable');return {url:id};}}});

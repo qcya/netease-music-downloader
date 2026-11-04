@@ -695,9 +695,11 @@ app.whenReady().then(() => {
   ipcMain.on('fullscreen:control',(event,message)=>fullscreenPlayer.control(event.sender,message));
   ipcMain.handle('fullscreen:preferences',event=>{
     if(!fullscreenPlayer.owns(event.sender))throw Error('仅全屏窗口可读取播放外观');
-    const file=config().playerBackgroundPath||path.join(__dirname,'assets/immersive-background-1080p.mp4');
+    const defaultFile=path.join(__dirname,'assets/immersive-background-1080p.mp4');
+    const file=config().playerBackgroundPath||defaultFile;
     const exists=BACKGROUND_EXTS.has(path.extname(file).toLowerCase())&&fs.existsSync(file)&&fs.statSync(file).isFile();
-    return {lyrics:config().floatingLyrics,background:exists?{kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:pathToFileURL(file).href}:{kind:'missing'}};
+    const fallback=fs.existsSync(defaultFile)?{kind:'video',url:pathToFileURL(defaultFile).href}:null;
+    return {lyrics:config().floatingLyrics,background:exists?{kind:['.mp4','.webm'].includes(path.extname(file).toLowerCase())?'video':'image',url:pathToFileURL(file).href}:{kind:'missing'},fallback};
   });
   ipcMain.handle('background:choose',async event=>{
     assertMainSender(event);const result=await dialog.showOpenDialog(win,{title:'选择全屏歌词背景',properties:['openFile'],filters:[{name:'图片或视频',extensions:['mp4','webm','png','jpg','jpeg','webp']}]});

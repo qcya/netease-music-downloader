@@ -44,8 +44,18 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
   gesture.moved=Math.max(gesture.moved,Math.abs(dy),Math.abs(dx));
   if(gesture.kind==='pull'&&!gesture.axis&&Math.max(Math.abs(dx),Math.abs(dy))>4){gesture.axis=Math.abs(dx)>Math.abs(dy)*1.1?'horizontal':'vertical';if(gesture.axis==='horizontal')gesture.kind='charm-move';}
   if(gesture.kind==='move'||gesture.kind==='charm-move'){
-   const display=screen.getDisplayNearestPoint(point);area=display.workArea;prefs.displayId=display.id;
-   prefs.anchorX=clamp(gesture.anchor+dx-area.x,38,area.width-38);
+   // The pendant may be past the panel's centre at a screen edge. Start an
+   // expanded-panel drag from the actual window, so it never has a dead zone.
+   const anchor=gesture.kind==='move'?gesture.initial.x+gesture.initial.width/2:gesture.anchor;
+   const display=screen.getDisplayNearestPoint(point),nextArea=display.workArea;
+   const nextAnchor=clamp(anchor+dx-nextArea.x,38,nextArea.width-38);
+   if(gesture.kind==='move'&&!gesture.horizontalMoved){
+    if(dx===0)return;
+    const candidate=panelBounds(nextArea,{...prefs,anchorX:nextAnchor});
+    if(candidate.x===gesture.initial.x&&candidate.y===gesture.initial.y)return;
+    gesture.horizontalMoved=true;
+   }
+   area=nextArea;prefs.displayId=display.id;prefs.anchorX=nextAnchor;
    panel().setBounds(bounds());placeCharm();
   }else if(gesture.kind==='resize'){
    prefs.height=panelBounds(area,{...prefs,height:gesture.initial.height+dy}).height;panel().setBounds(bounds());publish();

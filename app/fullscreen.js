@@ -4,13 +4,31 @@
  let signature='',active=-2,followAfter=0;
  const time=n=>{n=Math.max(0,Math.floor(n||0));return Math.floor(n/60)+':'+String(n%60).padStart(2,'0');};
  const control=(action,value)=>bridge.control({action,value});
- bridge.preferences().then(({background,lyrics:s})=>{
+ // A missing custom background must never leave white lyrics on the light canvas.
+ document.body.style.backgroundColor='#172438';
+ function loadBackground(background,fallback){
+  const video=$('background-video'),image=$('background-image'),status=$('background-status');let serial=0;
+  const notice=text=>{status.textContent=text;status.hidden=false;};
+  function show(source,isFallback=false){
+   const token=++serial;video.onerror=null;image.onerror=null;video.pause();video.hidden=true;image.hidden=true;
+   function failed(){
+    if(token!==serial)return;
+    if(!isFallback&&fallback?.url&&fallback.url!==source?.url){notice('自定义背景不可用，已切换到原版背景；可在设置中重新选择。');show(fallback,true);}
+    else{serial++;video.onerror=null;image.onerror=null;video.pause();video.hidden=true;image.hidden=true;notice('背景暂时不可用，可在设置中重新选择。');}
+   }
+   if(!source?.url||!['video','image'].includes(source.kind)){failed();return;}
+   if(source.kind==='video'){
+    video.onerror=failed;video.muted=true;video.src=source.url;video.hidden=false;
+    try{Promise.resolve(video.play()).catch(failed);}catch{failed();}
+   }else{image.onerror=failed;image.src=source.url;image.hidden=false;}
+  }
+  show(background);
+ }
+ bridge.preferences().then(({background,fallback,lyrics:s})=>{
   const style=document.documentElement.style;
   for(const [name,value] of Object.entries({'--lyric-color':s.originalColor,'--translation-color':s.translationColor,'--glow':s.glow+'px','--shadow':s.shadow,'--lyric-size':s.fontSize*1.25+'px','--translation-size':s.translationSize*1.25+'px','--lyric-line-height':s.lineHeight,'--lyric-align':s.align}))style.setProperty(name,String(value));
   document.body.classList.toggle('hide-original',!s.showOriginal);document.body.classList.toggle('hide-translation',!s.showTranslation);
-  if(background.kind==='video'){const v=$('background-video');v.src=background.url;v.hidden=false;v.muted=true;v.onerror=()=>{$('background-status').hidden=false;$('background-status').textContent='背景视频暂时无法播放，可在设置中重新选择。';};void v.play().catch(v.onerror);}
-  else if(background.kind==='image'){$('background-image').src=background.url;$('background-image').hidden=false;}
-  else{$('background-status').hidden=false;$('background-status').textContent='背景文件已移动，可在设置中重新选择。';}
+  loadBackground(background,fallback);
  }).catch(()=>{$('background-status').hidden=false;$('background-status').textContent='背景设置读取失败，音乐播放不受影响。';});
  function follow(){const line=$('lyric-list').querySelector('.active');if(line&&Date.now()>=followAfter){$('lyrics').scrollTo({top:line.offsetTop-$('lyrics').offsetTop-$('lyrics').clientHeight/2+line.clientHeight/2,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}}
  bridge.onState(s=>{

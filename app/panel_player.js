@@ -37,7 +37,7 @@
    catalog.delete(oldKey);catalog.set(newKey,{...item,key:newKey,file:newName});queue.tracks=queue.tracks.map(k=>k===oldKey?newKey:k);
    if(track?.key===oldKey){track={...track,key:newKey,file:newName};if(busy)return play(track,null,{paused:playOptions.paused,resumeTime:playOptions.resumeTime});}emit();
   }
-  return {state,play,step,toggle,setMode,renameLocal,emit,serial:()=>serial,stop(){serial++;navigation++;audio.pause();void bridge.stopOnlinePlayback().catch(()=>{});}};
+  return {state,play,step,toggle,setMode,renameLocal,emit,serial:()=>serial,stop(){serial++;navigation++;busy=false;error='';audio.pause();emit();void bridge.stopOnlinePlayback().catch(()=>{});}};
  }
  const api={createPlayer};if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.OrbitPlayer=api;
 })(typeof window!=='undefined'?window:null);

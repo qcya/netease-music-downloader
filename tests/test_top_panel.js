@@ -29,7 +29,15 @@ test('cord pull, cancellation, resize, monitor movement and sender boundaries',(
  send(charm,{type:'begin',kind:'pull',x:center,y:100});send(charm,{type:'move',x:1915,y:100});send(charm,{type:'cancel'});
  assert.equal(charm.bounds.x,1844,'pendant can reach right edge independent of panel width');
  assert.equal(saved.anchorX,1882,'capture loss must not undo horizontal drag');
- ctrl.unfold(false);assert.equal(panel.bounds.x,1500);ctrl.collapse();assert.equal(charm.bounds.x,1844);
+ ctrl.unfold(false);assert.equal(panel.bounds.x,1500);
+ send(panel,{type:'begin',kind:'move',x:1600,y:20});send(panel,{type:'move',x:1600,y:24});send(panel,{type:'end'});
+ ctrl.collapse();assert.equal(charm.bounds.x,1844,'a click or vertical jitter must not move the pendant');ctrl.unfold(false);
+ send(panel,{type:'begin',kind:'move',x:1600,y:20});send(panel,{type:'move',x:1601,y:20});send(panel,{type:'end'});
+ ctrl.collapse();assert.equal(charm.bounds.x,1844,'a drag blocked by the screen edge must not jump the pendant');ctrl.unfold(false);
+ send(panel,{type:'begin',kind:'move',x:1600,y:20});send(panel,{type:'move',x:1580,y:20});send(panel,{type:'end'});
+ assert.equal(panel.bounds.x,1480,'dragging the expanded panel away from an edge responds immediately');
+ ctrl.collapse();assert.equal(charm.bounds.x,1652,'pendant follows the relocated panel');
+ send(charm,{type:'begin',kind:'pull',x:1690,y:100});send(charm,{type:'move',x:1882,y:100});send(charm,{type:'end'});
  send(charm,{type:'begin',kind:'pull',x:1882,y:100});send(charm,{type:'move',x:center,y:100});send(charm,{type:'end'});
  send(charm,{type:'begin',kind:'pull',x:1680,y:100});send(charm,{type:'move',x:1680,y:300});assert.equal(panel.bounds.y,0);assert.equal(panel.bounds.height,740,'pull never squeezes or reflows content');
  send(charm,{type:'move',x:1680,y:100});assert.equal(panel.messages.filter(m=>m.channel==='panel:reveal').at(-1).data.progress,0,'reverse pull must follow pointer back to fully hidden');
