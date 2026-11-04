@@ -36,7 +36,15 @@ const server=http.createServer((req,res)=>{
  await wait(()=>run("document.getElementById('lyric-line').textContent==='本地测试歌词'"),'local lyric missing');
  await run("document.getElementById('lyrics-toggle').click()");
  const overlay=await connect(await wait(async()=>(await pages(port)).find(p=>p.url.endsWith('/floating-lyrics.html')),'desktop lyrics missing'));
- try{await wait(()=>overlay.run("document.getElementById('lyric').textContent==='本地测试歌词'"),'desktop lyrics did not receive current lyric');}finally{overlay.close();}
+ try{
+  await wait(()=>overlay.run("document.getElementById('lyric').textContent==='本地测试歌词'"),'desktop lyrics did not receive current lyric');
+  await run("document.getElementById('settings-button').click()");await wait(()=>run("!document.getElementById('settings-view').hidden"),'settings did not open');
+  for(const locked of [true,false]){
+   await run(`if(document.getElementById('lock-lyrics').checked!==${locked})document.getElementById('lock-lyrics').click()`);
+   await wait(async()=>{const state=await run('musicBridge.floatingLyricsStatus()'),settings=await run('musicBridge.getSettings()'),visual=await overlay.run("document.getElementById('widget').dataset.locked");return state.locked===locked&&settings.floatingLyrics.mouseThrough===locked&&visual===String(locked);},'desktop lyrics lock did not apply and persist immediately');
+  }
+  await run("document.querySelector('#settings-view .back-button').click()");
+ }finally{overlay.close();}
  await run("document.getElementById('lyrics-toggle').click()");await wait(async()=>!(await pages(port)).some(p=>p.url.endsWith('/floating-lyrics.html')),'desktop lyrics did not close');
  await run("document.getElementById('collapse').click()");const before=await run("document.getElementById('music-audio').currentTime");await sleep(500);assert.ok(await run(`document.getElementById('music-audio').currentTime>${before}`));
  await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
@@ -79,6 +87,6 @@ const server=http.createServer((req,res)=>{
  let oldX=await run('screenX');await drag(client,150,25,-60);assert.equal(await run('screenX'),oldX-60);
  await run("musicBridge.panelAction({type:'collapse'})");await sleep(200);oldX=await charm.run('screenX');await drag(charm,38,105,-100);assert.equal(await charm.run('screenX'),oldX-100);
  await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
- const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','expand default playlist','local playback','desktop lyrics toggle','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','expanded and collapsed multi-step drag geometry','original video background','custom font','named download task']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+ const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','expand default playlist','local playback','desktop lyrics toggle','desktop lyrics lock applies immediately and persists','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','expanded and collapsed multi-step drag geometry','original video background','custom font','named download task']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  if(process.env.ORBIT_KEEP_OPEN!=='1')await run("musicBridge.windowAction('quit')").catch(()=>{});
 })().catch(async e=>{console.error(e.stack);console.error('Requests',requests);if(client)console.error(await client.run('document.body.innerText').catch(()=>''));process.exitCode=1;}).finally(()=>{client?.close();charm?.close();server.close();});

@@ -353,11 +353,24 @@
  }));
  document.addEventListener('dragstart',e=>{if(!e.target.closest('[data-select-kind="track"],[data-select-kind="playlist"],input,textarea,[contenteditable="true"]'))e.preventDefault();});
  $('tasks-button').onclick=safe(async()=>{(await bridge.downloadHistory()).forEach(t=>{const key=t.key||t.id,old=tasks.get(key);if(!old||(old.time||0)<(t.time||0))tasks.set(key,t);});renderTasks();showSheet('tasks-view');});
- $('settings-button').onclick=safe(async()=>{settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;$('lock-lyrics').checked=settings.floatingLyrics.mouseThrough;fillAppearance();showSheet('settings-view');});
+ let lyricLockDesired=!!settings?.floatingLyrics?.mouseThrough,lyricLockConfirmed=lyricLockDesired,lyricLockWorker=null;
+ function setLyricLockDisplay(value){lyricLockDesired=lyricLockConfirmed=!!value;$('lock-lyrics').checked=lyricLockConfirmed;if(settings?.floatingLyrics)settings.floatingLyrics.mouseThrough=lyricLockConfirmed;}
+ bridge.onFloatingLyricsLockStatus(event=>{if(!lyricLockWorker)setLyricLockDisplay(event.locked);});
+ $('lock-lyrics').onchange=()=>{
+  lyricLockDesired=$('lock-lyrics').checked;if(lyricLockWorker)return;
+  lyricLockWorker=(async()=>{
+   while(lyricLockDesired!==lyricLockConfirmed){
+    const wanted=lyricLockDesired;
+    try{await bridge.lockFloatingLyrics(wanted);lyricLockConfirmed=wanted;if(settings?.floatingLyrics)settings.floatingLyrics.mouseThrough=wanted;}
+    catch(e){if(lyricLockDesired===wanted){lyricLockDesired=lyricLockConfirmed;$('lock-lyrics').checked=lyricLockConfirmed;status('桌面歌词锁定设置失败：'+(e.message||String(e)),true);}}
+   }
+  })().finally(()=>{lyricLockWorker=null;});
+ };
+ $('settings-button').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;setLyricLockDisplay(settings.floatingLyrics.mouseThrough);fillAppearance();showSheet('settings-view');});
  for(const b of document.querySelectorAll('.back-button'))b.onclick=hideSheets;
  $('choose-dir').onclick=safe(async()=>{const dir=await bridge.chooseDirectory();if(dir)$('download-dir').value=dir;});$('open-dir').onclick=safe(()=>bridge.openDirectory());
- $('save-settings').onclick=safe(async()=>{settings=await bridge.saveSettings({...settings,downloadDir:$('download-dir').value,apiBases:$('api-bases').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean),parallelDownloads:Number($('parallel').value),desktopLyricsEnabled:$('desktop-lyrics').checked,floatingLyrics:readAppearance()});
-  if(settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();pushDesktopLyrics();}else await bridge.closeFloatingLyrics();updateLyricsButton();await bridge.lockFloatingLyrics($('lock-lyrics').checked);availability.clear();status('设置已保存');});
+ $('save-settings').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.saveSettings({...settings,downloadDir:$('download-dir').value,apiBases:$('api-bases').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean),parallelDownloads:Number($('parallel').value),desktopLyricsEnabled:$('desktop-lyrics').checked,floatingLyrics:readAppearance()});
+  if(settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();pushDesktopLyrics();}else await bridge.closeFloatingLyrics();updateLyricsButton();availability.clear();status('设置已保存');});
 
  function fillAppearance(){
   $('player-bg-path').value=settings.playerBackgroundPath||'原版动态背景';const s=settings.floatingLyrics;
