@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -815,6 +816,49 @@ def download_many(api: MusicAPI, songs: list[dict], dest: Path, quality: str, ov
     return {"ok": success == len(songs), "requested_count": len(songs), "success_count": success, "failed_count": len(songs) - success, "results": outcomes, "output_dir": str(dest)}
 
 
+def embedded_covers(files: list[str]) -> list[dict]:
+    """Read only bounded, image-typed embedded artwork; filenames never leave the backend."""
+    from mutagen import File as open_audio
+    from mutagen.flac import Picture
+    results = []
+    def text_tag(tags, keys):
+        for key in keys:
+            value = tags.get(key)
+            if value is None:
+                continue
+            value = getattr(value, 'text', value)
+            if isinstance(value, (list, tuple)):
+                value = '/'.join(str(x).strip() for x in value if str(x).strip())
+            if isinstance(value, str) and value.strip():
+                return value.replace('\x00', '').strip()[:300]
+        return ''
+    for filename in files:
+        result = {"cover": "", "title": "", "artist": ""}
+        try:
+            audio = open_audio(filename)
+            pictures = list(getattr(audio, "pictures", []) or [])
+            tags = getattr(audio, "tags", None) or {}
+            result['title'] = text_tag(tags, ('TIT2', 'title', '\xa9nam'))
+            result['artist'] = text_tag(tags, ('TPE1', 'artist', '\xa9ART', 'aART'))
+            pictures += [x for x in tags.values() if hasattr(x, "data")]
+            pictures += list(tags.get("covr", []))
+            for block in tags.get("metadata_block_picture", []):
+                try: pictures.append(Picture(base64.b64decode(block)))
+                except Exception: pass
+            for picture in pictures:
+                data = getattr(picture, "data", picture)
+                if not isinstance(data, bytes) or not 8 <= len(data) <= 1024 * 1024:
+                    continue
+                kind = "image/jpeg" if data.startswith(b"\xff\xd8\xff") else "image/png" if data.startswith(b"\x89PNG\r\n\x1a\n") else "image/webp" if data[:4] == b"RIFF" and data[8:12] == b"WEBP" else ""
+                if kind:
+                    result["cover"] = "data:" + kind + ";base64," + base64.b64encode(data).decode("ascii")
+                    break
+        except Exception:
+            pass
+        results.append(result)
+    return results
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="网易云音乐 Agent Skill（JSON API）")
     parser.add_argument("--runtime-info", action="store_true", help="离线返回内置后端运行信息")
@@ -825,6 +869,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--timeout", type=int, default=12)
     sub = parser.add_subparsers(dest="command", required=False)
     d = sub.add_parser("doctor", help="逐个检查 API 可用性")
+    covers = sub.add_parser("local-covers", help="读取本地歌曲嵌入的封面")
+    covers.add_argument("--file", action="append", required=True)
     s = sub.add_parser("search", help="根据关键词搜索（只返回列表）")
     s.add_argument("--query", "-q", required=True)
     s.add_argument("--limit", type=int, default=15)
@@ -871,6 +917,11 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("需要指定命令，例如 search、download、lyric 或 doctor")
     if args.timeout < 1:
         raise MusicError("timeout 不能小于 1 秒")
+    if args.command == "local-covers":
+        if len(args.file) > 4:
+            raise MusicError("每次最多读取 4 个封面")
+        emit({"ok":True,"results":embedded_covers(args.file)},args.pretty)
+        return 0
     bases = args.api_base or ([x.strip() for x in os.environ.get("NETEASE_API_BASE_URL", "").split(",") if x.strip()] or None)
     if bases and not all(urlparse(b).scheme in ("https", "http") and urlparse(b).netloc for b in bases):
         raise MusicError("API 基址必须是完整的 http(s) URL")

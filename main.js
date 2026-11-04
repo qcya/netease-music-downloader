@@ -162,6 +162,7 @@ const localPlaylist=createPlaylistStore({
 function availableLocalTrack(name){return localPlaylist.localFile(name)}
 const categoryStore=createCategoryStore({getFile:playlistCategoriesFile,
   getTracks:()=>localPlaylist.list()[0].tracks,readJSON,writeJSONAtomic});
+const userPlaylists=require('./user_playlists').createUserPlaylists({getFile:()=>path.join(app.getPath('userData'),'user-playlists.json'),getFiles:()=>libraryRoots.files(),getLegacyCategories:()=>readJSON(playlistCategoriesFile(),{}),getLegacyPlaylists:()=>readJSON(playlistsFile(),[])});
 function readPlaylists(){return localPlaylist.list()}
 const discovery=createTasteDiscoveryService({
   getFile:()=>path.join(app.getPath('userData'),'discovery-cache.json'),
@@ -577,10 +578,11 @@ async function fetchLyrics(id, force=false) {
   try{return await task;}finally{if(lyricsPending.get(sid)===task)lyricsPending.delete(sid)}
 }
 
-const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,screen:require('electron').screen});
+const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,onCloseRequest:()=>persistDesktopLyricsEnabled(false),onOpenSettings:()=>{topPanel.unfold();if(win&&!win.isDestroyed())win.webContents.send('lyrics:open-settings');},screen:require('electron').screen});
 const topPanel=createTopPanel({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,getSaved:()=>readJSON(path.join(app.getPath('userData'),'panel-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'panel-layout.json'),prefs)});
 const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,restorePanel:()=>topPanel.unfold()});
 const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>path.join(app.getPath('userData'),'recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
+const popularPlaylists=require('./popular_playlists').createPopularPlaylists({fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 
 // No audio files, Python download subprocesses or full-file fallback on online playback.
 async function proxyPreview(req){return onlineMedia.handle(req);}
@@ -731,6 +733,8 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('discovery:get',(_e,options)=>{assertMainSender(_e);return options?.category==='recent'?recentDiscovery.get(options):discovery.get(options||{})});
   ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
+  ipcMain.handle('discovery:popular',(_e,options)=>{assertMainSender(_e);return popularPlaylists.get(options||{})});
+  ipcMain.handle('discovery:popular-playlist',(_e,id,options)=>{assertMainSender(_e);return popularPlaylists.playlist(id,options||{})});
   ipcMain.handle('system:choose-directory', async () => {
     const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
     return r.canceled ? null : r.filePaths[0];
@@ -740,6 +744,17 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:remove',(_e,id,name)=>changeLocalPlaylist(id,name,false));
   ipcMain.handle('playlists:reorder',(_e,names)=>localPlaylist.reorder(names));
   ipcMain.handle('playlists:categories-list',()=>categoryStore.list());
+  ipcMain.handle('user-playlists:list',e=>{assertMainSender(e);return userPlaylists.list()});
+  ipcMain.handle('user-playlists:create',(e,name)=>{assertMainSender(e);return userPlaylists.create(name)});
+  ipcMain.handle('user-playlists:rename',(e,id,name)=>{assertMainSender(e);return userPlaylists.rename(id,name)});
+  ipcMain.handle('user-playlists:delete',(e,id)=>{assertMainSender(e);return userPlaylists.remove(id)});
+  ipcMain.handle('user-playlists:add',(e,id,names)=>{assertMainSender(e);return userPlaylists.add(id,names)});
+  ipcMain.handle('user-playlists:remove',(e,id,names)=>{assertMainSender(e);return userPlaylists.removeTracks(id,names)});
+  ipcMain.handle('user-playlists:forget-files',(e,names)=>{assertMainSender(e);return userPlaylists.forgetFiles(names)});
+  ipcMain.handle('user-playlists:transfer',(e,source,target,names,move)=>{assertMainSender(e);return userPlaylists.transfer(source,target,names,move)});
+  ipcMain.handle('user-playlists:merge',(e,ids,name)=>{assertMainSender(e);return userPlaylists.merge(ids,name)});
+  ipcMain.handle('user-playlists:reorder',(e,ids)=>{assertMainSender(e);return userPlaylists.reorder(ids)});
+  ipcMain.handle('user-playlists:reorder-tracks',(e,id,names)=>{assertMainSender(e);return userPlaylists.reorderTracks(id,names)});
   ipcMain.handle('playlists:categories-create',(_e,name)=>categoryStore.create(name));
   ipcMain.handle('playlists:categories-rename',(_e,id,name)=>categoryStore.rename(id,name));
   ipcMain.handle('playlists:rename-default',(_e,name)=>categoryStore.renameDefault(name));
@@ -760,10 +775,11 @@ app.whenReady().then(() => {
     if (result.code) throw new Error('已找到 Python，但缺少 requests；请运行「安装依赖.bat」。');
     return {ok:true, version:item.standalone?'内置后端 · 免安装':result.stdout.trim()};
   });
-  ipcMain.handle('music:search', async (_e, query, page=1) => {
+  ipcMain.handle('music:search', async (_e, query, page=1, limit=40) => {
     if (typeof query !== 'string' || !query.trim() || query.length > 120) throw new Error('请输入 1–120 字的歌名或关键词');
     if(!Number.isInteger(page)||page<1||page>500)throw new Error('页码无效');
-    return await runCli('search',['--query',query.trim(),'--limit','40','--page',String(page)]);
+    if(!Number.isInteger(limit)||limit<1||limit>40)throw new Error('每页数量无效');
+    return await runCli('search',['--query',query.trim(),'--limit',String(limit),'--page',String(page)]);
   });
   ipcMain.handle('music:song-info', async (_e, id) => { const [sid] = songIds([id]); return (await runCli('song',['--id',sid],{timeoutMs:25000})).song; });
   ipcMain.handle('music:download', async (_e, ids, metadata=[]) => {
@@ -876,7 +892,15 @@ app.whenReady().then(() => {
     if(fs.existsSync(sidecar)){
       try{await shell.trashItem(sidecar)}catch(e){console.warn('歌曲已移入回收站，但歌词文件移动失败：',e.message)}
     }
-    localPlaylist.afterDelete(name);
+    // Update the old index without invoking its filename-migration routine:
+    // deleting one track must not rename any other tracks.
+    try{
+      const legacy=readJSON(playlistsFile(),[]);
+      if(Array.isArray(legacy)&&legacy.every(p=>p&&Array.isArray(p.tracks))){
+        const next=legacy.map(p=>({...p,tracks:p.tracks.filter(n=>n!==name)}));
+        if(JSON.stringify(next)!==JSON.stringify(legacy))writeJSONAtomic(playlistsFile(),next);
+      }
+    }catch(e){console.warn('歌曲已移入回收站，旧歌单索引未更新：',e.message)}
     return {ok:true};
   });
   ipcMain.handle('local:play', (_e, name) => {
@@ -891,10 +915,28 @@ app.whenReady().then(() => {
     return true;
   });
   ipcMain.handle('local:list', async () => {
-    const members=new Set(readPlaylists()[0].tracks);
+    // Reading the library must never migrate or rename legacy audio files.
+    const legacy=readJSON(playlistsFile(),[]);
+    if(!Array.isArray(legacy))throw Error('旧歌单索引格式损坏，原文件已保留');
+    const members=new Set(legacy.flatMap(p=>Array.isArray(p?.tracks)?p.tracks:[]));
     const files=await libraryRoots.files();
     return files.map(row=>({...row,inPlaylist:members.has(row.name)||localPlaylist.tagged(row.name)}));
   });
+  const localCovers=require('./local_covers').createLocalCovers({
+    resolve:availableLocalTrack,
+    readEmbedded:async files=>(await runCli('local-covers',files.flatMap(file=>['--file',file]),{timeoutMs:20000})).results,
+    fetchDetails:async ids=>{
+      const url=new URL('https://music.163.com/api/song/detail/');url.searchParams.set('ids',JSON.stringify(ids));
+      const r=await net.fetch(url.href,{signal:AbortSignal.timeout(7000)});if(!r.ok)throw Error('封面服务暂时不可用');
+      const data=await r.json(),result={};for(const song of data.songs||[]){const id=String(song.id);if(ids.includes(id))result[id]=song.album?.picUrl||song.al?.picUrl||'';}return result;
+    },
+    fetchSearch:async(title,artist)=>{
+      const url=new URL('https://music.163.com/api/search/get/web');url.searchParams.set('s',title+' '+artist);url.searchParams.set('type','1');url.searchParams.set('limit','30');url.searchParams.set('offset','0');
+      const response=await net.fetch(url.href,{signal:AbortSignal.timeout(7000)});if(!response.ok)throw Error('封面搜索暂时不可用');
+      const data=await response.json();if(data?.code!==200||!Array.isArray(data?.result?.songs))throw Error('封面搜索结果不可用');return data.result.songs;
+    }
+  });
+  ipcMain.handle('local:covers',(event,names)=>{assertMainSender(event);return localCovers.get(names);});
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
 }).catch(e=>reportStartupFailure('Electron 初始化失败',e));
 }

@@ -26,11 +26,11 @@ test('validates saved coordinates; restores negative monitor coords; rescues off
  assert.deepEqual(resolvePosition(null,screen,800,88),{x:560,y:80});
 });
 function mockController(initial){
- let saved=initial,latest;
+ let saved=initial,latest,menuItems,closeRequests=0,settingsRequests=0;
  const events=[];
  class Window {
    constructor(opts){
-     this.options=opts;this.bounds={x:opts.x??0,y:opts.y??0,width:opts.width,height:opts.height};this.closed=false;
+     this.options=opts;this.bounds={x:opts.x??0,y:opts.y??0,width:opts.width,height:opts.height};this.closed=false;this.visible=false;
      this.webContents={
        id:99,
        once:(_event,fn)=>{this.onLoad=fn},
@@ -49,18 +49,19 @@ function mockController(initial){
    setSize(w,h){this.bounds.width=w;this.bounds.height=h}
    setAlwaysOnTop(){}
    setIgnoreMouseEvents(){}
-   hide(){}
-   show(){}
-   showInactive(){}
+   isVisible(){return this.visible}
+   hide(){this.visible=false}
+   show(){this.visible=true}
+   showInactive(){this.visible=true}
    close(){this.closed=true;this.onClosed?.()}
  }
  const ctrl=createFloatingLyricsController({
-  BrowserWindow:Window,Menu:{},baseDir:root,screen,
+  BrowserWindow:Window,Menu:{buildFromTemplate:items=>{menuItems=items;return {popup(){}}}},baseDir:root,screen,
   getMainWindow:()=>null,getSettings:()=>({width:800,mouseThrough:false,alwaysOnTop:true}),
   getSavedPosition:()=>saved,
-  onBoundsChanged:position=>{saved=position}
+  onBoundsChanged:position=>{saved=position},onCloseRequest:()=>{closeRequests++},onOpenSettings:()=>{settingsRequests++}
  });
- return {ctrl,get saved(){return saved},get window(){return latest},events};
+ return {ctrl,get saved(){return saved},get window(){return latest},get menuItems(){return menuItems},get closeRequests(){return closeRequests},get settingsRequests(){return settingsRequests},events};
 }
 test('drag is persisted once at mouse up; lyric toggle or lock keeps exact location',()=>{
  const c=mockController(null);
@@ -100,4 +101,23 @@ test('reset while hidden stores the default preference without enabling desktop 
  assert.equal(r.reset,true);
  assert.equal(c.saved,null);
  assert.equal(c.ctrl.exists(),false);
+});
+test('lyrics resolved before opening the overlay are shown immediately',()=>{
+ const c=mockController(null);
+ assert.equal(c.ctrl.update({title:'歌曲',line:'第一句',translation:'translation'}),true);
+ c.ctrl.open();
+ assert.equal(c.window.visible,true);
+ assert.ok(c.events.some(([channel,data])=>channel==='lyrics:text'&&data.line==='第一句'&&data.translation==='translation'));
+ c.ctrl.close();c.ctrl.open();
+ assert.equal(c.window.visible,false,'reopening with no new lyrics must not show stale text');
+});
+test('closing desktop lyrics from its menu persists the switch and preserves its position',()=>{
+ const c=mockController({x:400,y:200});c.ctrl.open();c.ctrl.showMenu();
+ c.menuItems.find(item=>item.label==='关闭桌面歌词').click();
+ assert.equal(c.closeRequests,1);assert.equal(c.ctrl.exists(),false);assert.deepEqual(c.saved,{x:400,y:200});
+});
+test('overlay settings menu delegates to the top-panel opener',()=>{
+ const c=mockController(null);c.ctrl.open();c.ctrl.showMenu();
+ c.menuItems.find(item=>item.label==='打开歌词设置').click();
+ assert.equal(c.settingsRequests,1);assert.equal(c.ctrl.exists(),true);c.ctrl.close();
 });

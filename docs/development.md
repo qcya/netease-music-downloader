@@ -1,46 +1,34 @@
-# 顶部悬绳播放器
+# 开发与验证
 
-## preview.6 播放图标
+当前源码：2.0.0-preview.8。界面由屏幕顶部悬绳、下拉播放器、独立全屏歌词和可选桌面歌词组成。音频始终由下拉播放器的一个 `audio` 元素持有，收起或关闭全屏歌词不停止播放。
 
-全屏播放控件使用三角播放与双竖线暂停图标，状态提示由 title 和无障碍标签提供。实际 Electron 窗口验证两种状态切换和音频续播。
+## 主要模块
 
-## preview.5 交互优化
+- `top_panel.js`、`app/charm.*`：屏幕顶部定位、横移、下拉、GPU 位移动画、调节高度与布局持久化。
+- `app/panel.*`、`app/panel_player.js`：我的歌单、发现、搜索、下载任务、播放状态与队列。播放器处理异步解析取消和不可用歌曲跳过。
+- `user_playlists.js`：本地歌单引用、兼容旧歌单迁移、复制/移动/合并/排序；音频文件与歌单引用分离。只有用户明确确认的删除调用系统回收站。
+- `app/playlist_selection.js`：Ctrl/Shift 选择、空白区域框选、右键菜单与拖动；`app/track_order.js` 稳定地把已知不可播放条目放在当前页末尾。
+- `popular_playlists.js`、`playlist_reader.js`：网易云公开热门歌单、刷新换批和歌单目录分页；歌单与搜索每页展示八首歌曲。手动输入的歌单仍由配置的接口读取，取得歌曲后在本地分页；列表服务的运行时缓存与网络失败状态分开处理。
+- `local_covers.js`、`skill/scripts/music_skill.py`：批量读取本地嵌入封面，之后按 ID 或严格的歌名和歌手匹配远程封面。失败或无法唯一确认时使用默认图标。
+- `floating_window.js`、`app/floating-lyrics.*`：可选桌面悬浮歌词，沿用原始发光样式及位置、锁定偏好；启用和重开时推送当前行。`fullscreen_player.js`、`app/fullscreen.*` 负责无边框全屏显示及控制，不创建第二个音频实例。
+- `online_media.js`、`music_providers.js`、`source_availability.js`：在线地址解析、权限状态和流式预览。未知或网络错误不等同于不可播放；试听片段单独标识。
+- `download_queue.js`、`skill/`：下载任务和 Python 后端，尽量请求较高质量但依服务响应及权限而定；不保证无损。
 
-修复贴边拖动死区和进度条焦点导致的状态不同步；下载任务按实际进度显示百分比和速度，并限制后台刷新频率。全屏自定义背景失效时使用原版视频兜底，仍保留用户配置；视频也不可用时使用深色底保证文字可读。验证包含窗口边界、焦点状态、背景回退和正在解析时停止播放。
+歌单数据和窗口布局存储在用户数据目录；文件本身位于用户选择的音乐目录。旧版 `[歌单] ` 前缀可读取和迁移。常规歌单整理只改变引用，不更名或删除音频。
 
-当前版本：2.0.0-preview.7。顶部下拉面板是主播放器；点击封面打开独立全屏歌词窗口。
+## 本地验证
 
-## 架构
+```powershell
+npm run check
+$env:MUSIC_PYTHON_EXE = (py -3.12 -c 'import sys;print(sys.executable)')
+npm test
+py -3.12 -m pytest -q tests
+.\node_modules\.bin\electron.cmd scripts/verify_top_panel.js
+.\node_modules\.bin\electron.cmd scripts/verify_discovery_panel.js
+.\node_modules\.bin\electron.cmd scripts/verify_lyrics_transition.js
+npm run build:win
+```
 
-- `top_panel.js` 管理主面板和透明挂件的展开、横移、调高、多显示器布局与位置持久化。
-- `app/charm.*` 通过 Pointer Capture 发送拖动坐标。坐标统一为窗口位置加 client 坐标；首次移动区分横向移动和下拉，横移不展开。
-- `app/panel.*` 承担音乐库、搜索、新歌、歌单、任务和设置。`panel_player.js` 持有唯一 audio，管理序号取消、队列、失败跳过和本地文件改名。隐藏面板不会停止音频。
-- `fullscreen_player.js` 创建所在显示器上的独立原生无边框全屏窗口。专用 preload 只提供状态订阅和有限播放操作，主进程验证发送者。全屏不创建 audio；Esc 或关闭窗口恢复面板，播放状态不变。
-- `app/fullscreen.*` 恢复 v1.1.3 视频背景、顶部信息、居中双语发光歌词与悬浮控制条；点击歌词跳转，手动滚动后暂缓自动跟随。无歌词时明确显示提示，切歌不沿用上一首歌词。
-- 主窗口透明，面板淡蓝纯色且只有一层真实圆角。展开不改变原生窗口高度，使用 GPU transform 和 Web Animations，跟随显示器刷新率。挂件位置独立保存为 anchorX，旧 right 自动迁移；原生拖动读取系统鼠标位置，避免移动窗口时渲染器坐标漂移。普通文字禁选，输入框允许编辑和复制。
-- 本地歌词优先，在线歌词仅存在内存；可选的桌面悬浮歌词独立于全屏窗口。
-- 本地会话记住曲目、进度、音量和模式；重启恢复为暂停。面板布局保存到用户数据目录 `panel-layout.json`。
-- Python 下载后端、下载并发队列、跨目录索引和旧歌单格式保留。`music_providers.js` 对齐播放与下载的默认服务；标准音质失效后尝试其他音质，已下载的同 ID 文件优先本地播放。
+`verify_top_panel.js` 使用隔离的 `.validation/` 音频夹具，覆盖挂件、歌单手势、桌面和全屏歌词、封面、文件保留以及测试文件进入回收站。`verify_discovery_panel.js` 使用确定性的元数据与本地 HTTP 音频，验证热门歌单、刷新、跨页播放和两种列表的页内排序。`verify_lyrics_transition.js` 检查切歌时旧歌词不会继续显示。这些 Electron 验证脚本应串行运行。`scripts/check_packaged_panel.js` 面向已启动的便携 EXE，用本地 HTTP 夹具验证内置后端、搜索、播放、下载、歌词和窗口操作；CI 展示启动方式。
 
-## 范围
-
-- 旧主界面及专用脚本、旧版文档已移除，历史通过 Git 追溯。缓存、构建产物和验证截图均忽略；不清理用户音乐和配置。
-- 歌单兼容 `[歌单] ` 文件名前缀；改名同步队列并取消正在解析的旧路径。
-- “新发现”只展示近一年有发行日期的歌曲，不冒充账号私人推荐。
-- 预览直接使用服务实际提供的音频 URL。只有试听权限标记而没有音频地址，仍不可播放；不自动下载整首歌曲充当预览。
-
-## 验证
-
-- `npm run check`：JavaScript 语法检查。
-- `npm test`：98 项 Node 回归测试，覆盖播放竞态、队列、下载并发、数据持久化、布局和发送者边界。
-- `py -3.12 -m pytest -q tests`：37 项 Python 测试。
-- `scripts/verify_top_panel.js`：真实 Electron 窗口与鼠标事件，覆盖悬绳下拉、两种横移、调高、本地播放、歌单、输入筛选、全屏歌词/进度/暂停、原生 Esc 退出保持同一音频、纯色背景和文字选择行为。
-- `scripts/check_packaged_panel.js`：实际 portable EXE、内置 Python 和本地 HTTP 音频夹具，覆盖搜索、在线播放、下载、已有文件复用、全屏歌词及 Esc、歌单链接和窗口拖动。结果和截图存放于 `.validation/`。
-
-Windows 11 已用于本机窗口检查；Windows 10 系统边缘可能为直角，多种 DPI 和所有显示器布局仍需更广泛试用。测试夹具不代表每首第三方歌曲都能在线播放。当前改动未推送、未创建 Release。
-
-## preview.4 验证与限制
-
-恢复原视频 assets/immersive-background-1080p.mp4，并内置用户提供字体 assets/starry.ttf。下载任务在入队时接收显示名称，完成时合并后端元数据，旧记录优先按本地歌曲 ID 文件名补全。
-
-自动化验证使用实际 Electron 页面、主进程和 IPC；系统鼠标坐标分支另有单元测试。原生鼠标复现了快速拖动起点被 IPC 延迟吞掉的问题；修复为按下事件记录起点、后续读取系统坐标。修复后实鼠验证挂件右移 24 像素、左移 24 像素、轻拉 21 像素展开，以及面板左/右各 100 像素；位置均按预期持久化。逐帧记录用于验证展开有中间画面且内容高度不变，不宣称所有显示器上均达到 120 FPS。
+自动测试不代表全部网络服务、音源、DPI 和多显示器组合都已覆盖；Windows 版本的系统窗口行为仍需在目标机器验证。

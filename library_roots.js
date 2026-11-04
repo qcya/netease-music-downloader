@@ -23,7 +23,7 @@ function createLibraryRoots({getFile, getCurrent}) {
         if (!entry.isFile() || !AUDIO.has(path.extname(entry.name).toLowerCase())) continue;
         try {
           const stat = await fs.promises.stat(path.join(directory, entry.name));
-          result.push({name: entry.name, size: stat.size, directory});
+          result.push({name: entry.name, size: stat.size, mtimeMs:stat.mtimeMs, directory});
         } catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
     }

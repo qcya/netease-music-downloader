@@ -6,6 +6,10 @@ fs.mkdirSync(music,{recursive:true});app.setPath('userData',dir);
 fs.writeFileSync(path.join(dir,'settings.json'),JSON.stringify({downloadDir:music,disclaimerAcceptedVersion:1,desktopLyricsEnabled:false}));
 const wav=Buffer.alloc(44+44100*2*60);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(44100,24);wav.writeUInt32LE(88200,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
 for(const name of ['晨间练习.wav','夜航练习 [99000002].wav'])fs.writeFileSync(path.join(music,name),wav);
+// Attach a genuine embedded image to one WAV, exercising the real metadata backend.
+require('node:child_process').execFileSync(process.env.MUSIC_PYTHON_EXE||'python',['-c',
+ "import base64,sys;from mutagen.wave import WAVE;from mutagen.id3 import APIC;w=WAVE(sys.argv[1]);w.add_tags();w.tags.add(APIC(encoding=3,mime='image/png',type=3,desc='cover',data=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/aE0AAAAASUVORK5CYII=')));w.save()",path.join(music,'晨间练习.wav')]);
+const originalAudio=new Map(['晨间练习.wav','夜航练习 [99000002].wav'].map(name=>[name,fs.readFileSync(path.join(music,name))]));
 fs.writeFileSync(path.join(dir,'download-history.json'),JSON.stringify([{key:'legacy',id:'99000002',name:'99000002',status:'completed'},{key:'numeric-title',id:'99000003',name:'2002',song:{name:'2002',artists:'测试歌手'},status:'completed'}]));
 fs.writeFileSync(path.join(music,'晨间练习.lrc'),'[00:00]第一束光\n[00:05]沿着轨道出发');
 const errors=[];app.on('web-contents-created',(_e,w)=>w.on('console-message',(_event,level,message)=>{if(level>=3)errors.push(message);}));
@@ -16,7 +20,8 @@ async function wait(check,label){for(let n=0;n<150;n++){if(await check())return;
  await app.whenReady();let panel,charm;
  await wait(()=>{panel=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/panel.html'));charm=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/charm.html'));return panel&&charm;},'windows missing');
  const run=(w,code)=>w.webContents.executeJavaScript(code,true),ui=code=>run(panel,code);
- await wait(()=>ui('document.querySelectorAll(".track-row").length===2'),'local library not ready');
+ await wait(()=>ui('document.querySelectorAll(".playlist-heading").length===1'),'local library not ready');
+ assert.equal(await ui("document.querySelectorAll('.my-track').length"),0,'default playlist should start collapsed');
  await wait(()=>charm.isVisible(),'charm not visible');assert.equal(panel.isVisible(),false);
  const originalX=charm.getBounds().x;
  const action=(w,message)=>run(w,(w===charm?'charmBridge.action':'musicBridge.panelAction')+'('+JSON.stringify(message)+')');
@@ -33,6 +38,8 @@ async function wait(check,label){for(let n=0;n<150;n++){if(await check())return;
  await action(panel,{type:'begin',kind:'move',x:expandedX+150,y:25});await action(panel,{type:'move',x:expandedX+100,y:25});await action(panel,{type:'end'});
  assert.equal(panel.getBounds().x,expandedX-50);
  await ui("document.fonts.ready");assert.ok(await ui("document.fonts.check('16px Starry')"),'custom font not loaded');
+ await ui("document.querySelector('.playlist-heading').click()");await wait(()=>ui("document.querySelectorAll('.my-track').length===2"),'default playlist did not expand');
+ await wait(()=>ui("Array.from(document.querySelectorAll('.local-cover')).some(i=>i.dataset.file==='晨间练习.wav'&&i.src.startsWith('data:image/png;base64,'))"),'embedded artwork was not shown in the library');
  await ui("document.getElementById('tasks-button').click()");await wait(()=>ui("document.querySelectorAll('#task-list strong').length===2"),'history not loaded');
  assert.deepEqual((await ui("[...document.querySelectorAll('#task-list strong')].map(e=>e.textContent)")).sort(),['2002','夜航练习'].sort(),'legacy IDs resolve locally and numeric song names remain valid');
  panel.webContents.send('download:task',{key:'simulated',id:'989',name:'测试歌曲',status:'running',progress:{percent:42,speed:1048576},time:Date.now()});
@@ -40,7 +47,14 @@ async function wait(check,label){for(let n=0;n<150;n++){if(await check())return;
  panel.webContents.send('download:task',{key:'simulated',id:'989',name:'测试歌曲',status:'completed',progress:null,time:Date.now()});
  await wait(()=>ui("!document.querySelector('.task-progress') && document.getElementById('task-list').textContent.includes('下载完成')"),'completed task kept stale progress');
  await ui("document.querySelector('#tasks-view .back-button').click()");
- await ui("document.querySelector('.row-play').click()");await wait(()=>ui("!document.getElementById('music-audio').paused && document.getElementById('music-audio').currentTime>.1"),'playback missing');
+ await ui("document.querySelector('.my-track .playlist-play').click()");await wait(()=>ui("!document.getElementById('music-audio').paused && document.getElementById('music-audio').currentTime>.1"),'playback missing');
+ await wait(()=>ui("document.getElementById('lyric-line').textContent==='第一束光'"),'local lyric not loaded');
+ await ui("document.getElementById('lyrics-toggle').click()");let floating;
+ await wait(()=>{floating=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/floating-lyrics.html'));return floating?.isVisible();},'desktop lyrics did not appear');
+ await wait(()=>run(floating,"document.getElementById('lyric').textContent==='第一束光'"),'enabling lyrics did not send current line');
+ await ui("document.getElementById('lyrics-toggle').click()");await wait(()=>floating.isDestroyed(),'desktop lyrics did not close');
+ await ui("document.getElementById('lyrics-toggle').click()");await wait(()=>{floating=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/floating-lyrics.html'));return floating?.isVisible();},'desktop lyrics did not reopen');
+ await wait(()=>run(floating,"document.getElementById('lyric').textContent==='第一束光'"),'reopened lyrics did not restore current line');
  // Fullscreen is a view of the same audio, not a second player.
  const before=await ui("({src:document.getElementById('music-audio').src,time:document.getElementById('music-audio').currentTime})");
  await ui("document.getElementById('open-fullscreen').click()");let fullscreen;
@@ -90,23 +104,47 @@ async function wait(check,label){for(let n=0;n<150;n++){if(await check())return;
  await ui("document.getElementById('volume').focus();document.getElementById('music-audio').volume=.65");
  await wait(()=>ui("Math.abs(Number(document.getElementById('volume').value)-.65)<.01"),'focused volume slider did not reflect external change');
  await ui("document.getElementById('play').click()");await wait(()=>ui("document.getElementById('music-audio').paused"),'pause failed');
- await ui("document.getElementById('query').value='夜航';document.getElementById('query').dispatchEvent(new Event('input'))");assert.equal(await ui("document.querySelectorAll('.track-row').length"),1);
+ await ui("document.getElementById('query').value='夜航';document.getElementById('query').dispatchEvent(new Event('input'))");assert.equal(await ui("document.querySelectorAll('.my-track').length"),1);
  await ui("document.getElementById('query').value='';document.getElementById('query').dispatchEvent(new Event('input'))");
- // Drive the real dialogs and playlist IPC, including filename migration.
- await ui("document.getElementById('new-playlist').click()");await wait(()=>ui("document.getElementById('dialog').open"),'create dialog');
- await ui("document.getElementById('dialog-input').value='夜间轨道';document.getElementById('dialog-confirm').click()");await wait(()=>ui("document.getElementById('playlist').options.length===3"),'category creation');
- await ui("document.querySelector('.row-action').click()");await wait(()=>ui("document.getElementById('dialog').open"),'track dialog');await ui("document.getElementById('dialog-confirm').click()");await wait(()=>ui("document.getElementById('dialog-title').textContent==='加入哪个歌单？'"),'target dialog');
- await ui("document.getElementById('dialog-select').selectedIndex=1;document.getElementById('dialog-confirm').click()");
- await wait(()=>ui("document.getElementById('status').textContent==='歌单已更新'"),'add song failed');
- await ui("document.getElementById('playlist').selectedIndex=2;document.getElementById('playlist').dispatchEvent(new Event('change'))");assert.equal(await ui("document.querySelectorAll('.track-row').length"),1);
- await ui("document.querySelector('.row-play').click()");await wait(()=>ui("!document.getElementById('music-audio').paused"),'renamed song cannot play');
+ // Create two real playlists, then exercise multi-selection and context-menu actions.
+ async function createPlaylist(name){
+  await ui("document.getElementById('new-playlist').click()");await wait(()=>ui("document.getElementById('dialog').open"),'create playlist dialog');
+  await ui(`document.getElementById('dialog-input').value=${JSON.stringify(name)};document.getElementById('dialog-confirm').click()`);
+  await wait(()=>ui(`Array.from(document.querySelectorAll('.playlist-name')).some(e=>e.textContent===${JSON.stringify(name)})`),'playlist not created');
+ }
+ await createPlaylist('夜间轨道');await createPlaylist('白天轨道');
+ let playlists=await ui('musicBridge.userPlaylistsList()');let night=playlists.playlists.find(p=>p.name==='夜间轨道').id,day=playlists.playlists.find(p=>p.name==='白天轨道').id;
+ const menuAction=async(label)=>{await ui(`Array.from(document.querySelectorAll('#playlist-context button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);await wait(()=>ui("document.getElementById('dialog').open"),'action dialog missing');};
+ const chooseOption=async(name)=>{await ui(`document.getElementById('dialog-select').value=Array.from(document.getElementById('dialog-select').options).find(o=>o.textContent===${JSON.stringify(name)}).value;document.getElementById('dialog-confirm').click()`);};
+ await ui(`(()=>{const g=document.querySelector('[data-select-id="default"]').closest('.my-playlist'),r=g.querySelectorAll('.my-track');r[0].dispatchEvent(new MouseEvent('click',{bubbles:true}));r[1].dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));r[0].dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,button:2,clientX:200,clientY:300}));})()`);
+ await menuAction('复制到其他歌单');await chooseOption('夜间轨道');
+ await wait(async()=>{const d=await ui('musicBridge.userPlaylistsList()');return d.playlists.find(p=>p.id===night).tracks.length===2;},'copy tracks failed');
+ await ui(`document.querySelector('[data-select-kind="playlist"][data-select-id=${JSON.stringify(night)}]').click()`);await wait(()=>ui(`document.querySelector('[data-select-id=${JSON.stringify(night)}]').closest('.my-playlist').querySelectorAll('.my-track').length===2`),'copied playlist failed to expand');
+ await ui(`(()=>{const g=document.querySelector('[data-select-id=${JSON.stringify(night)}]').closest('.my-playlist'),r=g.querySelector('.my-track');r.dispatchEvent(new MouseEvent('click',{bubbles:true}));r.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,button:2,clientX:200,clientY:300}));})()`);
+ await menuAction('移动到其他歌单');await chooseOption('白天轨道');
+ await wait(async()=>{const d=await ui('musicBridge.userPlaylistsList()');return d.playlists.find(p=>p.id===night).tracks.length===1&&d.playlists.find(p=>p.id===day).tracks.length===1;},'move tracks failed');
+ await ui(`(()=>{const a=document.querySelector('[data-select-kind="playlist"][data-select-id=${JSON.stringify(night)}]'),b=document.querySelector('[data-select-kind="playlist"][data-select-id=${JSON.stringify(day)}]');a.dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));b.dispatchEvent(new MouseEvent('click',{bubbles:true,ctrlKey:true}));a.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,button:2,clientX:200,clientY:300}));})()`);
+ await menuAction('合并所选歌单为新歌单');await ui("document.getElementById('dialog-input').value='合并轨道';document.getElementById('dialog-confirm').click()");
+ await wait(async()=>{const d=await ui('musicBridge.userPlaylistsList()');return d.playlists.find(p=>p.name==='合并轨道')?.tracks.length===2;},'merge playlists failed');
+ playlists=await ui('musicBridge.userPlaylistsList()');const original=playlists.playlists.find(p=>p.id==='default').tracks;
+ await ui(`(()=>{const g=document.querySelector('[data-select-id="default"]').closest('.my-playlist'),r=g.querySelectorAll('.my-track'),dt=new DataTransfer(),rect=r[1].getBoundingClientRect();r[0].dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:dt}));r[1].dispatchEvent(new DragEvent('dragover',{bubbles:true,cancelable:true,dataTransfer:dt}));r[1].dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt,clientY:rect.bottom-1}));})()`);
+ await wait(async()=>{const d=await ui('musicBridge.userPlaylistsList()');return d.playlists.find(p=>p.id==='default').tracks[0]===original[1];},'drag reorder failed');
+ for(const name of ['晨间练习.wav','夜航练习 [99000002].wav'])assert.ok(fs.readFileSync(path.join(music,name)).equals(originalAudio.get(name)),'playlist operation altered '+name);
+ assert.equal(fs.readFileSync(path.join(music,'晨间练习.lrc'),'utf8'),'[00:00]第一束光\n[00:05]沿着轨道出发','playlist operation altered lyrics sidecar');
+ // Trash only the generated fixture through the actual context menu and confirmation.
+ const trashName='夜航练习 [99000002].wav';
+ await ui(`(()=>{const g=document.querySelector('[data-select-id="default"]').closest('.my-playlist'),r=Array.from(g.querySelectorAll('.my-track')).find(e=>JSON.parse(e.dataset.selectId)[1]===${JSON.stringify(trashName)});r.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,button:2,clientX:200,clientY:300}));})()`);
+ await menuAction('删除本地文件…');await chooseOption('移入回收站');
+ await wait(()=>!fs.existsSync(path.join(music,trashName)),'fixture file was not moved to Recycle Bin');
+ await wait(async()=>{const d=await ui('musicBridge.userPlaylistsList()');return d.playlists.every(p=>!p.tracks.includes(trashName));},'deleted fixture remained in a playlist');
+ assert.ok(fs.readFileSync(path.join(music,'晨间练习.wav')).equals(originalAudio.get('晨间练习.wav')),'deleting one fixture changed another');
  await ui("document.getElementById('play').click()");
  const resizeX=panel.getBounds().x+210;
  await action(panel,{type:'begin',kind:'resize',x:resizeX,y:725});await action(panel,{type:'move',x:resizeX,y:605});await action(panel,{type:'end'});await sleep(100);assert.equal(panel.getBounds().height,620);
  for(const height of [520,740]){await ui(`musicBridge.panelAction({type:'height',value:${height}})`);await sleep(200);assert.equal(panel.getBounds().height,height);assert.ok(await ui("document.getElementById('resize-grip').getBoundingClientRect().bottom<=innerHeight+1"),'grip clipped');fs.writeFileSync(path.join(root,`.validation/panel-${height}.png`),(await panel.webContents.capturePage()).toPNG());}
  panel.close();await sleep(200);assert.equal(panel.isDestroyed(),false);assert.equal(panel.isVisible(),false);
  if(errors.length)throw Error(errors.join('\n'));
- const result={ok:true,checks:['original icon pendant','collapsed horizontal drag','expanded horizontal drag','continuous fixed-height reveal','height resize','top anchored expansion','local playback','fullscreen native window','fullscreen lyrics and controls','Escape preserves audio','flat light blue','gradient only on title','nonselectable labels and editable input','collapsed playback','seek','volume','pause','filter','create playlist','assign and rename file','play renamed file','height presets','close collapses'],rendererErrors:errors};fs.writeFileSync(path.join(root,'.validation/panel-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+ const result={ok:true,checks:['original icon pendant','collapsed horizontal drag','expanded horizontal drag','continuous fixed-height reveal','height resize','top anchored expansion','expand default playlist','embedded album artwork','local playback','desktop lyrics enable and reopen','fullscreen native window','fullscreen lyrics and controls','Escape preserves audio','flat light blue','gradient only on title','nonselectable labels and editable input','collapsed playback','seek','volume','pause','filter','create playlists','multi-select tracks','copy and move tracks','merge playlists','drag reorder','preserve audio and lyrics files','delete fixture to Recycle Bin and clear references','height presets','close collapses'],rendererErrors:errors};fs.writeFileSync(path.join(root,'.validation/panel-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  if(process.env.ORBIT_KEEP_OPEN==='1'){await run(charm,"charmBridge.action({type:'expand'})");return;}
  await ui("musicBridge.windowAction('quit')");
 })().catch(e=>{console.error(e.stack);app.exit(1);});

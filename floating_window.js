@@ -2,7 +2,7 @@
 const path=require('node:path');
 const {normalizePosition,resolvePosition}=require('./lyric_position.js');
 /** Floating BrowserWindow stays isolated; only height measurement crosses IPC. */
-function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,getSavedPosition,onBoundsChanged,screen}){
+function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindow,getSettings,getSavedPosition,onBoundsChanged,onCloseRequest,onOpenSettings,screen}){
  let floating=null,locked=false,currentHeight=88,dragStart=null,loaded=false,lastText=null;
  const exists=()=>!!floating&&!floating.isDestroyed();
  const safeSettings=()=>getSettings?.()||{};
@@ -32,7 +32,9 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
     backgroundColor:'#00000000',show:false,webPreferences:{preload:path.join(baseDir,'floating-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true,backgroundThrottling:false}});
   // Chromium's ready-to-show is inconsistent for fully transparent windows.
   // Wait for the actual page to load and for real lyric text before showing.
-  loaded=false;lastText=null;
+  // The player may have already resolved lyrics before the overlay opens.
+  // Retain the most recent payload so the first visible frame is current.
+  loaded=false;
   floating.webContents.once('did-finish-load',()=>{
     if(!exists())return;
     loaded=true;
@@ -87,8 +89,9 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
   floating.webContents.send('lyrics:locked',locked);return {open:true,locked}}
 
  function update(info){
-  if(!exists()||!info||typeof info!=='object')return false;
+  if(!info||typeof info!=='object')return false;
   lastText={title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)};
+  if(!exists())return true;
   if(!loaded)return true;
   floating.webContents.send('lyrics:text',lastText);
   reconcileVisibility();
@@ -126,9 +129,12 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function showMenu(){if(!exists()||locked)return false;
    const menu=Menu.buildFromTemplate([
      {label:'锁定位置（解锁请返回软件设置）',click:()=>lockAndSave(true)},
-     {label:'打开歌词设置',click:()=>{const main=getMainWindow();if(main&&!main.isDestroyed()){main.show();main.focus();main.webContents.send('lyrics:open-settings');}}},
+     {label:'打开歌词设置',click:()=>{if(onOpenSettings){onOpenSettings();return;}const main=getMainWindow();if(main&&!main.isDestroyed()){main.show();main.focus();main.webContents.send('lyrics:open-settings');}}},
      {type:'separator'},
-     {label:'关闭桌面歌词',click:()=>close()}
+     {label:'关闭桌面歌词',click:()=>{
+       try{onCloseRequest?.();}catch(error){const main=getMainWindow();if(main&&!main.isDestroyed())main.webContents.send('lyrics:status',{open:true,error:'保存桌面歌词开关失败：'+String(error.message||error)});return;}
+       close();
+     }}
    ]);
    menu.popup({window:floating});return true;
  }
