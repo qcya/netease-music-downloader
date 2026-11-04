@@ -39,7 +39,7 @@ test('cord pull, cancellation, resize, monitor movement and sender boundaries',(
  send(panel,{type:'begin',kind:'move',x:1500,y:20});send(panel,{type:'move',x:-600,y:20});send(panel,{type:'end'});assert.equal(saved.displayId,2);assert.ok(panel.bounds.x>=-1280&&panel.bounds.x+420<=0);
  ctrl.collapse();assert.equal(panel.visible,false);assert.equal(charm.visible,true);
  let cursor={x:charm.bounds.x+38,y:105};screen.getCursorScreenPoint=()=>cursor;
- const nativeX=charm.bounds.x;send(charm,{type:'begin',kind:'pull',native:true,x:9999,y:9999});cursor={x:cursor.x+25,y:105};send(charm,{type:'move',x:-9999,y:-9999});send(charm,{type:'end'});
+ const nativeX=charm.bounds.x,down={...cursor};cursor={x:cursor.x+25,y:105};send(charm,{type:'begin',kind:'pull',native:true,...down});send(charm,{type:'move',x:-9999,y:-9999});send(charm,{type:'end'});
  assert.equal(charm.bounds.x,nativeX+25,'native dragging uses stable OS cursor, never renderer coordinates');
  ctrl.close();assert.equal(charm.dead,true);
 });

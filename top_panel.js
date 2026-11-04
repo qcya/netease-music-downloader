@@ -29,7 +29,9 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
  function collapse(){stopGesture(false);opened=false;if(alive(panel())){reveal(0);panel().hide();}placeCharm();if(alive(charm))charm.showInactive();publish();}
  function begin(kind,point,native=false){
   if(!['pull','resize','move'].includes(kind)||!ready)return false;
-  stopGesture(false);const start=native?screen.getCursorScreenPoint():point||screen.getCursorScreenPoint();
+  // Down-event coordinates are captured before the window moves. Sampling the OS
+  // here loses fast drags whose end arrived while the IPC message was in flight.
+  stopGesture(false);const start=point||screen.getCursorScreenPoint();
   gesture={kind,start,initial:bounds(),anchor:area.x+prefs.anchorX,saved:{...prefs},moved:0,last:start,native};
   // Native cursor coordinates stay stable while the captured window itself moves.
   if(native){cursorTimer=setInterval(()=>tick(screen.getCursorScreenPoint()),8);cursorTimer.unref?.();}
