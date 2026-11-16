@@ -1,0 +1,397 @@
+{
+  "upstream_commit": "9b4cc7e7bd143315da716075a6d024a0d4c0c81b",
+  "paths": [
+    "/weapi/album/privilege",
+    "/weapi/cloud/lyric/get",
+    "/weapi/cloudsearch/get/web",
+    "/weapi/cloudsearch/pc",
+    "/weapi/content/channel/collect/list",
+    "/weapi/content/interact/collect",
+    "/weapi/digitalAlbum/purchased",
+    "/weapi/dj/difm/all/style/channel/v2",
+    "/weapi/dj/difm/channel/subscribe",
+    "/weapi/dj/difm/channel/unsubscribe",
+    "/weapi/dj/difm/playing/tracks/list",
+    "/weapi/dj/difm/subscribe/channels/get/v2",
+    "/weapi/dj/program/byradio",
+    "/weapi/dj/program/detail",
+    "/weapi/djradio/",
+    "/weapi/djradio/category/get",
+    "/weapi/djradio/get/subed",
+    "/weapi/djradio/home/paygift/list",
+    "/weapi/djradio/hot/v1",
+    "/weapi/djradio/personalize/rcmd",
+    "/weapi/djradio/recommend",
+    "/weapi/djradio/recommend/v1",
+    "/weapi/djradio/sub",
+    "/weapi/djradio/toplist",
+    "/weapi/djradio/unsub",
+    "/weapi/djradio/v2/get",
+    "/weapi/feedback/weblog",
+    "/weapi/hotsearchlist/get",
+    "/weapi/listen/together/end/v2",
+    "/weapi/listen/together/heartbeat",
+    "/weapi/listen/together/play/command/report",
+    "/weapi/listen/together/play/invitation/accept",
+    "/weapi/listen/together/room/check",
+    "/weapi/listen/together/room/create",
+    "/weapi/listen/together/status/get",
+    "/weapi/listen/together/sync/list/command/report",
+    "/weapi/listen/together/sync/playlist/get",
+    "/weapi/login/qrcode/client/login",
+    "/weapi/login/qrcode/unikey",
+    "/weapi/personalized/playlist",
+    "/weapi/play-record/djradio/list",
+    "/weapi/play-record/song/list",
+    "/weapi/playlist/",
+    "/weapi/playlist/list",
+    "/weapi/playlist/manipulate/tracks",
+    "/weapi/playlist/subscribe",
+    "/weapi/playlist/unsubscribe",
+    "/weapi/playlist/update/playcount",
+    "/weapi/radio/like",
+    "/weapi/radio/trash/add",
+    "/weapi/register/anonimous",
+    "/weapi/search/suggest/",
+    "/weapi/search/suggest/keyword",
+    "/weapi/search/suggest/web",
+    "/weapi/song/enhance/player/url",
+    "/weapi/song/enhance/player/url/v1",
+    "/weapi/song/like/get",
+    "/weapi/song/lyric",
+    "/weapi/song/lyric/v1",
+    "/weapi/songplay/dynamic-cover",
+    "/weapi/toplist",
+    "/weapi/toplist/artist",
+    "/weapi/toplist/detail",
+    "/weapi/toplist/detail/v2",
+    "/weapi/user/playlist",
+    "/weapi/v1/album/",
+    "/weapi/v1/cloud/get",
+    "/weapi/v1/discovery/recommend/resource",
+    "/weapi/v1/event/get",
+    "/weapi/v1/radio/get",
+    "/weapi/v1/user/detail/",
+    "/weapi/v3/discovery/recommend/songs",
+    "/weapi/v3/song/detail",
+    "/weapi/v6/playlist/detail",
+    "/weapi/voice/broadcast/category/region/get",
+    "/weapi/voice/broadcast/channel/currentinfo",
+    "/weapi/voice/broadcast/channel/list",
+    "/weapi/w/nuser/account/get"
+  ],
+  "features": [
+    {
+      "method": "userDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherRoomCreate",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherRoomCheck",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherStatus",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherAccept",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherEnd",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherHeartbeat",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherPlayCommand",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherSyncList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "listenTogetherPlaylistGet",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songDynamicCover",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "lyricNew",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "chorus",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "loginStatus",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "cloudSearch",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "cloudLyricGet",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "userCloudSongs",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "personalFm",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "personalFmMode",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "personalFmTrash",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "searchSuggest",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "searchHotDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "topLists",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "topListDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "topListDetailV2",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "topArtists",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "digitalAlbumPurchased",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "album",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "albumPrivilege",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "eventList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "recentSongs",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "reportListeningHistory",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "loginStatusWithCookie",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "likeList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "loginQrKey",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "loginQrCheck",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songUrlV1",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songUrlV1",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songUrlStandardMp3",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "checkMusic",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "isMusicPlayable",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "like",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "playlistTrackAll",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "playlistUpdatePlaycount",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "playlistTracks",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "addTrackToPlaylist",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "userPlaylist",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "subscribe",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "registerAnonimous",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "songDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "recommendResource",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "personalizedPlaylists",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "topPlaylists",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "recommendSongs",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djCategoryList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djRecommend",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djRecommendByCategory",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djHot",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djPersonalizeRecommend",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djToplist",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djPaygift",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djProgramByRadio",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djProgramDetail",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djSub",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djSublist",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "recordRecentDjRadio",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDifmStyleChannels",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDifmSubscribedChannels",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDifmSubscribeChannel",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDifmUnsubscribeChannel",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "djDifmPlayingTracks",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "broadcastCategoryRegion",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "broadcastChannelList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "broadcastChannelCurrentInfo",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "broadcastChannelCollectList",
+      "desktop_status": "pending"
+    },
+    {
+      "method": "broadcastCollect",
+      "desktop_status": "pending"
+    }
+  ]
+}

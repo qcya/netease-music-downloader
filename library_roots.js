@@ -3,9 +3,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {readJSON, writeJSONAtomic} = require('./durable_json');
 const AUDIO = new Set(['.mp3', '.flac', '.m4a', '.ogg', '.wav', '.aac']);
-function createLibraryRoots({getFile, getCurrent}) {
+function createLibraryRoots({getFile, getCurrent, normalize=value=>value}) {
   function list() {
-    const raw = readJSON(getFile(), {directories: []});
+    const raw = normalize(readJSON(getFile(), {directories: []}));
     if (!raw || !Array.isArray(raw.directories)) throw new Error('音乐库目录记录格式损坏，已保留原文件');
     return [...new Set([...raw.directories, getCurrent()].filter(p => typeof p === 'string' && path.isAbsolute(p)).map(p => path.resolve(p)))];
   }

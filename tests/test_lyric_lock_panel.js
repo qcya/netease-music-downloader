@@ -5,7 +5,7 @@ function harness(lock){
  const start=source.indexOf(' let lyricLockDesired='),end=source.indexOf(" $('settings-button').onclick",start);
  assert.ok(start>=0&&end>start,'panel must wire an immediate lyric-lock controller');
  const checkbox={checked:false};let listener;const messages=[];
- const ctx={settings:{floatingLyrics:{mouseThrough:false}},bridge:{lockFloatingLyrics:lock,onFloatingLyricsLockStatus:fn=>{listener=fn}},$:()=>checkbox,status:(...x)=>messages.push(x)};
+ const ctx={settings:{floatingLyrics:{mouseThrough:false}},bridge:{lockFloatingLyrics:lock,onFloatingLyricsLockStatus:fn=>{listener=fn}},$:()=>checkbox,status:(...x)=>messages.push(x),updateLyricsButton(){}};
  vm.createContext(ctx);vm.runInContext(source.slice(start,end),ctx);
  return {ctx,checkbox,messages,notify:value=>listener({locked:value})};
 }

@@ -1,0 +1,53 @@
+{
+  "commit": "9b4cc7e7bd143315da716075a6d024a0d4c0c81b",
+  "assets": {
+    "icomoon.ttf": {
+      "upstream": "fonts/icomoon.ttf",
+      "sha256": "3322c9bf4066f3735b5af7222e1f5ee9e1bd772da7c535b32405a5b9b3380121"
+    },
+    "music.ttf": {
+      "upstream": "fonts/music.ttf",
+      "sha256": "e79408ec4bb4e0089d1846bb7eaddd833a373cf03d54dd9c6ccc8642d26c7193"
+    },
+    "player-action-icons.ttf": {
+      "upstream": "fonts/player-action-icons.ttf",
+      "sha256": "81c41fbb4612cff4bd23d65d0d7761e57c7b74da0b7fb01aff383a279c903b1f"
+    },
+    "player-queue-icons.ttf": {
+      "upstream": "fonts/player-queue-icons.ttf",
+      "sha256": "9f588bb4634e8f93172898711e66088f14b0088089589112a1caa6a1184fe4a4"
+    },
+    "fontello.ttf": {
+      "upstream": "fonts/fontello.ttf",
+      "sha256": "5f4f3202f76c07714f8cada77deedb2493e9520df829e2585cbc69d41663a5c1"
+    },
+    "play-mode-sequential.png": {
+      "upstream": "textures/player/icons/play-mode-sequential.png",
+      "sha256": "30b0816f99ca91d3b5d30c450f4c0f05f4402dd86af04516ff0be89d72dc3f01"
+    },
+    "play-mode-random.png": {
+      "upstream": "textures/player/icons/play-mode-random.png",
+      "sha256": "a4566b8d9a651f997dacd2aae0b9b78fc1b0c8a503afc1d58c0a726551ea2443"
+    },
+    "play-mode-single-loop.png": {
+      "upstream": "textures/player/icons/play-mode-single-loop.png",
+      "sha256": "8e367226d0b376ad5b4a13af99cce10776facdbf3c162a7b88897142139d5e9f"
+    },
+    "playlist.png": {
+      "upstream": "textures/player/icons/playlist.png",
+      "sha256": "2dc2de43d4d1e6725ce9416d8277dfb329dbe8617a8657c738862fc8b14f998a"
+    },
+    "favorite.png": {
+      "upstream": "textures/player/icons/favorite.png",
+      "sha256": "8e4fab12fd842146cf8669375de757dddd237a804c2605db0e281248d7e1404e"
+    },
+    "history.png": {
+      "upstream": "textures/player/icons/history.png",
+      "sha256": "5a00092ee0b8b554bacb6e092f3e158fc3bcf33c0281902123c02ceae32d15bc"
+    },
+    "personal-fm.png": {
+      "upstream": "textures/player/icons/personal-fm.png",
+      "sha256": "0dba665a9e26bfae656497b8841392a9adfd301e676ab9641e48441cf8e9fcb4"
+    }
+  }
+}

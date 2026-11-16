@@ -69,3 +69,11 @@ assets/immersive-background.mp4
 .validation/
 *.tmp.py
 .superpowers/
+
+# Portable player data (never package or publish account/music files)
+/下载/
+/缓存/
+/歌单/
+/播放器数据/
+/data/
+/playlists/

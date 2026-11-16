@@ -887,6 +887,7 @@ def main(argv: list[str] | None = None) -> int:
     lyric_parser.add_argument("--id", required=True)
     dl = sub.add_parser("download", help="按照歌曲 ID 下载一首或多首")
     dl.add_argument("--id", required=True, action="append", help="多个 ID 可重复指定")
+    direct = sub.add_parser("download-source", help="由可信桌面宿主通过标准输入传入原接口音源")
     sel = sub.add_parser("select", help="按搜索结果编号下载，如 1,3-5")
     sel.add_argument("--indices", required=True)
     sel.add_argument("--from-file", type=Path, help="指定 search 状态 JSON；默认最近一次搜索")
@@ -896,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
     pl.add_argument("--limit", type=int, default=0)
     pl.add_argument("--yes", action="store_true", help="确认执行批量下载；适合 AI 用户已明确授权时使用")
     pl.add_argument("--allow-partial", action="store_true", help="允许下载接口提供的部分歌单，默认拒绝假装完整")
-    for cmd in (s, dl, sel, pl):
+    for cmd in (s, dl, direct, sel, pl):
         cmd.add_argument("--quality", choices=("best", "lossless", "mp3", "preview"), default="best")
         cmd.add_argument("--out", type=Path, default=DEFAULT_OUT)
         cmd.add_argument("--overwrite", action="store_true")
@@ -978,6 +979,40 @@ def main(argv: list[str] | None = None) -> int:
         result = download_many(api, data["tracks"], args.out.expanduser(), args.quality, args.overwrite)
         emit({"playlist_id": pid, "playlist_source": data["source"], "possibly_incomplete": data["possibly_incomplete"], **result}, args.pretty)
         return 0 if result["ok"] else 1
+    if args.command == "download-source":
+        payload=json.loads(sys.stdin.read(65537))
+        song=payload.get('song',{})
+        sid=song_id_from(str(song.get('id','')))
+        url=payload.get('url','')
+        def trusted(uri):
+            parsed=urlparse(uri)
+            return parsed.scheme=='https' and not parsed.username and not parsed.password and any(parsed.hostname==host or (parsed.hostname or '').endswith('.'+host) for host in ('music.126.net','music.163.com'))
+        if not trusted(url):
+            raise MusicError('原接口返回了不支持的音源地址')
+        class OriginalSourceAPI(MusicAPI):
+            def audio_candidates(self, _sid, _quality):
+                yield dict(url=url,source='网易云原接口',level=str(payload.get('level','unknown')),rank=4)
+            def request(self, uri, *, params=None, stream=False):
+                from urllib.parse import urljoin
+                for _ in range(5):
+                    if not trusted(uri):
+                        return None
+                    try:
+                        response=self.session.get(uri,timeout=(6,self.timeout),stream=stream,allow_redirects=False)
+                        if response.status_code in (301,302,303,307,308):
+                            location=response.headers.get('Location','');response.close()
+                            if not location:return None
+                            uri=urljoin(uri,location);continue
+                        response.raise_for_status()
+                        return response
+                    except requests.RequestException:
+                        self.errors.append('原接口音源传输失败')
+                        return None
+                return None
+        result=download_many(OriginalSourceAPI(),[{**song,'id':sid}],args.out.expanduser(),args.quality,args.overwrite)
+        for item in result.get('results',[]):item.pop('diagnostic',None)
+        emit(result,args.pretty)
+        return 0 if result['ok'] else 1
     if args.command == "download":
         ids = list(dict.fromkeys(song_id_from(x) for x in args.id))
         tracks = [api.song(sid) for sid in ids]

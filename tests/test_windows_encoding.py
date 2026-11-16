@@ -51,7 +51,7 @@ class WindowsEncoding(unittest.TestCase):
         self.assertIn('  contents: read', workflow)
         version = json.loads((root / 'package.json').read_text(encoding='utf-8'))['version']
         self.assertNotIn('gh release create', workflow, 'preview builds must not publish automatically')
-        self.assertIn(f'MusicDownloader-{version}-portable.exe.sha256', workflow)
+        self.assertIn(f'青春沿岸の音乐播放器-{version}-win64.zip.sha256', workflow)
         self.assertIn('Run all regression tests', workflow)
 
 

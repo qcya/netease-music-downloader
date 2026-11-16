@@ -9,6 +9,8 @@ const http = require('node:http');
 const Module = require('node:module');
 
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'netease-electron-test-'));
+process.env.MUSIC_DOWNLOADER_TEST_USER_DATA=path.join(temp,'userData');
+const testPaths={};
 process.env.MUSIC_PYTHON_EXE = process.env.MUSIC_PYTHON_EXE || '/opt/pyvenv/bin/python';
 const handlers = new Map();
 let mediaHandler = null;
@@ -29,7 +31,8 @@ const electron = {
   Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
   app:{
     isPackaged:false,
-    getPath(k){if(k==='userData')return path.join(temp,'userData');if(k==='music')return path.join(temp,'music');return temp;},
+    setPath(k,v){testPaths[k]=v;},
+    getPath(k){if(testPaths[k])return testPaths[k];if(k==='userData')return path.join(temp,'userData');if(k==='music')return path.join(temp,'music');return temp;},
     setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}
   },
   BrowserWindow:Window,
@@ -138,7 +141,7 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   const missing=await mediaHandler(new Request('music-media://audio/unknown'));
   assert.equal(missing.status,404);
   // v4 版本曾缓存错误的无歌词状态；v5 必须重新请求。
-  const oldLyricDir=path.join(temp,'userData','lyric-cache');
+  const oldLyricDir=path.join(temp,'userData','缓存','歌词');
   fs.mkdirSync(oldLyricDir,{recursive:true});
   fs.writeFileSync(path.join(oldLyricDir,'12345.json'),JSON.stringify({id:'12345',found:false,lrc:'',translated_lrc:'',checkedAt:Date.now()}));
   const lyric=await invoke('music:lyric','12345');

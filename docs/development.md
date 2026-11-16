@@ -1,10 +1,10 @@
 # 开发与验证
 
-当前源码：2.1.0。界面由屏幕顶部悬绳、下拉播放器、独立全屏歌词和可选桌面歌词组成。音频始终由下拉播放器的一个 `audio` 元素持有，收起或关闭全屏歌词不停止播放。
+当前源码：2.2.0-preview.7（本地预览）。界面由 INS 透明覆盖层、窗口内原生毛玻璃、全屏歌词和可选桌面歌词组成。默认启动不创建界面或接口子进程。音频始终由主播放器的一个 `audio` 元素持有，收起或关闭全屏歌词不停止播放。
 
 ## 主要模块
 
-- `top_panel.js`、`app/charm.*`：屏幕顶部定位、横移、下拉、GPU 位移动画、调节高度与布局持久化。
+- `desktop_overlay.js`：INS 显隐、窗口内原生毛玻璃、自由拖动与双轴缩放、布局持久化。`startup_settings.js`：用户选择开启的静默自启动。隐藏且未播放时节流渲染、暂停动画，并在 30 秒后释放空闲 API 子进程。
 - `app/panel.*`、`app/panel_player.js`：我的歌单、发现、搜索、下载任务、播放状态与队列。播放器处理异步解析取消和不可用歌曲跳过。
 - `user_playlists.js`：本地歌单引用、兼容旧歌单迁移、复制/移动/合并/排序；音频文件与歌单引用分离。只有用户明确确认的删除调用系统回收站。
 - `app/playlist_selection.js`：Ctrl/Shift 选择、空白区域框选、右键菜单与拖动；`app/track_order.js` 稳定地把已知不可播放条目放在当前页末尾。
@@ -23,12 +23,18 @@ npm run check
 $env:MUSIC_PYTHON_EXE = (py -3.12 -c 'import sys;print(sys.executable)')
 npm test
 py -3.12 -m pytest -q tests
-.\node_modules\.bin\electron.cmd scripts/verify_top_panel.js
-.\node_modules\.bin\electron.cmd scripts/verify_discovery_panel.js
-.\node_modules\.bin\electron.cmd scripts/verify_lyrics_transition.js
+.\node_modules\.bin\electron.cmd scripts/verify_overlay_runtime.js
+.\node_modules\.bin\electron.cmd scripts/verify_netease_hub.js
+.\node_modules\.bin\electron.cmd scripts/verify_account_panel.js
 npm run build:win
 ```
 
-`verify_top_panel.js` 使用隔离的 `.validation/` 音频夹具，覆盖挂件、歌单手势、桌面和全屏歌词、封面、文件保留以及测试文件进入回收站。`verify_discovery_panel.js` 使用确定性的元数据与本地 HTTP 音频，验证热门歌单、刷新、跨页播放和两种列表的页内排序。`verify_lyrics_transition.js` 检查切歌时旧歌词不会继续显示。这些 Electron 验证脚本应串行运行。`scripts/check_packaged_panel.js` 面向已启动的便携 EXE，用本地 HTTP 夹具验证内置后端、搜索、播放、下载、歌词和窗口操作；CI 展示启动方式。
+`verify_overlay_runtime.js` 检查静默启动零窗口、零接口子进程、INS 按需初始化、原生材质释放和隐藏后音频继续。`verify_netease_hub.js` 联网检查原版 Java 热搜、榜单和搜索。`verify_account_panel.js` 使用模拟远程响应与真实 Electron IPC、系统加密存储，验证取消、登录、播放和退出；不代表真实账号写入功能全部验证。Electron 集成脚本应串行运行。
 
 自动测试不代表全部网络服务、音源、DPI 和多显示器组合都已覆盖；Windows 版本的系统窗口行为仍需在目标机器验证。
+
+## 原版坐标验证
+
+`app/restored-player.js` 与 `app/restored-player.css` 按原项目逻辑单位换算到桌面窗口；参考截图面板 1670×912 时，一个逻辑单位约为两个像素。`scripts/verify_muonium_layout.js` 用可重复数据核对侧栏、搜索、封面、播放歌单按钮、列表与底栏的坐标，允许边框与小数像素导致的 2 像素误差，同时验证图标字体与主题文件实际加载。该验证不等于所有动态画面都已像素级比较。
+
+`scripts/import_muonium_ui_assets.py <上游检出目录>` 复制原始资源并记录 SHA-256；构建直接使用已检入的资源，不依赖开发者的临时目录。

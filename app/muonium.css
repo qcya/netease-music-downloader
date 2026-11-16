@@ -1,0 +1,166 @@
+/* 网易云登录区与二维码保持可读并适应不同窗口尺寸。 */
+.account-panel { padding: 12px; border: 1px solid rgba(117,171,204,.34); border-radius: 10px; background: rgba(255,255,255,.48); }
+.account-panel .two-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.account-panel .hint { margin-bottom: 0; }
+.account-qr-box { display: flex; justify-content: center; padding: 12px; }
+.account-qr-box img { width: 180px; height: 180px; max-width: 70vw; object-fit: contain; }
+.account-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.mu-net-nav { display:flex; flex-direction:column; flex:none; border-top:1px solid #ffffff30; margin-top:12px; padding-top:8px; }
+.tabs { overflow-y:auto; scrollbar-width:thin; }
+.netease-hub { overflow:auto; }
+.netease-hub .quiet-button { display:inline-block; margin:5px; padding:7px 10px; background:#ffffff20; color:#fff; border-radius:6px; }
+.netease-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:16px; margin:16px 0; }
+.netease-card { display:flex; flex-direction:column; gap:8px; padding:10px; text-align:left; color:#fff; background:#ffffff12; border-radius:8px; }
+.netease-card img { width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; }
+.netease-card small { max-height:3em; overflow:hidden; color:#d1e4ef; }
+.netease-tracks .row-play { display:flex; align-items:center; gap:10px; flex:1; min-width:0; text-align:left; }
+.netease-tracks .row-play img { width:44px; height:44px; border-radius:4px; }
+.netease-pagination { display:flex; justify-content:space-between; }
+.netease-loading,.netease-error { color:#e2edf5; padding:14px 0; }
+/* 宽屏桌面播放器；保持原有控件与无障碍语义，窄屏沿用原布局。 */
+/* 展开动画由 clip-path 控制，不再将整块面板平移出窗口。 */
+.panel { transform: none; }
+.mu-playlist-hero[hidden] { display:none!important; }
+.mu-playlist-hero { display:flex; align-items:flex-end; gap:24px; padding:24px; min-height:176px; }
+.mu-playlist-hero img { width:128px; height:128px; border-radius:4px; object-fit:cover; flex:none; }
+.mu-playlist-hero h2 { font-size:24px; margin:0 0 8px; font-weight:600; }
+.mu-playlist-hero span,.mu-playlist-hero p { font-size:12px; margin:4px 0; }
+.mu-playlist-hero button { padding:6px 15px; border-radius:5px; background:#7fc4ff; color:#fff; }
+.mu-nav-playlists { min-height:0; overflow:auto; padding-top:10px; }
+.mu-nav-heading { padding:8px 12px; font-size:11px; color:#a9bcd2; }
+.tabs .mu-nav-playlist { display:block; width:100%; height:32px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; font-size:12px; }
+@media (min-width: 700px) {
+  :root { --glass-line: rgba(117, 171, 204, .34); --glass-ink: #31536e; }
+  html, body { background: transparent; }
+  .panel {
+    display: grid;
+    grid-template-columns: 206px minmax(0, 1fr);
+    grid-template-rows: 54px minmax(0, 1fr) 112px 22px 18px;
+    grid-template-areas: 'head head' 'nav content' 'player player' 'status foot' 'grip grip';
+    border: 1px solid rgba(255, 255, 255, .8);
+    border-top: 0;
+    border-radius: 0 0 16px 16px;
+    background: rgba(222, 241, 253, .66);
+    box-shadow: inset 0 0 0 1px rgba(118, 180, 214, .23);
+    color: var(--glass-ink);
+  }
+  header { grid-area: head; height: auto; min-width: 0; padding: 0 20px; background: rgba(245, 251, 255, .58); border-bottom: 1px solid var(--glass-line); }
+  .wordmark b { font-size: 15px; }
+  .head-actions { gap: 6px; }
+  .head-actions button { width: 34px; height: 34px; }
+  .tabs {
+    grid-area: nav; height: auto; min-height: 0; margin: 0; padding: 24px 12px;
+    display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+    gap: 8px; border: 0; border-right: 1px solid var(--glass-line); background: rgba(239, 249, 255, .48);
+  }
+  .tabs button { height: 44px; flex: none; padding: 0 18px; border-radius: 9px; text-align: left; font-size: 14px; }
+  .tabs button:hover { background: rgba(255, 255, 255, .65); }
+  .tabs button.active { color: #9e4d80; background: rgba(255, 239, 249, .88); }
+  .tabs button.active:after { top: 10px; bottom: 10px; left: 0; right: auto; width: 3px; height: auto; border-radius: 3px; }
+  .browser, .sheet { grid-area: content; min-width: 0; min-height: 0; padding: 22px 30px 12px; }
+  .browser { overflow: hidden; }
+  .browser-toolbar { gap: 12px; margin-bottom: 14px; }
+  .browser-toolbar button { font-size: 13px; padding: 7px 9px; }
+  #new-playlist { font-size: 14px; }
+  .searchbox { height: 42px; padding: 9px 13px; background: rgba(255,255,255,.72); }
+  .searchbox input, .searchbox button { font-size: 13px; }
+  .section-label { padding: 18px 4px 10px; font-size: 12px; }
+  .track-list { padding-right: 5px; }
+  .track-row { min-height: 62px; padding: 9px 12px; }
+  .row-cover { width: 43px; height: 43px; }
+  .row-info strong { font-size: 14px; }
+  .row-info small { font-size: 11px; }
+  .row-action { width: 34px; font-size: 18px; }
+  .discovery-cover { width: 66px; height: 66px; }
+  .playlist-heading { min-height: 52px; }
+  .sheet { overflow: auto; background: rgba(255,255,255,.22); }
+  .sheet h2 { font-size: 19px; }
+  .sheet label, .hint { font-size: 12px; }
+  .sheet input:not([type=checkbox]):not([type=range]), .sheet textarea, .sheet select { max-width: 680px; }
+  .player {
+    grid-area: player; min-width: 0; min-height: 0; padding: 12px 23px;
+    display: grid; grid-template-columns: minmax(200px, 260px) minmax(100px, 1fr) minmax(245px, 310px);
+    grid-template-rows: 32px 38px; column-gap: 22px; align-content: center; align-items: center;
+    border-top: 1px solid var(--glass-line); background: rgba(250, 253, 255, .68);
+  }
+  .hero { grid-column: 1; grid-row: 1 / 3; min-width: 0; min-height: 0; gap: 12px; }
+  .orbital-art { width: 70px; height: 70px; flex: 0 0 70px; }
+  .disc { width: 56px; height: 56px; }
+  .orbit-point { top: 3px; right: 13px; }
+  .signal { margin-bottom: 4px; font-size: 9px; letter-spacing: 0; }
+  .track-copy h1 { font-size: 16px; margin-bottom: 4px; }
+  #track-artist { margin-bottom: 4px; font-size: 11px; }
+  #track-source { font-size: 10px; }
+  .lyric-line { grid-column: 2; grid-row: 1; height: 28px; margin: 0; text-align: left; }
+  .timeline { grid-column: 2; grid-row: 2; min-width: 0; }
+  .timeline>div { margin-top: 7px; }
+  .transport { grid-column: 3; grid-row: 1 / 3; height: auto; margin: 0; gap: 5px; }
+  .transport #play { width: 42px; height: 42px; }
+  #status { grid-area: status; min-width: 0; min-height: 0; padding: 3px 12px 0; font-size: 10px; }
+  footer { grid-area: foot; height: auto; justify-content: flex-end; margin: 0 20px; border: 0; }
+  #height-label { margin-left: 4px; }
+  #resize-grip { grid-area: grip; height: 18px; min-height: 18px; }
+  dialog { max-width: 540px; }
+}
+
+/* MuoniumPlayer NCMScreen / NavigateBar / PlaylistPanel proportions.
+ * The desktop compositor supplies backdrop blur; these are transparent tints. */
+@media (min-width:700px) {
+ .panel { --mu-bg:#141e2b; --mu-text:#f5faff; --mu-secondary:#a9bcd2; --mu-accent:#7fc4ff;
+   grid-template-columns:var(--mu-nav-width,15%) minmax(0,1fr);
+   grid-template-rows:42px minmax(0,1fr) max(64px,var(--mu-controls-height,7%)) 18px 12px;
+   border-radius:var(--mu-corner,16px); background:rgba(18,42,60,.20);
+   color:#fff; text-shadow:0 1px 4px rgba(15,40,65,.75); }
+ .panel:before { display:none; }
+ header { background:rgba(35,66,93,.13); border-bottom-color:rgba(255,255,255,.12); }
+ .tabs { padding:14px 8px; background:rgba(35,64,88,.12); border-right-color:rgba(255,255,255,.14); }
+ .tabs button { color:rgba(255,255,255,.9); }
+ .tabs button.active { color:white; background:rgba(120,196,248,.35); }
+ .tabs button:hover { background:rgba(180,223,255,.23); }
+ .browser,.sheet { background:rgba(35,65,90,.06); }
+ .sheet { color:white; }
+ .searchbox { background:rgba(216,239,255,.16); border-color:rgba(220,242,255,.35); }
+ .searchbox input { color:white; }
+ .track-row { background:rgba(26,55,72,.09); border-color:rgba(225,245,255,.16); }
+ .track-row.current { background:rgba(95,190,249,.28); }
+ .row-info strong,.row-info small,.section-label,.browser-toolbar button { color:white; }
+ .player { grid-template-rows:26px 28px; padding:5px 16px; background:rgba(35,65,88,.18); border-color:rgba(255,255,255,.18); }
+ .orbital-art { width:52px; height:52px; flex-basis:52px; }
+ .disc { width:42px; height:42px; }
+ .track-copy h1,#track-artist,#track-source,.lyric-line,.timeline,.transport { color:white; }
+ .track-list { min-height:0; }
+ .mu-playlist-hero { padding:24px; }
+ /* Local playlists, track rows and public playlist cards share the same
+    translucent surfaces; older light-theme rules must not paint opaque white. */
+ .playlist-heading { background:rgba(28,65,84,.13); border-color:rgba(215,239,255,.23); color:var(--mu-text); }
+ .playlist-heading:hover,.my-track:hover,.discovery-card:hover,.track-row:hover { background:rgba(140,207,247,.18); border-color:rgba(200,236,255,.45); }
+ .playlist-heading.selected,.my-track.selected { background:rgba(127,196,255,.28); border-color:rgba(175,223,255,.62); box-shadow:inset 3px 0 var(--mu-accent); }
+ .my-track.current,.track-row.current { background:rgba(94,177,231,.27); border-color:rgba(176,224,255,.65); box-shadow:inset 3px 0 var(--mu-accent); }
+ .my-track,.discovery-card { background:rgba(28,65,84,.08); border-color:rgba(215,239,255,.16); }
+ .playlist-name,.playlist-folder,.playlist-chevron,.playlist-count,.playlist-empty,
+ .discovery-info strong,.discovery-info small,.discovery-arrow,.row-number,.row-state,
+ .row-action,.playlist-play,.empty,.empty strong,.library-hint,#pagination,#pagination button { color:var(--mu-text); }
+ .discovery-info small,.row-info small,.playlist-count,.playlist-empty,.library-hint { color:var(--mu-secondary); }
+ .row-cover,.local-cover,.discovery-cover { border-color:rgba(220,241,255,.3); }
+ /* Inputs and popups get a slightly stronger tint for text legibility while
+    the underlying playlist surface remains visibly transparent. */
+ .searchbox input::placeholder { color:rgba(235,247,255,.7); }
+ .browser-toolbar select,.sheet input:not([type=checkbox]):not([type=range]),.sheet select,.sheet textarea,
+ dialog input,dialog select { background:rgba(31,66,91,.64); border-color:rgba(208,235,255,.4); color:var(--mu-text); }
+ select option { background:#263f55; color:#f5faff; }
+ .sheet h2,.sheet h3,.sheet label,.sheet .hint,.two-actions button,.back-button,.quiet-button,
+ .task p,.task strong,.lyric-item { color:var(--mu-text); }
+ .sheet input[type=color] { padding:4px; }
+ .account-panel,.task { background:rgba(31,66,91,.3); border-color:rgba(208,235,255,.3); }
+ .accent-button,.mu-playlist-hero button { background:rgba(96,176,234,.7); border-color:rgba(203,235,255,.55); color:white; }
+ .wordmark b,.head-actions button,.transport>button,.volume button,#status,footer,#height-label { color:var(--mu-text); }
+ .head-actions button:hover,.transport #play:hover { background:rgba(175,222,255,.24); }
+ .transport #play { background:rgba(123,199,247,.32); border-color:rgba(221,244,255,.65); }
+ .transport #play svg { fill:white; }
+ .playlist-context { background:rgba(29,56,78,.94); border-color:rgba(208,235,255,.35); }
+ .playlist-context button { color:var(--mu-text); }
+ .playlist-context button:hover { color:white; background:rgba(127,196,255,.28); }
+ dialog { background:rgba(27,52,72,.94); border-color:rgba(208,235,255,.4); color:var(--mu-text); }
+ dialog p { color:var(--mu-secondary); }
+ dialog::backdrop { background:rgba(10,25,38,.34); }
+}

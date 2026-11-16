@@ -1,18 +1,29 @@
 ﻿'use strict';
 const path=require('node:path');
 const clamp=(n,min,max)=>Math.max(min,Math.min(max,Number.isFinite(n)?n:min));
-function panelBounds(area,{width=420,height=740,right=28,anchorX}={}){
- const w=Math.min(width,area.width),max=Math.max(200,area.height-24),h=clamp(height,Math.min(420,max),max);
+function panelBounds(area,{width,height,right=28,anchorX}={}){
+ const w=Math.min(Number.isFinite(width)?width:Math.round(area.width*.88),area.width),max=Math.max(200,area.height-24),h=clamp(Number.isFinite(height)?height:Math.round(area.height*.85),Math.min(420,max),max);
  const x=Number.isFinite(anchorX)?area.x+anchorX-w/2:area.x+area.width-w-right;
  return {x:Math.round(clamp(x,area.x,area.x+area.width-w)),y:area.y,width:w,height:Math.round(h)};
 }
 function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}),save=()=>{}}){
- let charm=null,opened=false,gesture=null,ready=false,closed=false,cursorTimer=null;
- let prefs={height:740,right:28},area;
+ let charm=null,opened=false,gesture=null,ready=false,closed=false,cursorTimer=null,materialTimer=null,materialOn=false;
+ let prefs={right:28},area;
  const panel=()=>getWindow(),alive=w=>w&&!w.isDestroyed();
  const bounds=()=>panelBounds(area||{x:0,y:0,width:1280,height:800},prefs);
  function publish(){if(alive(panel()))panel().webContents.send('panel:state',{expanded:opened,height:bounds().height,maxHeight:(area?.height||800)-24});}
- function reveal(progress,animate=false){if(alive(panel()))panel().webContents.send('panel:reveal',{progress,animate});}
+ function reveal(progress,animate=false){if(alive(panel())){
+  const w=panel(),b=bounds(),anchor=clamp((area.x+prefs.anchorX-b.x)/b.width,0,1);
+  // DWM paints the whole window, independently of the web content clip. Do not
+  // let a full rectangular backdrop appear before the sheet has unfolded.
+  clearTimeout(materialTimer);materialTimer=null;
+  if(progress<1){if(materialOn){try{w.setBackgroundMaterial?.('none')}catch{}materialOn=false;}}
+  else if(!materialOn&&process.platform==='win32'&&Number(require('node:os').release().split('.')[2])>=22621){
+   const enable=()=>{materialTimer=null;if(!closed&&opened&&alive(w)){try{w.setBackgroundMaterial?.('acrylic');materialOn=true}catch{}}};
+   if(animate){materialTimer=setTimeout(enable,480);materialTimer.unref?.();}else enable();
+  }
+  w.webContents.send('panel:reveal',{progress,animate,anchor});
+ }}
  function persist(){prefs.right=area.x+area.width-bounds().x-bounds().width;save({...prefs});}
  function placeCharm(){if(alive(charm))charm.setBounds({x:Math.round(area.x+prefs.anchorX-38),y:area.y,width:76,height:160});}
  function refresh(){
@@ -24,7 +35,7 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
  }
  function unfold(animate=true){
   if(closed||!ready)return;opened=true;const w=panel();w.setBounds(bounds());
-  if(!w.isVisible())reveal(0);w.show();w.focus?.();charm?.hide();reveal(1,animate);publish();
+  if(!w.isVisible())reveal(0);w.show();w.focus?.();charm?.showInactive();charm?.moveTop?.();reveal(1,animate);publish();
  }
  function collapse(){stopGesture(false);opened=false;if(alive(panel())){reveal(0);panel().hide();}placeCharm();if(alive(charm))charm.showInactive();publish();}
  function begin(kind,point,native=false){
@@ -46,8 +57,8 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
   if(gesture.kind==='move'||gesture.kind==='charm-move'){
    // The pendant may be past the panel's centre at a screen edge. Start an
    // expanded-panel drag from the actual window, so it never has a dead zone.
-   const anchor=gesture.kind==='move'?gesture.initial.x+gesture.initial.width/2:gesture.anchor;
    const display=screen.getDisplayNearestPoint(point),nextArea=display.workArea;
+   const anchor=gesture.kind==='move'?gesture.initial.x+gesture.initial.width/2:gesture.anchor;
    const nextAnchor=clamp(anchor+dx-nextArea.x,38,nextArea.width-38);
    if(gesture.kind==='move'&&!gesture.horizontalMoved){
     if(dx===0)return;
@@ -56,13 +67,13 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
     gesture.horizontalMoved=true;
    }
    area=nextArea;prefs.displayId=display.id;prefs.anchorX=nextAnchor;
-   panel().setBounds(bounds());placeCharm();
+   panel().setBounds(bounds());placeCharm();if(opened)reveal(1);
   }else if(gesture.kind==='resize'){
    prefs.height=panelBounds(area,{...prefs,height:gesture.initial.height+dy}).height;panel().setBounds(bounds());publish();
   }else if(gesture.axis==='vertical'){
-   if(dy>3&&!panel().isVisible()){panel().setBounds(bounds());reveal(0);panel().showInactive();charm.moveTop?.();}
+   if(!opened&&dy>3&&!panel().isVisible()){panel().setBounds(bounds());reveal(0);panel().showInactive();charm.moveTop?.();}
    // A short pull reveals a large, unchanged sheet; the GPU performs the slide.
-   reveal(clamp(dy*5/bounds().height,0,1));
+   const amount=clamp(dy*5/bounds().height,0,1);reveal(opened?1-amount:amount);
    charm.webContents.send('charm:pull',clamp(dy,0,70));
   }
  }
@@ -71,7 +82,8 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
   const old=gesture;gesture=null;if(!old)return;
   if(old.kind==='pull'){
    charm?.webContents.send('charm:pull',0);
-   if(commit&&(old.last.y-old.start.y>12||old.moved<6))unfold();else{reveal(0);panel()?.hide();opened=false;charm?.showInactive();}
+   if(commit&&(old.last.y-old.start.y>12||old.moved<6)){if(opened)collapse();else unfold();}
+   else if(opened)reveal(1,true);else{reveal(0);panel()?.hide();opened=false;charm?.showInactive();}
   }else if(commit||old.kind==='charm-move'||old.kind==='move'){persist();publish();}
   else{prefs=old.saved;refresh();}
  }
@@ -79,6 +91,11 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
   if(charm)return;prefs={...prefs,...getSaved()};refresh();
   charm=new BrowserWindow({width:76,height:160,frame:false,transparent:true,backgroundColor:'#00000000',resizable:false,maximizable:false,minimizable:false,closable:false,fullscreenable:false,alwaysOnTop:true,skipTaskbar:true,show:false,hasShadow:false,
    webPreferences:{preload:path.join(baseDir,'charm-preload.js'),contextIsolation:true,nodeIntegration:false,sandbox:true,backgroundThrottling:false}});
+  // Only the visible cord and pendant should intercept mouse input. Keep the
+  // whole lower region for pendant shadows, the hint, and pull animation.
+  // setShape is unsupported on some platforms/builds; retain the original
+  // rectangular window if the operating system declines it.
+  try{charm.setShape?.([{x:20,y:0,width:36,height:5},{x:33,y:0,width:10,height:76},{x:0,y:72,width:76,height:88}]);}catch{}
   charm.webContents.setWindowOpenHandler(()=>({action:'deny'}));charm.webContents.on('will-navigate',e=>e.preventDefault());
   charm.webContents.once('did-finish-load',()=>{ready=true;placeCharm();charm.showInactive();reveal(0);});
   charm.loadFile(path.join(baseDir,'app/charm.html'));
@@ -100,7 +117,7 @@ function createTopPanel({BrowserWindow,screen,baseDir,getWindow,getSaved=()=>({}
   if(message.type==='height'&&Number.isFinite(message.value)){prefs.height=panelBounds(area,{...prefs,height:message.value}).height;panel().setBounds(bounds());persist();publish();return true;}
   return false;
  }
- function close(){if(closed)return;closed=true;gesture=null;clearInterval(cursorTimer);for(const event of ['display-added','display-removed','display-metrics-changed'])screen.removeListener?.(event,refresh);if(alive(charm))charm.destroy();}
+ function close(){if(closed)return;closed=true;gesture=null;clearInterval(cursorTimer);clearTimeout(materialTimer);for(const event of ['display-added','display-removed','display-metrics-changed'])screen.removeListener?.(event,refresh);if(alive(charm))charm.destroy();}
  return {init,action,unfold,collapse,close,owns,refresh,bounds};
 }
 module.exports={panelBounds,createTopPanel};

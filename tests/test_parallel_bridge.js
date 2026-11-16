@@ -8,6 +8,8 @@ const http=require('node:http');
 const Module=require('node:module');
 
 const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'netease-parallel-'));
+process.env.MUSIC_DOWNLOADER_TEST_USER_DATA=path.join(tmp,'userData');
+const testPaths={};
 process.env.MUSIC_PYTHON_EXE=process.env.MUSIC_PYTHON_EXE||'/opt/pyvenv/bin/python';
 const handlers=new Map(); const updates=[];
 class Window {
@@ -19,7 +21,7 @@ class Window {
 const fake={
   screen:{getAllDisplays:()=>[{id:1,workArea:{x:0,y:0,width:1920,height:1080}}],getPrimaryDisplay:()=>({id:1,workArea:{x:0,y:0,width:1920,height:1080}}),on(){}},
   Tray:class {setToolTip(){}setContextMenu(){}on(){}},Menu:{buildFromTemplate:x=>x},net:{fetch:globalThis.fetch},
-  app:{isPackaged:false,getPath:k=>path.join(tmp,k),setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}},
+  app:{isPackaged:false,getPath:k=>testPaths[k]||path.join(tmp,k),setPath:(k,v)=>{testPaths[k]=v;},setAppUserModelId(){},whenReady:async()=>{},on(){},quit(){}},
   BrowserWindow:Window, ipcMain:{handle:(key,cb)=>handlers.set(key,cb),on(){}},
   dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
   shell:{openPath:async()=>'',openExternal:async()=>true},
@@ -62,7 +64,5 @@ test('real Electron IPC + Python downloads at most three distinct songs concurre
   assert.ok(peak<=3,`limit exceeded: peak=${peak}`);
   assert.equal(requests,7,'duplicate ID should only download once');
   assert.equal(fs.readdirSync(destination).filter(n=>n.endsWith('.flac')).length,7);
-  assert.ok(updates.some(e=>e.channel==='download:task'&&e.obj.status==='queued'));
-  assert.ok(updates.some(e=>e.channel==='download:task'&&e.obj.status==='running'));
-  assert.ok(updates.some(e=>e.channel==='download:task'&&e.obj.status==='completed'));
+  assert.equal(updates.length,0,'silent background tasks must not construct a renderer just to publish progress');
 });

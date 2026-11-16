@@ -1,0 +1,53 @@
+/* Layout and icon adapter for MuoniumPlayer NCMScreen / NavigateBar /
+ * ControlsBar at 9b4cc7e7. Apache-2.0. Geometry uses the upstream logical units.
+ * The desktop window replaces the Minecraft viewport; our lyric engine stays. */
+(()=>{
+ 'use strict';
+ const $=id=>document.getElementById(id),root=document.querySelector('.panel'),tabs=document.querySelector('.tabs'),host=window.NeteaseDesktopHost,views=window.NeteaseViews;
+ const make=(tag,cls,text)=>{const n=document.createElement(tag);n.className=cls||'';if(text!==undefined)n.textContent=text;return n;};
+ root.classList.add('mu-restored');
+ const titlebar=document.querySelector('header');titlebar.hidden=true;
+ const scroll=make('div','mu-navigation-scroll');
+ const search=$('search-form');tabs.prepend(search);search.classList.add('mu-sidebar-search');$('query').placeholder='搜索歌曲…';$('query').setAttribute('aria-label','搜索网易云');
+ const modes=make('div','mu-search-modes');let searchType=1;
+ for(const [type,label]of [[1,'歌曲'],[1000,'歌单']]){const b=make('button',type===1?'selected':'',label);b.type='button';b.onclick=()=>{searchType=type;for(const x of modes.children)x.classList.toggle('selected',x===b);$('query').placeholder=type===1?'搜索歌曲…':'搜索歌单…';};modes.append(b);}search.append(modes);
+ search.onsubmit=e=>{e.preventDefault();const text=$('query').value.trim();if(text)void views.search(text,searchType);};
+ const appTitle=make('h1','mu-app-title'),appIcon=make('img','mu-app-icon');appIcon.src='../assets/avatar.png';appIcon.alt='';appTitle.append(appIcon,make('span','mu-app-name','青春沿岸の音乐播放器'));tabs.prepend(appTitle);
+ const home=$('home-button');scroll.append(home);home.prepend(make('span','mu-glyph mu-music-font','A'));
+ const netNav=document.querySelector('.mu-net-nav');
+ const fm=[...netNav.querySelectorAll('button')].find(n=>n.dataset.view==='fm');if(fm){const img=make('img','mu-nav-image');img.src='../assets/muonium/personal-fm.png';img.alt='';fm.prepend(img);scroll.append(fm);}
+ const downloads=make('button','mu-nav-playlist','已下载音乐');downloads.type='button';const downloadIcon=make('img','mu-nav-image');downloadIcon.src='../assets/muonium/playlist.png';downloadIcon.alt='';downloads.prepend(downloadIcon);downloads.onclick=()=>{void views.downloads();for(const button of scroll.querySelectorAll('button'))button.classList.toggle('active',button===downloads);};scroll.append(downloads);
+ scroll.append(make('div','mu-nav-heading','我的网易云歌单'),$('mu-cloud-playlists'));netNav.remove();tabs.append(scroll);
+ // Local playlist management remains in the downloaded music view.
+ $('mu-nav-playlists').hidden=true;for(const key of ['local','recent','search']){const button=tabs.querySelector('[data-tab='+key+']');if(button)button.hidden=true;}
+ const account=$('account-entry');tabs.append(account);
+ function glyph(button,family,text){const ink=make('span','mu-glyph '+family,text);ink.setAttribute('aria-hidden','true');button.append(ink);return ink;}
+ for(const [id,letter]of [['previous','H'],['play','B'],['next','E']])glyph($(id),'mu-controls-font',letter);
+ const modeImage=make('img','mu-mode-image');modeImage.src='../assets/muonium/play-mode-sequential.png';modeImage.alt='';$('mode').append(modeImage);
+ function modal(title){let d=$('mu-tools-dialog');if(!d){d=make('dialog','mu-tools-dialog');d.id='mu-tools-dialog';document.body.append(d);}d.classList.remove('mu-coverflow');d.replaceChildren();d.append(make('h2','',title));const form=make('form','');form.method='dialog';const done=make('button','accent-button','完成');done.value='done';form.append(done);d.append(form);d.showModal();return {dialog:d,form};}
+ const lyrics=make('button','mu-footer-settings mu-footer-lyrics','词');lyrics.type='button';lyrics.title='左键开关歌词 / 右键锁定歌词';lyrics.setAttribute('aria-label',lyrics.title);const lock=make('span','mu-lyric-lock');lock.innerHTML='<svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/></svg>';lock.setAttribute('aria-hidden','true');lyrics.append(lock);document.querySelector('.player').append(lyrics);
+ function syncLyrics(state=host.lyricsState()){lyrics.classList.toggle('enabled',!!state.enabled);lyrics.setAttribute('aria-pressed',String(!!state.enabled));lock.hidden=!state.locked;}
+ lyrics.onclick=()=>Promise.resolve(host.toggleLyrics()).then(()=>syncLyrics()).catch(e=>host.status(e.message,true));lyrics.oncontextmenu=e=>{e.preventDefault();void Promise.resolve(host.toggleLyricsLock()).then(()=>syncLyrics()).catch(e=>host.status(e.message,true));};document.addEventListener('music:lyrics-state',e=>syncLyrics(e.detail));syncLyrics();
+ const queue=make('button','mu-footer-queue');queue.title='待播歌曲';queue.setAttribute('aria-label','待播歌曲');glyph(queue,'mu-action-font','\ue144');queue.onclick=()=>{const {dialog,form}=modal('待播歌曲');const list=make('div','mu-queue-list'),state=host.state();for(const row of state.rows){const b=make('button','',row.name);b.onclick=()=>{dialog.close();void host.playRow(row,state.rows);};list.append(b);}if(!state.rows.length)list.append(make('p','','选择歌曲后显示待播列表'));dialog.insertBefore(list,form);};document.querySelector('.player').append(queue);
+ const qualityNames={standard:'流畅(128k)',higher:'标准(192k)',exhigh:'高品质(320k)',lossless:'无损',hires:'Hi-Res'};
+ const quality=make('button','mu-footer-quality');quality.type='button';quality.title='选择播放音质';
+ function syncQuality(){
+  const state=host.getQuality(),track=host.state().track;
+  const requested=typeof state==='string'?state:state?.requested||state?.level,actual=typeof state==='object'?state?.actual:null;
+  const label=(qualityNames[requested]||qualityNames.standard).split('(')[0];
+  quality.textContent=track?.local||track?.fromLocal?'本地':qualityNames[actual]?.split('(')[0]||(track?'请求'+label:label);
+  quality.title='请求音质：'+(qualityNames[requested]||qualityNames.standard)+'；实际音质：'+(qualityNames[actual]||'未确认');
+ }
+ quality.onclick=()=>{const {dialog,form}=modal('播放音质'),choices=make('div','mu-quality-choices');for(const [level,label]of Object.entries(qualityNames)){const b=make('button','accent-button',label);b.type='button';b.onclick=async()=>{try{b.disabled=true;await host.setQuality(level);syncQuality();dialog.close();}catch(e){host.status(e.message,true);}finally{b.disabled=false;}};choices.append(b);}dialog.insertBefore(choices,form);};document.querySelector('.player').append(quality);document.addEventListener('music:quality-state',syncQuality);syncQuality();
+ const rightControls=make('div','mu-right-controls');rightControls.append(queue,quality,lyrics,document.querySelector('.volume'));document.querySelector('.player').append(rightControls);
+ const drag=make('div','mu-window-drag');drag.title='拖动窗口';root.append(drag);let held=false;drag.onpointerdown=e=>{if(e.button!==0)return;held=true;drag.setPointerCapture(e.pointerId);window.musicBridge.panelAction({type:'begin',kind:'move',native:true,x:screenX+e.clientX,y:screenY+e.clientY});};drag.onpointermove=()=>{if(held)window.musicBridge.panelAction({type:'move'});};for(const name of ['pointerup','pointercancel','lostpointercapture'])drag.addEventListener(name,()=>{if(held){held=false;window.musicBridge.panelAction({type:'end'});}});
+ function geometry(){const unit=Math.max(.9,Math.min(2.3,root.clientWidth/835));root.style.setProperty('--mu-unit',unit);root.style.setProperty('--mu-controls-height',Math.max(96,48*unit)+'px');root.style.setProperty('--mu-corner','8px');}
+ new ResizeObserver(geometry).observe(root);geometry();
+ const sourceBadge=make('span','mu-playing-source');sourceBadge.setAttribute('aria-hidden','true');document.querySelector('.track-copy').append(sourceBadge);
+ const modeLabels={sequence:'顺序播放',shuffle:'随机播放',reverse:'倒序播放','repeat-one':'单曲循环','stop-after':'播完停止'};
+ const modePaths={reverse:'<path d="M4 6h16M4 12h11M4 18h6m8-8v10m-4-4 4 4 4-4"/>','stop-after':'<path d="M3 6h12M3 12h8M3 18h6"/><rect x="14" y="13" width="7" height="7" rx="1"/>'};
+ const modeCustom=make('span','mu-mode-custom');$('mode').append(modeCustom);
+ function sync(state){$('play').querySelector('.mu-glyph').textContent=state.playing?'A':'B';const custom=modePaths[state.mode];modeImage.hidden=!!custom;modeCustom.hidden=!custom;if(custom)modeCustom.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true">'+custom+'</svg>';else modeImage.src='../assets/muonium/'+({'shuffle':'play-mode-random.png','repeat-one':'play-mode-single-loop.png'}[state.mode]||'play-mode-sequential.png');$('mode').title=modeLabels[state.mode]||modeLabels.sequence;$('mode').setAttribute('aria-label',$('mode').title);sourceBadge.hidden=!state.track;const local=state.track?.local||state.track?.fromLocal;sourceBadge.title=local?'本地音乐':'网易云音乐';sourceBadge.innerHTML='<svg viewBox="0 0 24 24">'+(local?'<path d="M3 6h7l2 3h9v11H3Z"/><path d="M15 12v5m0-5 3-1v5m-3 1c0 2-3 2-3 0s3-2 3 0m3-1c0 2-3 2-3 0"/>':'<path d="M8 18H6a4 4 0 0 1-1-8 7 7 0 0 1 13-2 5 5 0 0 1 1 10h-2M13 9v10m0-10 5-1v8m-5 3c0 3-5 3-5 0s5-3 5 0m5-3c0 3-5 3-5 0"/>')+'</svg>';for(const row of document.querySelectorAll('#netease-view .track-row'))row.classList.toggle('current',row.dataset.key===state.track?.key);if(!state.track)queueMicrotask(()=>{$('cover').src='../assets/placeholder-cover.svg';});}
+ document.addEventListener('music:state',e=>{sync(e.detail);syncQuality();});sync(host.state());
+ window.MuonCoverflow=(tracks,play)=>{if(!tracks.length)return;const {dialog,form}=modal('Coverflow');dialog.classList.add('mu-coverflow');const stage=make('div','mu-coverflow-stage'),caption=make('p','mu-coverflow-caption'),controls=make('div','mu-coverflow-controls');let index=0;const cards=tracks.map((track,i)=>{const b=make('button','mu-coverflow-card'),img=make('img','');img.src=host.cover(track.cover_url);img.alt=track.name;b.append(img);b.onclick=()=>{index=i;render();};b.ondblclick=()=>{dialog.close();void play(i);};stage.append(b);return b;});function render(){cards.forEach((card,i)=>{const d=i-index;card.style.transform='translateX('+d*92+'px) translateZ('+(-Math.abs(d)*100)+'px) rotateY('+(d===0?0:d>0?-48:48)+'deg)';card.style.zIndex=String(tracks.length-Math.abs(d));card.hidden=Math.abs(d)>4;});caption.textContent=tracks[index].name;}for(const [label,fn]of [['上一首',()=>{index=Math.max(0,index-1);render();}],['播放',()=>{dialog.close();void play(index);}],['下一首',()=>{index=Math.min(tracks.length-1,index+1);render();}]]){const b=make('button','accent-button',label);b.type='button';b.onclick=fn;controls.append(b);}dialog.insertBefore(stage,form);dialog.insertBefore(caption,form);dialog.insertBefore(controls,form);stage.onwheel=e=>{e.preventDefault();index=Math.max(0,Math.min(tracks.length-1,index+(e.deltaY>0?1:-1)));render();};render();};
+})();

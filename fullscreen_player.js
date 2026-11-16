@@ -12,7 +12,7 @@ function createFullscreenPlayer({BrowserWindow,screen,baseDir,getMainWindow,rest
   const main=getMainWindow();if(!alive(main))return;
   const bounds=screen.getDisplayMatching(main.getBounds()).bounds;
   const view=new BrowserWindow({...bounds,frame:false,fullscreen:true,show:false,backgroundColor:'#e5f3ff',
-   title:'音乐下载器 · 全屏歌词',icon:path.join(baseDir,'assets/app.ico'),autoHideMenuBar:true,
+   title:'青春沿岸の音乐播放器 · 全屏歌词',icon:path.join(baseDir,'assets/app.ico'),autoHideMenuBar:true,
    webPreferences:{preload:path.join(baseDir,'fullscreen-preload.js'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   window=view;
   view.webContents.setWindowOpenHandler(()=>({action:'deny'}));

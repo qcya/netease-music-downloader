@@ -1,9 +1,11 @@
 'use strict';
 (function(root){
  const nav=typeof module==='object'&&module.exports?require('./playback_navigation'):root.MusicPlaybackNavigation;
- function createPlayer({audio,bridge,onState=()=>{},onTrack=()=>{}}){
+ function createPlayer({audio,bridge,onState=()=>{},onTrack=()=>{},quality='standard'}){
+  const qualities=['standard','higher','exhigh','lossless','hires'];
+  if(!qualities.includes(quality))quality='standard';
   let serial=0,navigation=0,track=null,queue=nav.createQueue([]),catalog=new Map(),busy=false,error='',mode='sequence',playOptions={},queueExtender=null;
-  const state=()=>({track,queue,rows:queue.tracks.map(k=>catalog.get(k)).filter(Boolean),busy,error,mode,playing:!audio.paused&&!audio.ended,time:audio.currentTime||0,duration:Number.isFinite(audio.duration)?audio.duration:0,volume:audio.volume});
+  const state=()=>({track,queue,rows:queue.tracks.map(k=>catalog.get(k)).filter(Boolean),busy,error,mode,quality,requestedQuality:quality,actualQuality:track?.actualQuality||null,playing:!audio.paused&&!audio.ended,time:audio.currentTime||0,duration:Number.isFinite(audio.duration)?audio.duration:0,volume:audio.volume});
   const emit=()=>onState(state());
   async function play(item,pool=null,options={}){
    if(!item)return false;if(options.navigationToken===undefined)navigation++;const token=++serial;playOptions=options;busy=true;error='';audio.pause();audio.removeAttribute('src');audio.load();track=item;catalog.set(item.key,item);
@@ -11,11 +13,17 @@
    else if(!queue.tracks.includes(item.key)){queue=nav.createQueue([item.key],0,mode);if(options.navigationToken===undefined)queueExtender=null;}
    emit();
    try{
-    await bridge.stopOnlinePlayback();if(token!==serial)return false;
-    const source=item.local?await bridge.playLocal(item.file):await bridge.streamAudio(item.id,{allowTrial:options.allowTrial===true});
+    // Local files must never wait for an account/network IPC to settle.
+    if(item.local)void Promise.resolve().then(()=>bridge.stopOnlinePlayback()).catch(()=>{});
+    else {await bridge.stopOnlinePlayback();if(token!==serial)return false;}
+    const source=item.local?await bridge.playLocal(item.file):await bridge.streamAudio(item.id,{allowTrial:options.allowTrial===true,quality});
     if(token!==serial)return false;
     const latest=catalog.get(item.key)||item;
-    track={...latest,...source,id:source.id||latest.id||item.id,name:latest.name,artists:latest.artists,key:item.key,local:item.local,file:item.file};
+    // Catalog rows can contain a previous playback source. Reset transport facts
+    // before applying the new source so local shortcuts and network streams do
+    // not inherit one another's origin, trial or quality claims.
+    const sourceDefaults={fromLocal:false,localFile:null,actualQuality:null,lossless:false,format:null,bitrate:null,qualityFallback:false,previewOnly:false,trialSeconds:0,streaming:false,fromCache:false};
+    track={...latest,...sourceDefaults,...source,id:source.id||latest.id||item.id,name:latest.name,artists:latest.artists,key:item.key,local:item.local,file:item.file};
     if(item.local&&latest.cover_url)track.cover_url=latest.cover_url;
     catalog.set(item.key,track);
     if(Number.isFinite(options.resumeTime)&&options.resumeTime>0)audio.addEventListener('loadedmetadata',()=>{if(token===serial&&Number.isFinite(audio.duration))audio.currentTime=Math.min(options.resumeTime,Math.max(0,audio.duration-.1));},{once:true});
@@ -46,6 +54,15 @@
    return false;
   }
   async function toggle(){if(busy)return;if(!audio.src||audio.error||error){if(track)return play(track,null,{allowTrial:true});return;}if(audio.paused){try{await audio.play();}catch(e){error=e.message;}}else audio.pause();emit();}
+  async function setQuality(level){
+   if(!qualities.includes(level))throw Error('无效音质');
+   if(level===quality)return true;quality=level;
+   if(!track||track.local||track.fromLocal){emit();return true;}
+   // A second selection during resolution retains the original transport intent.
+   const resumeTime=busy&&Number.isFinite(playOptions.resumeTime)?playOptions.resumeTime:audio.currentTime||0;
+   const paused=busy?(playOptions.paused===true):audio.paused;
+   return play(track,null,{...playOptions,navigationToken:undefined,resumeTime,paused});
+  }
   function setMode(value){navigation++;mode=nav.normalizeMode(value);queue=nav.createQueue(queue.tracks,queue.index,mode);emit();}
   function renameLocal(oldName,newName){
    const oldKey='local:'+oldName,newKey='local:'+newName,item=catalog.get(oldKey);if(!item)return;
@@ -87,7 +104,7 @@
    if(wasCurrent){serial++;navigation++;busy=false;error='';audio.pause();audio.removeAttribute('src');audio.load();track=null;}
    const remaining=queue.tracks.filter(k=>k!==key);queue=nav.createQueue(remaining,Math.max(0,remaining.indexOf(track?.key)),mode);emit();
   }
-  return {state,play,step,toggle,setMode,renameLocal,updateQueue,updateLocalArtwork,removeLocal,emit,serial:()=>serial,stop(){serial++;navigation++;busy=false;error='';audio.pause();emit();void bridge.stopOnlinePlayback().catch(()=>{});}};
+  return {state,play,step,toggle,setMode,setQuality,changeQuality:setQuality,renameLocal,updateQueue,updateLocalArtwork,removeLocal,emit,serial:()=>serial,stop(){serial++;navigation++;busy=false;error='';audio.pause();emit();void bridge.stopOnlinePlayback().catch(()=>{});}};
  }
  const api={createPlayer};if(typeof module==='object'&&module.exports)module.exports=api;if(root)root.OrbitPlayer=api;
 })(typeof window!=='undefined'?window:null);

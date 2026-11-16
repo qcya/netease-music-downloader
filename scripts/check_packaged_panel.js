@@ -4,7 +4,7 @@ const {connect,pages}=require('./cdp_client'),fs=require('node:fs'),path=require
 const port=Number(process.argv[2]||19273),dir=path.resolve(process.argv[3]||'.validation/packaged-panel'),sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function wait(fn,label){for(let i=0;i<200;i++){try{const value=await fn();if(value)return value;}catch{}await sleep(100);}throw Error(label);}
 const wav=Buffer.alloc(44+44100*2*30);wav.write('RIFF');wav.writeUInt32LE(wav.length-8,4);wav.write('WAVEfmt ',8);wav.writeUInt32LE(16,16);wav.writeUInt16LE(1,20);wav.writeUInt16LE(1,22);wav.writeUInt32LE(44100,24);wav.writeUInt32LE(88200,28);wav.writeUInt16LE(2,32);wav.writeUInt16LE(16,34);wav.write('data',36);wav.writeUInt32LE(wav.length-44,40);
-let base,client,charm,trial=true;const requests=[];
+let base,client,trial=true;const requests=[];
 const song={id:99000001,name:'轨道测试音频',ar:[{name:'本地验证'}],al:{name:'Orbit Test'},dt:30000};
 const server=http.createServer((req,res)=>{
  const u=new URL(req.url,'http://localhost'),json=data=>{res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
@@ -23,13 +23,12 @@ const server=http.createServer((req,res)=>{
 (async()=>{
  fs.mkdirSync(dir,{recursive:true});await new Promise(r=>server.listen(0,'127.0.0.1',r));base='http://127.0.0.1:'+server.address().port;
  client=await connect(await wait(async()=>(await pages(port)).find(p=>p.url.endsWith('/panel.html')),'packaged panel unavailable'));
- charm=await connect(await wait(async()=>(await pages(port)).find(p=>p.url.endsWith('/charm.html')),'pendant unavailable'));
  const run=client.run;await wait(()=>run('typeof musicBridge!=="undefined"'),'preload unavailable');
  const info=await run('musicBridge.appInfo()');assert.equal(info.version,require('../package.json').version);
  const backend=await run('musicBridge.checkPython()');assert.equal(backend.ok,true);assert.match(backend.version,/内置/);
  const music=path.join(dir,'fixture-music');fs.mkdirSync(music,{recursive:true});fs.writeFileSync(path.join(music,'本地轨道.wav'),wav);fs.writeFileSync(path.join(music,'本地轨道.lrc'),'[00:00]本地测试歌词\n[00:05]第二句');
  await run(`musicBridge.getSettings().then(s=>musicBridge.saveSettings({...s,downloadDir:${JSON.stringify(music)},apiBases:[${JSON.stringify(base)}],desktopLyricsEnabled:false,disclaimerAcceptedVersion:1}))`);
- await run("document.getElementById('welcome').close()");await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
+ await run("document.getElementById('welcome').close();document.getElementById('settings-button').click()");await wait(()=>run("!document.getElementById('settings-view').hidden"),'settings refresh missing');await run("document.querySelector('#settings-view .back-button').click()");await run("musicBridge.panelAction({type:'expand'})");await sleep(400);
  await run("document.querySelector('[data-tab=local]').click()");await wait(()=>run("!!document.querySelector('[data-select-id=default]')"),'default playlist missing');
  await run("document.querySelector('[data-select-id=default]').click()");await wait(()=>run("Array.from(document.querySelectorAll('.my-track')).some(r=>r.textContent.includes('本地轨道'))"),'fixture library missing');
  await run("Array.from(document.querySelectorAll('.my-track')).find(r=>r.textContent.includes('本地轨道')).querySelector('.playlist-play').click()");await wait(()=>run("!document.getElementById('music-audio').paused"),'local audio failed');
@@ -54,8 +53,8 @@ const server=http.createServer((req,res)=>{
   await run("document.querySelector('#settings-view .back-button').click()");
  }finally{overlay.close();}
  await run("document.getElementById('lyrics-toggle').click()");await wait(async()=>!(await pages(port)).some(p=>p.url.endsWith('/floating-lyrics.html')),'desktop lyrics did not close');
- await run("document.getElementById('collapse').click()");const before=await run("document.getElementById('music-audio').currentTime");await sleep(500);assert.ok(await run(`document.getElementById('music-audio').currentTime>${before}`));
- await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
+ await run("musicBridge.panelAction({type:'collapse'})");const before=await run("document.getElementById('music-audio').currentTime");await sleep(500);assert.ok(await run(`document.getElementById('music-audio').currentTime>${before}`));
+ await run("musicBridge.panelAction({type:'expand'})");await sleep(400);
  await run("document.querySelector('[data-tab=search]').click()");await sleep(200);await run("document.getElementById('query').value='测试';document.getElementById('search-form').requestSubmit()");
  await wait(()=>run("document.querySelector('.row-info strong')?.textContent==='轨道测试音频'"),'Python search results not rendered');
  await run("document.querySelector('.row-play').click()");await wait(()=>run("document.getElementById('music-audio').src.startsWith('music-preview:')&&!document.getElementById('music-audio').paused"),'online stream failed');
@@ -83,18 +82,10 @@ const server=http.createServer((req,res)=>{
  await run("document.querySelector('.row-play').click()");await wait(()=>run("document.getElementById('music-audio').src.startsWith('file:')&&!document.getElementById('music-audio').paused"),'downloaded song was not reused for playback');
  await run("document.getElementById('load-online-playlist').click()");await wait(()=>run("document.getElementById('dialog').open"),'playlist prompt missing');
  await run("document.getElementById('dialog-input').value='https://music.163.com/#/playlist?id=99000001';document.getElementById('dialog-confirm').click()");await wait(()=>run("document.getElementById('list-title').textContent==='网易云歌单'&&!document.getElementById('pagination').hidden&&document.querySelectorAll('.track-row').length===1"),'online playlist failed');
- await run("document.getElementById('play').click();musicBridge.panelAction({type:'height',value:620})");await sleep(300);assert.equal(await run('innerHeight'),620);
- async function drag(target,x,y,dx){
-  const bridge=target===charm?'charmBridge.action':'musicBridge.panelAction';
-  const start=await target.run('({x:screenX,y:screenY})');
-  const send=m=>target.run(bridge+'('+JSON.stringify(m)+')');
-  await send({type:'begin',kind:target===charm?'pull':'move',x:start.x+x,y:start.y+y});
-  for(let i=1;i<=8;i++)await send({type:'move',x:start.x+x+dx*i/8,y:start.y+y});
-  await send({type:'end'});await sleep(100);
- }
- let oldX=await run('screenX');await drag(client,150,25,-60);assert.equal(await run('screenX'),oldX-60);
- await run("musicBridge.panelAction({type:'collapse'})");await sleep(200);oldX=await charm.run('screenX');await drag(charm,38,105,-100);assert.equal(await charm.run('screenX'),oldX-100);
- await charm.run("charmBridge.action({type:'expand'})");await sleep(400);
- const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','expand default playlist','local playback','desktop lyrics toggle','desktop lyrics lock applies immediately and persists','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','expanded and collapsed multi-step drag geometry','original video background','custom font','named download task']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
+ await run("document.getElementById('play').click();musicBridge.panelAction({type:'height',value:620})");await sleep(300);assert.equal(await run("document.querySelector('.panel').clientHeight"),620);
+ assert.match(await run("getComputedStyle(document.querySelector('.panel')).backgroundColor"),/0\.0(?:2[0-9]|3)\)/);
+ await run("musicBridge.panelAction({type:'collapse'})");await wait(async()=>!(await pages(port)).some(p=>p.url.endsWith('/overlay-backdrop.html')),'hidden backdrop retained');
+ await run("musicBridge.panelAction({type:'expand'})");assert.equal((await pages(port)).filter(p=>p.url.startsWith('file:')&&!p.url.includes('devtools')).length,1,'extra background renderer');
+ const result={ok:true,version:info.version,backend:backend.version,checks:['packaged startup','embedded Python','expand default playlist','local playback','desktop lyrics toggle','desktop lyrics lock applies immediately and persists','collapsed playback','renderer search','online stream','fullscreen lyrics and seek','Escape preserves stream','nonselectable labels and editable input','download button','reuse downloaded audio','online playlist URL','resize','transparent player on single acrylic surface','original video background','custom font','named download task']};fs.writeFileSync(path.join(dir,'packaged-result.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));
  if(process.env.ORBIT_KEEP_OPEN!=='1')await run("musicBridge.windowAction('quit')").catch(()=>{});
-})().catch(async e=>{console.error(e.stack);console.error('Requests',requests);if(client)console.error(await client.run('document.body.innerText').catch(()=>''));process.exitCode=1;}).finally(()=>{client?.close();charm?.close();server.close();});
+})().catch(async e=>{console.error(e.stack);console.error('Requests',requests);if(client)console.error(await client.run('document.body.innerText').catch(()=>''));process.exitCode=1;}).finally(()=>{client?.close();server.close();});

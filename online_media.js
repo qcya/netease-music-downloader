@@ -2,10 +2,10 @@
 // Audio passes directly from the network reader to Chromium. This module has no
 // filesystem dependency, full-file buffer, download fallback or durable URL cache.
 const {randomUUID}=require('node:crypto');
-const {createSourceAvailability}=require('./source_availability');
+const {createSourceAvailability,normalizeQuality}=require('./source_availability');
 const OFFICIAL='https://music.163.com';
 const idOf=value=>{const id=String(value);if(!/^\d{1,20}$/.test(id))throw Error('无效歌曲 ID');return id;};
-function createOnlineMedia({fetchImpl=globalThis.fetch,metingFetchImpl=fetchImpl,getBases=()=>[],timeoutMs=12000,now=Date.now}={}){
+function createOnlineMedia({fetchImpl=globalThis.fetch,metingFetchImpl=fetchImpl,getBases=()=>[],timeoutMs=12000,now=Date.now,getAuthState=()=>({enabled:false,revision:0}),authLookup=null}={}){
  let revision=0,current=null,resolving=null;
  const lyricCache=new Map(),lyricPending=new Map();
  const bases=()=>getBases().filter(v=>{try{const u=new URL(v);return !u.username&&!u.password&&(u.protocol==='https:'||(u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)));}catch{return false;}}).slice(0,4);
@@ -24,7 +24,7 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,metingFetchImpl=fetchImpl
   try{while(true){const {done,value}=await reader.read();if(done)break;length+=value.length;if(length>2*1024*1024)throw Error('元数据响应过大');chunks.push(value);}return JSON.parse(Buffer.concat(chunks).toString('utf8'));}
   finally{void reader.cancel().catch(()=>{});}
  }
- const sources=createSourceAvailability({json,getBases:bases,trusted,now});
+ const sources=createSourceAvailability({json,getBases:bases,trusted,now,getAuthState,authLookup});
  // A Meting endpoint can return audio without trial metadata. Only a FLAC whose
  // STREAMINFO duration agrees with independently fetched song metadata is usable.
  async function metingFallback(sid,signal){
@@ -54,24 +54,28 @@ function createOnlineMedia({fetchImpl=globalThis.fetch,metingFetchImpl=fetchImpl
      if(b.length<42||b.subarray(0,4).toString()!=='fLaC'||(b[4]&127)!==0||b.readUIntBE(5,3)!==34)break;
      const value=b.readBigUInt64BE(18),rate=Number(value>>44n),samples=Number(value&((1n<<36n)-1n));
      const actual=samples/rate;
-     if(rate>0&&samples>0&&Math.abs(actual-seconds)<=Math.max(3,seconds*0.02))return {url:uri,mime:'audio/flac',meting:true,...(uri===endpoint?{metingEndpoint:endpoint}:{})};
+     if(rate>0&&samples>0&&Math.abs(actual-seconds)<=Math.max(3,seconds*0.02))return {url:uri,mime:'audio/flac',meting:true,actualQuality:'lossless',lossless:true,format:'flac',sampleRate:rate,...(uri===endpoint?{metingEndpoint:endpoint}:{})};
      break;
     }
    }catch(e){if(signal.aborted)throw e;}
   }
   return null;
  }
- async function open(id,{allowTrial=false}={}){
+ async function open(id,{allowTrial=false,quality='standard'}={}){
+  quality=normalizeQuality(quality);
   const sid=idOf(id);stop();const serial=revision,control=new AbortController();resolving=control;
   try{
-   const chosen=await sources.resolve(sid,control.signal);
+   const chosen=await sources.resolve(sid,control.signal,{quality});
    if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
-   const fallback=chosen.state!=='available'?await metingFallback(sid,control.signal):null;
+   const fallback=chosen.state!=='available'||(['lossless','hires'].includes(quality)&&!chosen.lossless)?await metingFallback(sid,control.signal):null;
    if(serial!==revision||control.signal.aborted)throw Error('已切换歌曲');
    const previewOnly=!fallback&&chosen.state!=='available'&&allowTrial===true&&chosen.trialAvailable===true;
    if(chosen.state!=='available'&&!previewOnly&&!fallback)throw Error(chosen.reason+'；不会自动下载或缓存。');
    const token=randomUUID();current={url:fallback?.url||(previewOnly?chosen.trialUrl:chosen.url),mime:fallback?.mime,meting:!!fallback?.meting,metingEndpoint:fallback?.metingEndpoint,id:sid,token,controllers:new Set()};
-   return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false,previewOnly,trialSeconds:previewOnly?chosen.trialSeconds:0};
+   const actual=fallback||chosen;
+   return {ok:true,id:sid,url:'music-preview://audio/'+token,streaming:true,fromCache:false,previewOnly,trialSeconds:previewOnly?chosen.trialSeconds:0,
+    requestedQuality:quality,actualQuality:actual.actualQuality||null,lossless:actual.lossless===true,format:actual.format||null,bitrate:actual.bitrate||null,
+    qualityFallback:actual.actualQuality!==quality,...(fallback?{sampleRate:fallback.sampleRate}: {})};
   }finally{if(resolving===control)resolving=null;}
  }
  function isAudio(bytes){

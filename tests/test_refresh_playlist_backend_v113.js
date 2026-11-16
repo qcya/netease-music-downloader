@@ -78,11 +78,11 @@ test('exhausted pool reports exhaustion and never loops seed titles as a new bat
  }
  assert.equal(exhausted,true);
 });
-test('pinned portable builder uses per-launch extraction; packaged backend path is revalidated',()=>{
+test('folder ZIP build avoids self-extraction; packaged backend path is revalidated',()=>{
  const root=path.join(__dirname,'..'),pkg=require('../package.json');
  assert.equal(pkg.devDependencies['electron-builder'],'26.0.12');
- // v26.0.12 checks !unpackDirName: true selects unique $PLUGINSDIR (not false).
- assert.equal(pkg.build.portable.unpackDirName,true,'do not reuse the same extraction folder on second launch');
+ assert.deepEqual(pkg.build.win.target,['zip']);
+ assert.equal(pkg.build.portable,undefined,'folder distribution must not self-extract into the C-drive temp directory');
  const s=fs.readFileSync(path.join(root,'main.js'),'utf8');
  const fn=s.slice(s.indexOf('async function findPython()'),s.indexOf('async function runCli('));
  assert.ok(fn.indexOf('embeddedBackend(')<fn.indexOf('if (cachedPython)'), 'revalidate standalone backend before returning cached dev interpreter');

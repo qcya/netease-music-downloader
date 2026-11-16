@@ -15,5 +15,6 @@ test('floating lyrics remains draggable only when unlocked; lock is click-throug
  assert.match(js,/setIgnoreMouseEvents\(locked,\{forward:true\}\)/);
  assert.match(js,/if\(!exists\(\)\|\|locked\)return false/);
  assert.match(renderer,/contextmenu/);assert.match(renderer,/dragBegin/);
- assert.doesNotMatch(main,/globalShortcut/);
+ assert.doesNotMatch(js,/globalShortcut/,'lyric locking must remain independent of the overlay hotkey');
+ assert.match(main,/globalShortcut\?\.register\('Insert'/);
 });
