@@ -16,3 +16,5 @@
 - 喜欢/取消、自建歌单删除确认/取消/失败回退、取消收藏、账号切换迟到请求隔离，均使用假账号验证。
 
 发行包仍须由 `scripts/verify_distribution.py` 核对源码、离线模型哈希、接口清单与空白用户资料，并运行 `scripts/verify_reference_package.js` 检查实际 EXE。GitHub 附件发布前核对字节数及 SHA-256；这些步骤不能用“源码测试通过”替代。
+
+GitHub Windows 运行器没有正常的交互式 GPU 会话，隐藏 Electron 检查使用软件渲染。软件渲染时 Chromium 使用 layered-window 回退，不能断言 GPU 窗口样式；仍检查 HTCLIENT 命中与控件不透明度。非 layered 的生产窗口样式与桌面合成由本机 GPU 验证覆盖，不把服务端软件渲染作为视觉验收。
