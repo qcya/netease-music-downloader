@@ -2,3 +2,4 @@
 .lyric.active .karaoke-word{position:relative;display:inline-block;white-space:pre;color:color-mix(in srgb,var(--karaoke-ink) 34%,transparent);text-shadow:none}
 .lyric.active .karaoke-word:after{content:attr(data-text);position:absolute;inset:0;color:var(--karaoke-ink);text-shadow:0 0 var(--glow) #fce5f7,0 2px 12px #20355f;clip-path:inset(-1em calc(100% - var(--karaoke-progress,0%)) -1em -1em);pointer-events:none}
 .lyric.active .karaoke-word[data-progress="0"]:after{opacity:0}.lyric.active .karaoke-word[data-progress="1"]:after{clip-path:none}
+.lyric.active .karaoke-line{max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere}

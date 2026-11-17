@@ -2,7 +2,7 @@
 const {app,BrowserWindow,ipcMain}=require('electron');
 process.on('uncaughtException',e=>{console.error(e.stack);app.exit(1);});process.on('unhandledRejection',e=>{console.error(e.stack||e);app.exit(1);});
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
-const root=path.join(__dirname,'..'),dir=path.join(root,'.validation','classic-303-'+Date.now());fs.mkdirSync(dir,{recursive:true});app.setPath('userData',dir);app.commandLine.appendSwitch('mute-audio');
+const root=path.join(__dirname,'..'),dir=path.join(root,'.validation','classic-303-'+Date.now());fs.mkdirSync(dir,{recursive:true});app.setPath('userData',dir);app.commandLine.appendSwitch('mute-audio');app.commandLine.appendSwitch('force-prefers-reduced-motion');
 const controls=[];ipcMain.handle('fullscreen:preferences',()=>({lyrics:require('../lyric_preferences').normalizeLyrics(),background:{kind:'black'}}));ipcMain.on('fullscreen:control',(_e,m)=>controls.push(m));
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 app.whenReady().then(async()=>{
@@ -12,6 +12,16 @@ app.whenReady().then(async()=>{
  const state={key:'japanese',title:'双语歌词验证',artist:'自有测试文本',cover:'../assets/placeholder-cover.svg',index:1,playing:false,time:11,duration:30,volume:.5,lyrics:[{time:0,text:'昨日の風を覚えている',translation:'还记得昨天的风'},{time:10,text:'音楽と歩こう',translation:'让音乐陪伴每一步',words:[{text:'音楽と',time:10,duration:2},{text:'歩こう',time:14,duration:2}]},{time:20,text:'明日もここで',translation:'明天仍在这里'}]};
  async function sample(time){state.time=time;w.webContents.send('fullscreen:state',state);await sleep(70);}
  const progress=()=>ui("[...document.querySelectorAll('.lyric.active small .karaoke-word')].reduce((sum,n)=>sum+Number(n.dataset.progress),0)");
+ async function centered(){await sleep(450);const m=await ui("(()=>{const r=document.querySelector('.lyric.active').getBoundingClientRect();return {center:r.top+r.height/2,target:innerHeight/2}})()");assert.ok(Math.abs(m.center-m.target)<2,'active lyric must be at screen center: '+JSON.stringify(m));}
+ await sample(11);await centered();
+ // Unanalysed opening lines still sweep as whole LRC lines. No artificial
+ // word timings are generated; real word timings replace this when available.
+ state.key='opening';state.index=0;state.lyrics=[{time:0,text:'第一句完整歌词',translation:'Opening line'},{time:4,text:'第二句完整歌词'},{time:8,text:'第三句完整歌词'}];await sample(2);
+ assert.equal(await ui("Number(document.querySelector('.lyric.active .original .karaoke-word').dataset.progress)"),.5);await centered();
+ state.index=1;await sample(5);assert.equal(await ui("Number(document.querySelector('.lyric.active .original .karaoke-word').dataset.progress)"),.25);await centered();
+ state.index=2;await sample(9);await centered();
+ w.setSize(1280,1024);await sleep(150);await centered();w.setSize(1600,900);await sleep(150);await centered();
+ state.key='japanese';state.index=1;state.lyrics=[{time:0,text:'昨日の風を覚えている',translation:'还记得昨天的风'},{time:10,text:'音楽と歩こう',translation:'让音乐陪伴每一步',words:[{text:'音楽と',time:10,duration:2},{text:'歩こう',time:14,duration:2}]},{time:20,text:'明日もここで',translation:'明天仍在这里'}];
  await sample(9);assert.equal(await progress(),0);await sample(11);assert.equal(await progress(),2);await sample(12);const rest=await progress();await sample(13);assert.equal(await progress(),rest);await sleep(150);assert.equal(await progress(),rest,'paused brightness advanced');
  await sample(15);assert.equal(await progress(),6);await sample(16);assert.equal(await progress(),8);await sample(10.2);assert.ok(Math.abs(await progress()-.4)<.001,'seek backwards rewinds brightness');
  assert.equal(await ui("[...document.querySelectorAll('.lyric.active .karaoke-word')].every(n=>getComputedStyle(n).opacity==='1'&&n.textContent.length>0)"),true,'unread original and translation must remain visible');

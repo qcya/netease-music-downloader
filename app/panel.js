@@ -17,7 +17,7 @@
  let alignmentRequest='',alignmentNotice='';
  function stopAlignment(){alignmentRequest='';alignmentNotice='';void bridge.cancelLyricAlignment?.().catch(()=>{});}
  async function requestWordTimings(){
-  if(!fullscreenActive||alignmentRequest||!lyrics.length||lyrics.every(l=>l.words?.length)||!bridge.alignLyrics)return;
+  if((!fullscreenActive&&!settings?.desktopLyricsEnabled)||alignmentRequest||!lyrics.length||lyrics.every(l=>l.words?.length)||!bridge.alignLyrics)return;
   const track=player.state().track;if(!track||track.key!==lyricsKey)return;
   const requestId=track.key+':'+lyricRequest+':'+Date.now();alignmentRequest=requestId;alignmentNotice='正在分析逐字歌词…';publishFullscreen();
   try{const result=await bridge.alignLyrics({requestId,source:track.local||track.fromLocal?{localFile:track.file||track.localFile}:{id:track.id},lines:lyrics,index:Math.max(0,lyricIndex)});
@@ -29,7 +29,7 @@
  }
  bridge.onLyricAlignment?.(message=>{if(message.requestId!==alignmentRequest||!lyrics[message.index])return;lyrics[message.index]={...lyrics[message.index],words:message.words};publishFullscreen();pushDesktopLyrics();});
  function lyricsState(){return {enabled:!!settings?.desktopLyricsEnabled,locked:!!settings?.floatingLyrics?.mouseThrough};}
- function updateLyricsButton(){const enabled=!!settings?.desktopLyricsEnabled,button=$('lyrics-toggle');button.classList.toggle('active',enabled);button.setAttribute('aria-pressed',String(enabled));button.title=enabled?'关闭桌面歌词':'打开桌面歌词';button.setAttribute('aria-label',button.title);document.dispatchEvent(new CustomEvent('music:lyrics-state',{detail:lyricsState()}));}
+ function updateLyricsButton(){const enabled=!!settings?.desktopLyricsEnabled,button=$('lyrics-toggle');button.classList.toggle('active',enabled);button.setAttribute('aria-pressed',String(enabled));button.title=enabled?'关闭桌面歌词':'打开桌面歌词';button.setAttribute('aria-label',button.title);document.dispatchEvent(new CustomEvent('music:lyrics-state',{detail:lyricsState()}));if(enabled)void requestWordTimings();else if(!fullscreenActive&&alignmentRequest)stopAlignment();}
  function pushDesktopLyrics(){
   if(!settings?.desktopLyricsEnabled)return;
   const track=player.state().track;let current=null;
@@ -108,7 +108,7 @@
    if(!lyrics.length){$('lyric-line').textContent='此刻，专注听旋律。';$('lyrics-list').append(element('p','empty','这首歌暂时没有同步歌词。'));return;}
    for(const [i,line] of lyrics.entries()){const button=element('button','lyric-item',line.text);if(line.translation)button.append(element('small','',line.translation));button.onclick=()=>{if(Number.isFinite(audio.duration)&&line.time<audio.duration)audio.currentTime=line.time;};button.dataset.index=i;$('lyrics-list').append(button);}
    syncLyrics();
-   if(fullscreenActive)void requestWordTimings();
+   if(fullscreenActive||settings?.desktopLyricsEnabled)void requestWordTimings();
   }catch{if(token===player.serial()&&request===lyricRequest){$('lyric-line').textContent='歌词暂时未连接，音乐继续。';lyricPhase='error';pushDesktopLyrics();}}
  }
  function syncLyrics(){
@@ -448,7 +448,7 @@
  async function toggleDesktopLyrics(){if(!settings)settings=await bridge.getSettings();if(settings.desktopLyricsEnabled){await bridge.closeFloatingLyrics();settings.desktopLyricsEnabled=false;}else{settings.desktopLyricsEnabled=true;await bridge.showFloatingLyrics();pushDesktopLyrics();}updateLyricsButton();return lyricsState();}
  $('lyrics-toggle').onclick=safe(toggleDesktopLyrics);
  bridge.onFloatingLyricsStatus(s=>{if(s.notice)status(s.notice);if(s.open===false&&settings){void bridge.getSettings().then(value=>{settings.desktopLyricsEnabled=value.desktopLyricsEnabled;updateLyricsButton();}).catch(()=>{});if(s.error)status(s.error,true);}});
- bridge.onFullscreenActive(active=>{fullscreenActive=active;if(!active)stopAlignment();publishFullscreen();if(active)void requestWordTimings();});
+ bridge.onFullscreenActive(active=>{fullscreenActive=active;if(!active&&!settings?.desktopLyricsEnabled)stopAlignment();publishFullscreen();if(active)void requestWordTimings();});
  bridge.onFullscreenControl(safe(message=>{
   if(message.action==='mode')return $('mode').click();
   if(message.action==='quality')return window.NeteaseDesktopHost.setQuality(message.value);

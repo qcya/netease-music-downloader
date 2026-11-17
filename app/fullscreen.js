@@ -9,8 +9,9 @@
  const wordClock=window.MusicWords.clock(paintWords);
  function paintWords(at){
   const line=model.lyrics?.[active],node=$('lyric-list').children[active];if(!line||!node)return;
-  window.KaraokeLyrics.paint(node.querySelector('.original'),line,at);
-  const translated=node.querySelector('small');if(translated)window.KaraokeLyrics.paintTranslation(translated,line,at);
+  const end=model.lyrics?.[active+1]?.time||model.duration;
+  window.KaraokeLyrics.paint(node.querySelector('.original'),line,at,end);
+  const translated=node.querySelector('small');if(translated)window.KaraokeLyrics.paintTranslation(translated,line,at,end);
  }
  function visibility(){const visible=sceneVisible&&!document.hidden;background.setVisible(visible);if(visible)wordClock.sample(model.time,model.playing);else wordClock.stop();}
  bridge.onVisibility?.(value=>{sceneVisible=!!value;visibility();});document.addEventListener('visibilitychange',visibility);
@@ -18,9 +19,10 @@
   const style=document.documentElement.style;
   for(const [name,value] of Object.entries({'--lyric-color':s.originalColor,'--translation-color':s.translationColor,'--glow':s.glow+'px','--shadow':s.shadow,'--lyric-size':s.fontSize*1.25+'px','--translation-size':s.translationSize*1.25+'px','--lyric-line-height':s.lineHeight,'--lyric-align':s.align}))style.setProperty(name,String(value));
   document.body.classList.toggle('hide-original',!s.showOriginal);document.body.classList.toggle('hide-translation',!s.showTranslation);
-  background.set(source);
+  background.set(source);requestAnimationFrame(follow);
  }).catch(()=>{$('background-status').hidden=false;$('background-status').textContent='背景设置读取失败，音乐播放不受影响。';});
- function follow(){const line=$('lyric-list').querySelector('.active');if(line&&Date.now()>=followAfter){$('lyrics').scrollTo({top:line.offsetTop-$('lyrics').offsetTop-$('lyrics').clientHeight/2+line.clientHeight/2,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}}
+ function follow(){const line=$('lyric-list').querySelector('.active');if(line&&Date.now()>=followAfter){const bounds=line.getBoundingClientRect();$('lyrics').scrollTo({top:$('lyrics').scrollTop+bounds.top+bounds.height/2-innerHeight/2,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});}}
+ document.fonts.ready.then(follow);
  bridge.onState(s=>{
   model=s;document.body.classList.toggle('playing',s.playing);$('title').textContent=s.title||'让音乐降落';$('artist').textContent=s.artist||'选择一首喜欢的歌';
   if($('cover').getAttribute('src')!==s.cover)$('cover').src=s.cover||'../assets/avatar.png';

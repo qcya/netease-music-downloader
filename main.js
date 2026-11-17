@@ -646,8 +646,9 @@ async function fetchLyrics(id, force=false) {
 
 const firstPositionPolicy=createFirstPositionPolicy({readState:()=>readJSON(path.join(app.getPath('userData'),'lyric-position-policy.json'),null),writeState:state=>writeJSONAtomic(path.join(app.getPath('userData'),'lyric-position-policy.json'),state),lock:()=>persistFloatingLyricsLock(true)});
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,onCloseRequest:()=>persistDesktopLyricsEnabled(false),onOpenSettings:()=>{topPanel.unfold();if(win&&!win.isDestroyed())win.webContents.send('lyrics:open-settings');},screen:require('electron').screen});
-const topPanel=createDesktopOverlay({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,ensureWindow:()=>createWindow(),getTheme:()=>config().playerTheme,getSaved:()=>readJSON(path.join(app.getPath('userData'),'overlay-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'overlay-layout.json'),prefs),onVisibility:updateIdlePower});
-const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,suspendPanel:()=>topPanel.suspend(),onHidden:()=>lyricAlignment.cancel(),restorePanel:()=>topPanel.unfold()});
+const startupNotice=require('./startup_notice').createStartupNotice({BrowserWindow,screen,shell});
+const topPanel=createDesktopOverlay({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,ensureWindow:()=>createWindow(),getTheme:()=>config().playerTheme,getSaved:()=>readJSON(path.join(app.getPath('userData'),'overlay-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'overlay-layout.json'),prefs),onVisibility:visible=>{if(visible)startupNotice.close();updateIdlePower(visible);}});
+const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,suspendPanel:()=>topPanel.suspend(),onHidden:()=>{if(!config().desktopLyricsEnabled)lyricAlignment.cancel();},restorePanel:()=>topPanel.unfold()});
 const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>portableStorage.cacheFile('recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 const popularPlaylists=require('./popular_playlists').createPopularPlaylists({fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 
@@ -930,7 +931,7 @@ app.whenReady().then(() => {
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可停止在线歌曲');
     lyricAlignment.cancel();playbackResolveVersion++;onlineMedia.stop();return true;
   });
-  ipcMain.handle('lyrics:align',(event,request)=>{assertMainSender(event);if(!fullscreenPlayer.isOpen())throw Error('请先打开全屏歌词');const source=request?.source;if(source?.localFile){const file=availableLocalTrack(source.localFile),stat=fs.statSync(file);request={...request,source:{localFile:source.localFile,size:stat.size,mtime:stat.mtimeMs}};}else{const [id]=songIds([source?.id]);if(onlineMedia.currentID()!==id)throw Error('歌曲已切换');request={...request,source:{id}};}return lyricAlignment.align(request);});
+  ipcMain.handle('lyrics:align',(event,request)=>{assertMainSender(event);if(!fullscreenPlayer.isOpen()&&!config().desktopLyricsEnabled)throw Error('请先打开歌词');const source=request?.source;if(source?.localFile){const file=availableLocalTrack(source.localFile),stat=fs.statSync(file);request={...request,source:{localFile:source.localFile,size:stat.size,mtime:stat.mtimeMs}};}else{const [id]=songIds([source?.id]);if(onlineMedia.currentID()!==id)throw Error('歌曲已切换');request={...request,source:{id}};}return lyricAlignment.align(request);});
   ipcMain.handle('lyrics:align-cancel',event=>{assertMainSender(event);lyricAlignment.cancel();return true;});
   ipcMain.handle('music:lyric-memory',async(event,id)=>{
     if(event?.sender&&event.sender!==win.webContents)throw Error('仅主播放器可读取在线歌词');
@@ -1048,9 +1049,11 @@ app.whenReady().then(() => {
   ipcMain.handle('local:covers',(event,names)=>{assertMainSender(event);return localCovers.get(names);});
   app.on('activate', () => topPanel.unfold());
   if(process.argv.includes('--show'))topPanel.unfold();
+  else if(!process.env.MUSIC_DOWNLOADER_TEST_USER_DATA)startupNotice.show();
 }).catch(e=>reportStartupFailure('Electron 初始化失败',e));
 }
 app.on('before-quit',()=>{
+  startupNotice.close();
   lyricAlignment.cancel();
   clearTimeout(idleReleaseTimer);globalShortcut?.unregister('Insert');
   exiting=true;

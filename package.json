@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "private": true,
   "description": "青春沿岸の音乐播放器：INS 覆盖层、网易云与桌面歌词",
   "main": "main.js",
@@ -68,6 +68,7 @@
       "desktop_overlay.js",
       "native_glass.js",
       "startup_settings.js",
+      "startup_notice.js",
       "portable_storage.js",
       "playback_session.js",
       "native_blur.js",

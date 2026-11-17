@@ -1,0 +1,11 @@
+'use strict';
+const {test}=require('node:test'),assert=require('node:assert/strict'),{EventEmitter}=require('node:events');
+test('startup notice never focuses the player, sounds once, and destroys its transient renderer',()=>{
+ const windows=[],timers=[],sounds=[];class Window extends EventEmitter{constructor(options){super();this.options=options;this.dead=false;this.shows=0;windows.push(this);}loadFile(file){this.file=file;return Promise.resolve();}isDestroyed(){return this.dead;}showInactive(){this.shows++;}destroy(){this.dead=true;this.emit('closed');}}
+ const service=require('../startup_notice').createStartupNotice({BrowserWindow:Window,screen:{getCursorScreenPoint:()=>({x:-500,y:100}),getDisplayNearestPoint:()=>({workArea:{x:-1920,y:0,width:1920,height:1040}})},shell:{beep:()=>sounds.push(1)},baseDir:__dirname,setTimer:(fn,ms)=>{const t={fn,ms,unref(){}};timers.push(t);return t;},clearTimer:t=>{t.cancelled=true;}});
+ service.show();assert.equal(windows.length,1);const w=windows[0];assert.equal(w.options.show,false);assert.equal(w.options.focusable,false);assert.equal(w.options.skipTaskbar,true);assert.ok(w.options.x>=-1920&&w.options.x+w.options.width<=0);assert.ok(w.options.height<150);w.emit('ready-to-show');assert.equal(w.shows,1);assert.equal(sounds.length,1);service.show();assert.equal(windows.length,1);assert.equal(sounds.length,1);assert.equal(timers.filter(t=>!t.cancelled).length,1);assert.ok(timers.at(-1).ms<=5000);timers.at(-1).fn();assert.equal(w.dead,true);service.close();assert.equal(w.dead,true);
+});
+test('opening the player before notification is ready cannot resurrect the notification',()=>{
+ let window;class Window extends EventEmitter{constructor(){super();window=this;this.dead=false;}loadFile(){return Promise.resolve();}isDestroyed(){return this.dead;}destroy(){this.dead=true;}showInactive(){throw Error('late notice became visible');}}
+ const service=require('../startup_notice').createStartupNotice({BrowserWindow:Window,screen:{getCursorScreenPoint:()=>({}),getDisplayNearestPoint:()=>({workArea:{x:0,y:0,width:400,height:600}})},shell:{beep(){throw Error('late beep');}},baseDir:__dirname});service.show();service.close();window.emit('ready-to-show');assert.equal(window.dead,true);
+});
