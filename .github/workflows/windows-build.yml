@@ -65,7 +65,7 @@ jobs:
           @{ downloadDir=(Join-Path $testDir 'music'); desktopLyricsEnabled=$false; disclaimerAcceptedVersion=1 } | ConvertTo-Json | Set-Content (Join-Path $testDir 'settings.json') -Encoding utf8
           $env:MUSIC_DOWNLOADER_TEST_USER_DATA = $testDir
           $env:MUSIC_DOWNLOADER_TEST_HIDE_WINDOWS = '1'
-          $p = Start-Process -FilePath (Resolve-Path $exe) -ArgumentList @('--remote-debugging-port=19273','--show') -WindowStyle Hidden -PassThru
+          $p = Start-Process -FilePath (Resolve-Path $exe) -ArgumentList @('--remote-debugging-port=19273','--show','--mute-audio','--disable-gpu') -WindowStyle Hidden -PassThru
           try {
             node scripts/verify_reference_package.js 19273 $testDir
             if ($LASTEXITCODE) { throw 'Packaged panel test failed' }
