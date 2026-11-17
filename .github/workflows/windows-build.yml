@@ -47,10 +47,10 @@ jobs:
           foreach ($script in @('verify_drag_performance.js','verify_neutral_glass.js','verify_overlay_runtime.js','verify_muonium_layout.js','verify_netease_hub.js','verify_account_panel.js','verify_reference_revision.js','verify_cloud_controls.js','verify_classic_fullscreen.js','verify_translation_captions.js','verify_fullscreen_idle.js')) {
             New-Item -ItemType Directory -Force .validation | Out-Null
             $log = Join-Path (Get-Location) ".validation/$script"
-            $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList "scripts/$script" -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput "$log.out.log" -RedirectStandardError "$log.err.log"
+            $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList @('scripts/run_electron_check.js',"scripts/$script") -WindowStyle Hidden -PassThru -Wait -RedirectStandardOutput "$log.out.log" -RedirectStandardError "$log.err.log"
             Get-Content "$log.out.log" -ErrorAction SilentlyContinue
             Get-Content "$log.err.log" -ErrorAction SilentlyContinue
-            if ($p.ExitCode) { throw "Integration test failed: $script" }
+            if ($p.ExitCode) { throw "Integration test failed: $script (exit $($p.ExitCode))" }
           }
       - name: Build extract-and-run ZIP
         env:
