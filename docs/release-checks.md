@@ -18,3 +18,7 @@
 发行包仍须由 `scripts/verify_distribution.py` 核对源码、离线模型哈希、接口清单与空白用户资料，并运行 `scripts/verify_reference_package.js` 检查实际 EXE。GitHub 附件发布前核对字节数及 SHA-256；这些步骤不能用“源码测试通过”替代。
 
 GitHub Windows 运行器没有正常的交互式 GPU 会话，隐藏 Electron 检查使用软件渲染。软件渲染时 Chromium 使用 layered-window 回退，不能断言 GPU 窗口样式；仍检查 HTCLIENT 命中与控件不透明度。非 layered 的生产窗口样式与桌面合成由本机 GPU 验证覆盖，不把服务端软件渲染作为视觉验收。
+
+最终交付：3.0.5 ZIP 已通过源码逐字节比对、实际 EXE 验证及离线模型哈希检查；桌面包与 GitHub 附件 SHA-256 均为 `a60b8b1234048fc02c97d2d01931f05b7bcbea308cec95c3b585c4c315aff046`。发行源码为 `a35a587dd7e36617a488f2a51a830d6267b8ee54`；其后的提交只维护测试和构建工具，未改变已发行的播放器实现。
+
+未解决的远端检查：Windows Actions 的隐藏窗口拖动压力脚本存在原生异常退出，重试仍出现 `0xC000041D`，未查明根因，不能宣称 Windows CI 全部通过。同脚本也曾在运行器通过 240 次原生批量移动，其他一轮运行已完成毛玻璃、闲置功耗和原版布局等检查；这些部分通过记录不能代替完整成功构建。本机隐藏窗口与实际发行 EXE 检查通过，仍需区别于这一远端失败。
