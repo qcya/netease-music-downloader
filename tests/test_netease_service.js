@@ -12,6 +12,12 @@ test('all exposed NetEase operations use checked-in upstream endpoint contracts'
  await assert.rejects(()=>service.request('playlist',{id:'https://evil.test'}),/编号/);
  await assert.rejects(()=>service.request('arbitraryCommand'),/操作/);
 });
+
+test('owned playlist deletion uses authenticated remove contract and validates IDs',async()=>{
+ const calls=[],service=createNeteaseService({client:{call(){throw Error('must require authentication')}},accountRequest:async(endpoint,params)=>{calls.push({endpoint,params});return {body:{code:200}};}});
+ await service.request('deletePlaylist',{id:'123'});assert.deepEqual(calls,[{endpoint:'/weapi/playlist/remove',params:{ids:'[123]'}}]);assert.equal(service.isWrite('deletePlaylist'),true);
+ await assert.rejects(()=>service.request('deletePlaylist',{id:'../123'}),/编号/);
+});
 test('account credential responses are stripped and auth failures stay failures',async()=>{
  const service=createNeteaseService({client:{call:async()=>({body:{code:200,cookie:'private',nested:{accessToken:'private',name:'ok'}}})},accountRequest:async()=>({body:{code:301}})});
  assert.deepEqual(await service.request('hot'),{code:200,nested:{name:'ok'}});

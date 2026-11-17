@@ -3,7 +3,7 @@
  * Copyright 2026 MuoniumPlayer Team, Apache License 2.0.
  * Adapted from NCMScreen.layout/getPlayerCornerRadius and
  * panels/NavigateBar.layout, PlaylistPanel.layout. Original Java sources,
- * LICENSE and NOTICE are retained in app/vendor/muonium. The Minecraft/Skija
+ * LICENSE and NOTICE are retained in upstream/muonium/ui-reference. The Minecraft/Skija
  * runtime is replaced by DOM layout and Windows desktop composition.
  */
 (function(){

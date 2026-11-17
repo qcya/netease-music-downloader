@@ -34,6 +34,14 @@ test('failed packaged HTML load surfaces diagnostic instead of indefinitely hidi
  assert.match(errors[0][0],/界面文件加载失败/);
  assert.match(errors[0][1],/ERR_FILE_NOT_FOUND/);
 });
+
+test('close callback may minimize a taskbar window without hiding it first',()=>{
+ const window=new Window();let prevented=false,minimized=false;
+ window.hide=()=>{throw Error('Hiding first would remove the taskbar window');};
+ wireMainWindow({window,app:{quit(){}},shouldHide:()=>true,onHide:()=>{minimized=true;},timeoutMs:100000});
+ window.emit('ready-to-show');window.emit('close',{preventDefault(){prevented=true;}});
+ assert.equal(prevented,true);assert.equal(minimized,true);
+});
 test('main bootstrap includes single instance activation, process termination and errors surfaced',()=>{
  const main=fs.readFileSync(path.join(__dirname,'..','main.js'),'utf8');
  const build=fs.readFileSync(path.join(__dirname,'..','.github/workflows/windows-build.yml'),'utf8');

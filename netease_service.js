@@ -24,6 +24,8 @@ const ops={
  likes:a=>['/weapi/song/like/get',{uid:id(a.uid)}],
  like:a=>['/weapi/radio/like',{trackId:id(a.id),like:a.like!==false,alg:'itembased',time:25}],
  subscribe:a=>['/weapi/playlist/'+(a.subscribe===false?'unsubscribe':'subscribe'),{id:id(a.id)}],
+ // Same authenticated WEAPI contract as the installed API's playlist_delete.
+ deletePlaylist:a=>['/weapi/playlist/remove',{ids:'['+id(a.id)+']'}],
  playlistTracks:a=>['/weapi/playlist/manipulate/tracks',{op:a.remove?'del':'add',pid:id(a.id),trackIds:JSON.stringify((a.ids||[]).slice(0,100).map(id)),imme:true}],
  podcastCategories:()=>['/weapi/djradio/category/get',{}],
  podcasts:a=>['/weapi/djradio/hot/v1',page(a)],
@@ -40,8 +42,8 @@ const ops={
  broadcastFavorites:()=>['/weapi/content/channel/collect/list',{contentType:'BROADCAST',limit:'99999',timeReverseOrder:true,startDate:'4762584922000'}],
  broadcastCollect:a=>['/weapi/content/interact/collect',{contentType:'BROADCAST',contentId:id(a.id),cancelCollect:a.collect===false}],
 };
-const auth=new Set(['dailyPlaylists','dailySongs','profile','userPlaylists','recent','cloud','fm','likes','like','subscribe','playlistTracks','subscribedPodcasts','podcastSubscribe','broadcastFavorites','broadcastCollect']);
-const writes=new Set(['like','subscribe','playlistTracks','podcastSubscribe','broadcastCollect']);
+const auth=new Set(['dailyPlaylists','dailySongs','profile','userPlaylists','recent','cloud','fm','likes','like','subscribe','deletePlaylist','playlistTracks','subscribedPodcasts','podcastSubscribe','broadcastFavorites','broadcastCollect']);
+const writes=new Set(['like','subscribe','deletePlaylist','playlistTracks','podcastSubscribe','broadcastCollect']);
 // Invoke the unmodified original CloudMusicApi methods whenever their public
 // signature covers the desktop operation. Search/detail batch pagination keeps
 // the original MuNeteaseApi transport so offset and ID lists remain explicit.

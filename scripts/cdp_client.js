@@ -7,5 +7,5 @@ async function connect(target){
  const run=async expression=>{const result=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true,userGesture:true});if(result.exceptionDetails)throw Error(result.exceptionDetails.exception?.description||result.exceptionDetails.text);return result.result.value;};
  return {send,run,close:()=>socket.close()};
 }
-const pages=async port=>fetch(`http://127.0.0.1:${port}/json`).then(r=>r.json());
+const pages=async port=>fetch(`http://127.0.0.1:${port}/json`,{signal:AbortSignal.timeout(5000)}).then(r=>r.json());
 module.exports={connect,pages};

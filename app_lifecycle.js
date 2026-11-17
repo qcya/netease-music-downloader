@@ -35,7 +35,7 @@ function wireMainWindow({window,app,onShown,onFailure,closeChildren,shouldHide=(
     fail('界面进程异常退出',new Error(details?.reason||'render-process-gone'));
   });
   window.on?.('close',event=>{
-    if(shown&&!failed&&shouldHide()){event?.preventDefault();window.hide();onHide?.();return;}
+    if(shown&&!failed&&shouldHide()){event?.preventDefault();if(onHide)onHide();else window.hide();return;}
     closeTools();
   });
   window.on?.('closed',()=>{

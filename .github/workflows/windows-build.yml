@@ -40,9 +40,11 @@ jobs:
           if ($LASTEXITCODE) { throw 'Node tests failed' }
           python -m pytest -q tests
           if ($LASTEXITCODE) { throw 'Python tests failed' }
+          npm run build:native
+          if ($LASTEXITCODE) { throw 'Native blur build failed' }
           npm run build:muonium
           if ($LASTEXITCODE) { throw 'Original NetEase backend build failed' }
-          foreach ($script in @('verify_neutral_glass.js','verify_overlay_runtime.js','verify_muonium_layout.js','verify_netease_hub.js','verify_account_panel.js','verify_reference_revision.js')) {
+          foreach ($script in @('verify_drag_performance.js','verify_neutral_glass.js','verify_overlay_runtime.js','verify_muonium_layout.js','verify_netease_hub.js','verify_account_panel.js','verify_reference_revision.js','verify_cloud_controls.js','verify_classic_fullscreen.js','verify_translation_captions.js','verify_fullscreen_idle.js')) {
             $p = Start-Process node_modules/electron/dist/electron.exe -ArgumentList "scripts/$script" -WindowStyle Hidden -PassThru -Wait
             if ($p.ExitCode) { throw "Integration test failed: $script" }
           }
@@ -68,16 +70,16 @@ jobs:
             if (!$p.HasExited) { Stop-Process -Id $p.Id -Force }
             Copy-Item (Join-Path $testDir 'packaged-result.json') packaged-result.json -ErrorAction SilentlyContinue
           }
-          $archive = 'dist/青春沿岸の音乐播放器-2.2.0-preview.10-win64.zip'
+          $archive = 'dist/青春沿岸の音乐播放器-3.0.5-win64.zip'
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText("$archive.sha256", "$hash  $(Split-Path $archive -Leaf)" + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Orbit-Windows-2.2.0-preview.10
+          name: Orbit-Windows-3.0.5
           path: |
-            dist/青春沿岸の音乐播放器-2.2.0-preview.10-win64.zip
-            dist/青春沿岸の音乐播放器-2.2.0-preview.10-win64.zip.sha256
+            dist/青春沿岸の音乐播放器-3.0.5-win64.zip
+            dist/青春沿岸の音乐播放器-3.0.5-win64.zip.sha256
             .validation/panel-result.json
             .validation/panel-*.png
             packaged-result.json

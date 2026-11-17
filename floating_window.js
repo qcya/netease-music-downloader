@@ -102,6 +102,8 @@ function createFloatingLyricsController({BrowserWindow,Menu,baseDir,getMainWindo
  function update(info){
   if(!info||typeof info!=='object')return false;
   lastText={title:String(info.title||'').slice(0,160),line:String(info.line||'').slice(0,500),translation:String(info.translation||'').slice(0,500)};
+  lastText.words=Array.isArray(info.words)?info.words.slice(0,500).filter(w=>w&&typeof w.text==='string'&&Number.isFinite(w.time)&&Number.isFinite(w.duration)).map(w=>({text:w.text.slice(0,80),time:Math.max(0,w.time),duration:Math.max(0,Math.min(1200,w.duration))})):[];
+  lastText.time=Math.max(0,Number(info.time)||0);lastText.playing=!!info.playing;
   if(!exists())return true;
   if(!loaded)return true;
   floating.webContents.send('lyrics:text',lastText);

@@ -665,7 +665,7 @@ def fetch_audio(api: MusicAPI, candidate: dict, destination: Path, requested: st
             # JSON / HTML / 被拒绝响应都不写成所谓 MP3。
             api.errors.append(f"{candidate['source']} 返回非音频内容")
             return None
-        if requested == "lossless" and kind not in ("flac", "wav"):
+        if requested == "lossless" and kind != "flac":
             return None
         if requested in ("mp3", "preview") and kind != "mp3":
             return None
@@ -749,7 +749,7 @@ def download_one(api: MusicAPI, song: dict, out_dir: Path, quality: str, *, over
             pass
     # 使用字符串比较，不用 glob：文件名含有 [歌曲ID]，glob 会把中括号当通配字符。
     present = [str(p) for p in out_dir.iterdir() if p.is_file() and p.name.startswith(prefix + ".") and p.suffix.lower() in (".flac", ".mp3", ".wav", ".ogg", ".m4a", ".aac")]
-    suitable = [p for p in present if quality == "best" or (quality == "lossless" and Path(p).suffix.lower() in (".flac", ".wav")) or (quality in ("mp3", "preview") and Path(p).suffix.lower() == ".mp3")]
+    suitable = [p for p in present if quality == "best" or (quality == "lossless" and Path(p).suffix.lower() == ".flac") or (quality in ("mp3", "preview") and Path(p).suffix.lower() == ".mp3")]
     # best 模式不能将已存在的低音质 MP3 当成最高音质。
     # 已存在真实无损文件才直接跳过；旧 MP3 尝试升级，失败时保留原文件。
     old_fallback = suitable[0] if suitable else None

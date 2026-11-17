@@ -9,7 +9,7 @@ test('first launch enables unlocked lyrics; stored lock, switch and negative-mon
  const code=source.slice(source.indexOf('function config()'),source.indexOf('function ensureData()'));
  const {normalizeLyrics}=require('../lyric_preferences'),{normalizePosition}=require('../lyric_position');
  let stored=null;
- const config=vm.runInNewContext(code+';config',{fs:{readFileSync(){if(stored===null)throw Error('ENOENT');return JSON.stringify(stored)}},path,portableStorage:{normalizeSettings:x=>x},getDefaultDir:()=>'/music',configFile:()=>'/settings',normalizeLyrics,normalizePosition,BACKGROUND_EXTS:new Set()});
+ const config=vm.runInNewContext(code+';config',{fs:{readFileSync(){if(stored===null)throw Error('ENOENT');return JSON.stringify(stored)}},path,portableStorage:{normalizeSettings:x=>x},getDefaultDir:()=>'/music',configFile:()=>'/settings',normalizeLyrics,normalizePosition,require:name=>require('../player_theme'),BACKGROUND_EXTS:new Set()});
  assert.equal(config().desktopLyricsEnabled,true,'new installation must show desktop lyrics');
  assert.equal(config().floatingLyrics.mouseThrough,false);
  stored={floatingLyrics:{mouseThrough:true},floatingLyricsPosition:{x:-600,y:180}};
@@ -26,7 +26,7 @@ test('availability does not interrupt current playback; no audio request, no tri
  }});
  const playing=await s.open('9');
  assert.equal(typeof s.availability,'function','availability must be a separate non-playing operation');
- const rows=await s.availability(['1','2','3']);
+ calls.length=0;const rows=await s.availability(['1','2','3']);
  assert.deepEqual(rows.map(r=>r.state),['available','unavailable','unavailable']);
  assert.ok(rows.every(r=>!Object.hasOwn(r,'url')),'never send expiring source URLs to the UI');
  assert.equal(s.currentURL(),playing.url,'checking cards cannot stop playing song');

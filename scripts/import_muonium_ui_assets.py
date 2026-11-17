@@ -12,6 +12,6 @@ manifest={}
 for name in names:
     src=source/name;dest=target/src.name;shutil.copy2(src,dest);manifest[dest.name]={'upstream':name,'sha256':hashlib.sha256(src.read_bytes()).hexdigest()}
 for name in ['LICENSE','NOTICE']:
-    shutil.copy2(root/'app/vendor/muonium'/name,target/name)
+    shutil.copy2(root/'upstream/muonium/ui-reference'/name,target/name)
 (target/'sources.json').write_text(json.dumps({'commit':'9b4cc7e7bd143315da716075a6d024a0d4c0c81b','assets':manifest},indent=2),encoding='utf-8')
 print(f'Imported {len(manifest)} original UI assets')

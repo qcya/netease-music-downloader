@@ -1,0 +1,30 @@
+'use strict';
+const {app,BrowserWindow,ipcMain}=require('electron');
+process.on('uncaughtException',e=>{console.error(e.stack);app.exit(1);});process.on('unhandledRejection',e=>{console.error(e.stack||e);app.exit(1);});
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const root=path.join(__dirname,'..'),dir=path.join(root,'.validation','classic-303-'+Date.now());fs.mkdirSync(dir,{recursive:true});app.setPath('userData',dir);app.commandLine.appendSwitch('mute-audio');
+const controls=[];ipcMain.handle('fullscreen:preferences',()=>({lyrics:require('../lyric_preferences').normalizeLyrics(),background:{kind:'black'}}));ipcMain.on('fullscreen:control',(_e,m)=>controls.push(m));
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+app.whenReady().then(async()=>{
+ const w=new BrowserWindow({x:-12000,y:-12000,width:1600,height:900,show:false,frame:false,skipTaskbar:true,webPreferences:{preload:path.join(root,'fullscreen-preload.js'),sandbox:true,contextIsolation:true,backgroundThrottling:false,offscreen:true}});
+ const errors=[];w.webContents.on('console-message',(_e,level,message)=>{if(level===3)errors.push(message);});
+ await w.loadFile(path.join(root,'app/fullscreen.html'));const ui=s=>w.webContents.executeJavaScript(s,true);await ui('document.fonts.ready.then(()=>true)');
+ const state={key:'japanese',title:'双语歌词验证',artist:'自有测试文本',cover:'../assets/placeholder-cover.svg',index:1,playing:false,time:11,duration:30,volume:.5,lyrics:[{time:0,text:'昨日の風を覚えている',translation:'还记得昨天的风'},{time:10,text:'音楽と歩こう',translation:'让音乐陪伴每一步',words:[{text:'音楽と',time:10,duration:2},{text:'歩こう',time:14,duration:2}]},{time:20,text:'明日もここで',translation:'明天仍在这里'}]};
+ async function sample(time){state.time=time;w.webContents.send('fullscreen:state',state);await sleep(70);}
+ const progress=()=>ui("[...document.querySelectorAll('.lyric.active small .karaoke-word')].reduce((sum,n)=>sum+Number(n.dataset.progress),0)");
+ await sample(9);assert.equal(await progress(),0);await sample(11);assert.equal(await progress(),2);await sample(12);const rest=await progress();await sample(13);assert.equal(await progress(),rest);await sleep(150);assert.equal(await progress(),rest,'paused brightness advanced');
+ await sample(15);assert.equal(await progress(),6);await sample(16);assert.equal(await progress(),8);await sample(10.2);assert.ok(Math.abs(await progress()-.4)<.001,'seek backwards rewinds brightness');
+ assert.equal(await ui("[...document.querySelectorAll('.lyric.active .karaoke-word')].every(n=>getComputedStyle(n).opacity==='1'&&n.textContent.length>0)"),true,'unread original and translation must remain visible');
+ assert.equal(await ui("document.querySelector('.lyric.active .original').textContent"),state.lyrics[1].text);
+ assert.equal(await ui("document.getElementById('background-video').getAttribute('src')"),null);assert.equal(await ui("document.getElementById('background-image').getAttribute('src')"),null);assert.equal(await ui("getComputedStyle(document.documentElement).backgroundColor"),'rgb(0, 0, 0)');
+ assert.equal(await ui("document.querySelectorAll('.lyric').length"),3);assert.equal(await ui("document.querySelectorAll('.kinetic-stage,[data-player-bar],kbd').length"),0);assert.match(await ui("document.getElementById('close').textContent"),/返回播放器/);
+ await sample(15);await sleep(400);const screenshot=path.join(dir,'全屏播放器.png');fs.writeFileSync(screenshot,(await w.webContents.capturePage()).toPNG());
+ state.key='english';state.index=0;state.lyrics=[{time:10,text:'Let music guide us',translation:'e\u0301👨‍👩‍👧‍👦中',words:[{text:'Let ',time:10,duration:1},{text:'music ',time:11,duration:1},{text:'guide us',time:12,duration:1}]}];await sample(11.5);
+ assert.equal(await ui("document.querySelectorAll('.lyric.active small .karaoke-word').length"),3);assert.equal(await progress(),1.5);assert.deepEqual(await ui("[...document.querySelectorAll('.lyric.active small .karaoke-word')].map(n=>n.textContent)"),['e\u0301','👨‍👩‍👧‍👦','中']);
+ assert.equal(await ui("[...document.querySelectorAll('.lyric.active .original .karaoke-word')].map(n=>n.textContent).join('')"),'Let music guide us');assert.equal(await ui("Number(document.querySelectorAll('.lyric.active .original .karaoke-word')[1].dataset.progress)"),.5);
+ state.playing=true;await sample(11.5);assert.match(await ui("document.getElementById('toggle-icon').getAttribute('d')"),/M8 5h3/);state.playing=false;await sample(11.5);
+ for(const id of ['toggle','previous','next','retry-lyrics'])await ui(`document.getElementById('${id}').click()`);
+ await ui("document.getElementById('seek').value=12;document.getElementById('seek').dispatchEvent(new Event('change'));document.getElementById('volume').value=.4;document.getElementById('volume').dispatchEvent(new Event('input'));document.querySelector('.lyric').click();document.getElementById('close').click()");await sleep(70);
+ for(const action of ['toggle','previous','next','retry-lyrics','seek','volume','close'])assert.ok(controls.some(c=>c.action===action),action);
+ assert.equal(w.isVisible(),false);assert.deepEqual(errors,[]);w.destroy();console.log(JSON.stringify({ok:true,screenshot,checks:['original full-screen layout','black with no default media','Japanese/English original and translation','whole Unicode graphemes','full original/translation remain visible; brightness pause, seek and rests','classic playback controls','hidden window only']}));app.quit();
+}).catch(e=>{console.error(e.stack);app.exit(1);});

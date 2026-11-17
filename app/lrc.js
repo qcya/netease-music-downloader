@@ -42,7 +42,22 @@
     }
     return rows;
   }
-  const api = Object.freeze({parseLrc,splitBilingual});
+  // NetEase YRC: [line-start-ms,duration-ms](word-start-ms,duration-ms,flag)text.
+  // Uses the same absolute word timestamps as upstream LyricParser (Apache-2.0).
+  function parseLyrics(text,translated='',yrc=''){
+    const ordinary=parseLrc(text,translated),translations=parseLrc(translated),rows=[];
+    const offset=Number(/\[offset\s*:\s*(-?\d+)\]/i.exec(yrc)?.[1]||0)/1000;
+    for(const raw of String(yrc).split(/\r?\n/)){
+      const line=/^\[(\d+),(\d+)\](.*)$/.exec(raw.trim());if(!line)continue;
+      const tokens=[...line[3].matchAll(/\((\d+),(\d+),\d+\)/g)];if(!tokens.length||tokens.length>500)continue;
+      const words=tokens.map((m,i)=>({time:Math.max(0,Number(m[1])/1000+offset),duration:Math.max(0,Number(m[2])/1000),text:line[3].slice(m.index+m[0].length,tokens[i+1]?.index)})).filter(w=>w.text);
+      const time=Math.max(0,Number(line[1])/1000+offset),original=words.map(w=>w.text).join('');if(!original||original.length>2000)continue;
+      const match=translations.concat(ordinary.filter(r=>r.translation)).map(r=>({r,d:Math.abs(r.time-time)})).filter(x=>x.d<=.8).sort((a,b)=>a.d-b.d)[0]?.r;
+      rows.push({time,duration:Number(line[2])/1000,text:original,words,translation:match?(match.translation||match.text):''});
+    }
+    return rows.length?rows.sort((a,b)=>a.time-b.time):ordinary;
+  }
+  const api = Object.freeze({parseLrc,parseLyrics,splitBilingual});
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.MusicLRC = api;
 })(typeof window !== 'undefined' ? window : null);

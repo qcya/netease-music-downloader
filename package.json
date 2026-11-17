@@ -1,16 +1,18 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "2.2.0-preview.10",
+  "version": "3.0.5",
   "private": true,
   "description": "青春沿岸の音乐播放器：INS 覆盖层、网易云与桌面歌词",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "npm run check && node scripts/write_build_info.js && npm run build:backend && npm run build:muonium && electron-builder --win zip --x64",
+    "build:win": "npm run check && node scripts/write_build_info.js && npm run build:native && npm run build:backend && npm run build:muonium && npm run build:lyric && electron-builder --win zip --x64",
     "check": "node scripts/check_js.js",
     "build:backend": "py -3.12 scripts/build_backend.py",
     "test": "node --test tests/*.js",
-    "build:muonium": "py -3.12 scripts/build_muonium_backend.py"
+    "build:muonium": "py -3.12 scripts/build_muonium_backend.py",
+    "build:native": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build_native.ps1",
+    "build:lyric": "py -3.12 scripts/build_lyric_aligner.py"
   },
   "devDependencies": {
     "electron": "37.3.1",
@@ -67,7 +69,12 @@
       "native_glass.js",
       "startup_settings.js",
       "portable_storage.js",
-      "playback_session.js"
+      "playback_session.js",
+      "native_blur.js",
+      "player_theme.js",
+      "audio_quality.js",
+      "window_stack.js",
+      "lyric_alignment.js"
     ],
     "extraResources": [
       {
@@ -85,6 +92,14 @@
       {
         "from": "backend/muonium",
         "to": "backend/muonium"
+      },
+      {
+        "from": "backend/neutral_composition.dll",
+        "to": "backend/neutral_composition.dll"
+      },
+      {
+        "from": "backend/lyric-aligner",
+        "to": "backend/lyric-aligner"
       }
     ],
     "win": {

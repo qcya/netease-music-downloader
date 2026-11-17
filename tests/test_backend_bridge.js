@@ -196,4 +196,9 @@ test('Electron IPC ↔ Python real CLI: search, playlist, download, local files 
   assert.deepEqual((await invoke('playlists:list'))[0].tracks,[]);
   assert.ok(!(await invoke('local:list')).some(file=>file.name==='[歌单] '+originalFile));
 
+  for(const [quality,extension]of [['mp3','.mp3'],['lossless','.flac']]){
+    const directory=path.join(temp,'format-'+quality);await invoke('settings:set',{downloadDir:directory,quality,apiBases:[`http://127.0.0.1:${server.address().port}`]});assert.equal((await invoke('settings:get')).quality,quality);
+    const actual=await invoke('music:download',['12345']);assert.equal(actual.ok,true,JSON.stringify(actual));assert.equal(path.extname(actual.results[0].path),extension,'requested format must reach real Python CLI');
+  }
+
 });

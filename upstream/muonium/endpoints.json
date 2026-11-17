@@ -46,6 +46,7 @@
     "/weapi/playlist/",
     "/weapi/playlist/list",
     "/weapi/playlist/manipulate/tracks",
+    "/weapi/playlist/remove",
     "/weapi/playlist/subscribe",
     "/weapi/playlist/unsubscribe",
     "/weapi/playlist/update/playcount",

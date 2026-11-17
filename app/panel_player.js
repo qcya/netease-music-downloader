@@ -22,7 +22,7 @@
     // Catalog rows can contain a previous playback source. Reset transport facts
     // before applying the new source so local shortcuts and network streams do
     // not inherit one another's origin, trial or quality claims.
-    const sourceDefaults={fromLocal:false,localFile:null,actualQuality:null,lossless:false,format:null,bitrate:null,qualityFallback:false,previewOnly:false,trialSeconds:0,streaming:false,fromCache:false};
+    const sourceDefaults={fromLocal:false,localFile:null,actualQuality:null,qualityVerified:false,reportedQuality:null,sampleRate:null,bitDepth:null,lossless:false,format:null,bitrate:null,qualityFallback:false,previewOnly:false,trialSeconds:0,streaming:false,fromCache:false};
     track={...latest,...sourceDefaults,...source,id:source.id||latest.id||item.id,name:latest.name,artists:latest.artists,key:item.key,local:item.local,file:item.file};
     if(item.local&&latest.cover_url)track.cover_url=latest.cover_url;
     catalog.set(item.key,track);

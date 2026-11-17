@@ -5,13 +5,19 @@ const {createOnlineMedia}=require('../online_media');
 const {createPlayer}=require('../app/panel_player');
 const cdn='https://m7.music.126.net/test.mp3';
 const json=data=>new Response(JSON.stringify(data));
+function flacBytes(){const b=Buffer.alloc(42);b.write('fLaC');b.writeUIntBE(34,5,3);b.writeBigUInt64BE((96000n<<44n)|(23n<<36n),18);return b;}
+const mp3Bytes=()=>new Response(Buffer.from([255,251,224,100]));
+test('an API advertising FLAC cannot label a real MP3 stream as lossless',async()=>{
+ const media=createOnlineMedia({getAuthState:()=>({enabled:true,revision:1}),authLookup:async id=>({data:[{id,url:cdn,type:'flac',level:'lossless'}]}),fetchImpl:async()=>mp3Bytes()});
+ const source=await media.open('1',{quality:'lossless'});assert.equal(source.actualQuality,'exhigh');assert.equal(source.format,'mp3');assert.equal(source.lossless,false);assert.equal(source.qualityVerified,true);media.close();
+});
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
 test('requested quality reaches the authenticated method and actual FLAC quality is reported',async()=>{
  const calls=[];
  const media=createOnlineMedia({getAuthState:()=>({enabled:true,revision:1}),authLookup:async(id,level)=>{
   calls.push([id,level]);return {data:[{id,url:cdn,type:'flac',level:'hires'}]};
- },fetchImpl:async()=>{throw Error('public lookup must not run');}});
+ },fetchImpl:async url=>{assert.equal(url,cdn);return new Response(flacBytes());}});
  const row=await media.open('1',{quality:'hires'});
  assert.deepEqual(calls,[['1','hires']]);assert.equal(row.requestedQuality,'hires');assert.equal(row.actualQuality,'hires');assert.equal(row.lossless,true);assert.equal(row.qualityFallback,false);media.close();
 });
@@ -20,9 +26,9 @@ test('desired public quality is tried before a lower authenticated fallback, wit
  const calls=[];
  const media=createOnlineMedia({getBases:()=>['https://public.example'],getAuthState:()=>({enabled:true,revision:1}),
   authLookup:async(id,level)=>{calls.push('auth:'+level);return {data:[{id,url:null}]};},
-  fetchImpl:async(url,options)=>{calls.push(String(url));assert.equal(options.credentials,'omit');assert.equal(options.headers.Cookie,undefined);return json({data:[{id:1,url:cdn,type:'mp3',level:'exhigh',br:320000}]});}});
+  fetchImpl:async(url,options)=>{calls.push(String(url));if(String(url)===cdn)return mp3Bytes();assert.equal(options.credentials,'omit');assert.equal(options.headers.Cookie,undefined);return json({data:[{id:1,url:cdn,type:'mp3',level:'exhigh',br:320000}]});}});
  const row=await media.open('1',{quality:'exhigh'});assert.equal(row.actualQuality,'exhigh');assert.equal(row.lossless,false);
- assert.equal(calls.length,2);assert.equal(calls[0],'auth:exhigh');assert.match(calls[1],/level=exhigh/);media.close();
+ assert.equal(calls.length,3);assert.equal(calls[2],cdn);assert.equal(calls[0],'auth:exhigh');assert.match(calls[1],/level=exhigh/);media.close();
 });
 
 test('quality cache and pending keys never reuse a standard card lookup for lossless',async()=>{
@@ -40,7 +46,7 @@ test('missing requested sources explicitly fall back and never label an MP3 as l
  const levels=[];
  const media=createOnlineMedia({getAuthState:()=>({enabled:true,revision:1}),authLookup:async(id,level)=>{
   levels.push(level);return {data:[{id,url:level==='exhigh'?cdn:null,type:'mp3',br:320000}]};
- },fetchImpl:async()=>json({data:[]})});
+ },fetchImpl:async()=>mp3Bytes()});
  const row=await media.open('1',{quality:'lossless'});assert.deepEqual(levels,['lossless','exhigh']);
  assert.equal(row.requestedQuality,'lossless');assert.equal(row.actualQuality,'exhigh');assert.equal(row.lossless,false);assert.equal(row.qualityFallback,true);media.close();
  assert.equal(qualityMetadata({level:'lossless',type:'mp3'},'lossless').actualQuality,null);
