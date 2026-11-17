@@ -40,11 +40,12 @@ jobs:
             echo "::error::No latest release; refusing to delete anything."
             exit 1
           fi
-          # Never purge usable older builds unless the release being kept
-          # actually has the expected downloadable standalone EXE.
-          exe_count="$(gh api "repos/${REPO}/releases/tags/${current}" --jq '[.assets[] | select(.name | endswith("-portable.exe"))] | length')"
-          if [[ "$exe_count" -lt 1 ]]; then
-            echo "::error::Latest release lacks a portable EXE; refusing cleanup."
+          # The current player is an extract-and-run folder ZIP, with its
+          # model/runtime and checksum. Do not expect the removed single EXE.
+          zip_count="$(gh api "repos/${REPO}/releases/tags/${current}" --jq '[.assets[] | select(.state == "uploaded" and .size > 0 and (.name | endswith("-win64.zip")))] | length')"
+          hash_count="$(gh api "repos/${REPO}/releases/tags/${current}" --jq '[.assets[] | select(.state == "uploaded" and .size > 0 and (.name | endswith("-win64.zip.sha256")))] | length')"
+          if [[ "$zip_count" -lt 1 || "$hash_count" -lt 1 ]]; then
+            echo "::error::Latest release lacks a folder ZIP or checksum; refusing cleanup."
             exit 1
           fi
           echo "Keeping latest release: $current"

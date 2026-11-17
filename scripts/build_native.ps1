@@ -12,6 +12,6 @@ $env:LIB=@("$vc/lib/x64","$sdk/Lib/$version/ucrt/x64","$sdk/Lib/$version/um/x64"
 New-Item -ItemType Directory -Force (Join-Path $root 'build/native'),(Join-Path $root 'backend') | Out-Null
 Push-Location (Join-Path $root 'build/native')
 try{
- & "$vc/bin/Hostx64/x64/cl.exe" /nologo /utf-8 /std:c++17 /EHsc /MT /LD /O2 (Join-Path $root 'native/neutral_composition.cpp') /Foneutral_composition.obj "/Fe$root/backend/neutral_composition.dll" /link windowsapp.lib CoreMessaging.lib dwmapi.lib user32.lib d2d1.lib dxguid.lib
+ & "$vc/bin/Hostx64/x64/cl.exe" /nologo /utf-8 /std:c++20 /EHsc /MT /LD /O2 (Join-Path $root 'native/neutral_composition.cpp') /Foneutral_composition.obj "/Fe$root/backend/neutral_composition.dll" /link windowsapp.lib CoreMessaging.lib dwmapi.lib user32.lib d2d1.lib dxguid.lib
  if($LASTEXITCODE){throw 'Native blur compilation failed.'}
 }finally{Pop-Location}
