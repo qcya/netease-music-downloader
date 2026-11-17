@@ -1,10 +1,21 @@
 # 青春沿岸の音乐播放器
 
-适用于 Windows 的桌面播放器。当前版本 **3.0.6**。本仓库不是网易云官方客户端。
+适用于 Windows 的桌面播放器。当前版本 **3.0.7**。本仓库不是网易云官方客户端。
+
+## Agent 技能与歌曲下载
+
+发行文件夹内含 `AGENTS.md`、`SKILL.md`、`skills/netease-music-downloader/` 与 `agent.cmd`。把整个解压目录提供给 Agent 后，它可以先读项目约定和网易云技能，再从随包后端搜索、查询、下载歌曲或预览歌单；无需安装 Python、Node，也不需要打开播放器界面。
+
+```powershell
+.\agent.cmd search --query "yellow 神山羊" --limit 10
+.\agent.cmd download --id 33894312 --quality best
+```
+
+搜索只返回候选；有多个结果时让用户选定后再下载。默认音乐保存到包内 `下载/`，Agent 的搜索状态与可选 API 连接信息在 `缓存/agent/`。若 Agent 需要 HTTP，可按 [技能 API 说明](skills/netease-music-downloader/references/API.md) 临时启动 `agent.cmd serve --port 0`。API 只绑定本机回环地址，需要随机令牌，闲置五分钟会退出；播放器本身不会自动开启 API。
 
 ## 开始使用
 
-1. 将 `青春沿岸の音乐播放器-3.0.6-win64.zip` 完整解压到可写目录，运行文件夹中的播放器 EXE。保留旁边的资源和运行库；不要只复制 EXE，也不要直接在压缩包内运行。此版本提供文件夹 ZIP，不使用安装器或自解压单文件。
+1. 将 `青春沿岸の音乐播放器-3.0.7-win64.zip` 完整解压到可写目录，运行文件夹中的播放器 EXE。保留旁边的资源和运行库；不要只复制 EXE，也不要直接在压缩包内运行。此版本提供文件夹 ZIP，不使用安装器或自解压单文件。
 2. 默认在后台和托盘待命，启动时顶部短暂提示并响一声，提示结束后不保留窗口。按 **INS** 打开或最小化播放器，最小化时音乐继续播放。播放器是普通任务栏窗口，不置顶；右上角关闭按钮同样只最小化。需要退出时，从托盘菜单选择“退出播放器”。运行新版前先退出旧实例。
 3. 拖动窗口顶部整行的空白区域移动窗口（搜索、刷新、返回按钮除外），右下角可调整尺寸。窗口可以部分移出屏幕或越过任务栏，位置与尺寸会保存。
 4. 左侧应用图标和名称下方可以切换搜索“歌曲”或“歌单”。主页显示公开推荐与热门歌单封面，点击封面进入歌单；“推荐歌单”旁的刷新图标可重新获取歌单。
@@ -113,9 +124,10 @@ npm run build:win
 | `app/fullscreen.*`、`fullscreen_player.js` | 独立全屏歌词，同步主播放器状态 |
 | `app/floating-lyrics.*`、`floating_window.js` | 桌面歌词、拖动与锁定 |
 | `assets/` | 应用图标、背景、固定字体和上游图标资源 |
-| `skill/` | 随程序打包的下载后端 |
-| `skill/scripts/`、`local_covers.js` | Python 下载、音频处理和本地封面 |
-| `skill/references/`、`skill/agents/` | 后端说明与 Agent Skill 配置 |
+| `skills/netease-music-downloader/` | 可直接交给任意 Agent 的技能说明、元数据与本机 API 文档 |
+| `agent.cmd`、`skill/scripts/` | 无需额外安装 Python 的随包命令行和 HTTP 后端 |
+| `skill/` | 构建随包下载后端所用的 Python 源码、依赖和实现说明 |
+| `local_covers.js` | 本地音频封面读取 |
 | `.github/workflows/` | Windows 构建和验收 |
 | `scripts/`、`tests/` | 构建、隔离夹具及回归验证 |
 | `docs/development.md`、`docs/troubleshooting.md` | 架构与故障排查 |

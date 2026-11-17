@@ -868,6 +868,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-dir", type=Path, default=STATE_DIR)
     parser.add_argument("--timeout", type=int, default=12)
     sub = parser.add_subparsers(dest="command", required=False)
+    serve = sub.add_parser("serve", help="按需启动仅本机可访问的 Agent HTTP API")
+    serve.add_argument("--port", type=int, default=0, help="监听端口；0 为自动选择空闲端口")
+    serve.add_argument("--idle-timeout", type=int, default=300, help="空闲退出秒数；0 表示不自动退出")
+    serve.add_argument("--connection-file", type=Path, help="连接信息保存位置；不含 Cookie")
     d = sub.add_parser("doctor", help="逐个检查 API 可用性")
     covers = sub.add_parser("local-covers", help="读取本地歌曲嵌入的封面")
     covers.add_argument("--file", action="append", required=True)
@@ -905,8 +909,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.capabilities:
         emit({"ok": True, "skill": APP_NAME, "schema_version": 1,
-              "commands": ["doctor", "search", "song", "lyric", "preview-source", "download", "select", "playlist", "playlist-download"],
+              "commands": ["doctor", "search", "song", "lyric", "preview-source", "download", "select", "playlist", "playlist-download", "serve"],
               "audio_qualities": ["best", "lossless", "mp3", "preview"],
+              "agent_http_api": {"optional": True, "bind": "127.0.0.1", "default_port": 0, "auth": "random bearer token in the local connection file", "idle_timeout_seconds": 300},
               "stdout": "one UTF-8 JSON object", "progress": "stderr",
               "exit_codes": {"0": "success", "1": "partial/unavailable", "2": "invalid request"},
               "note": "Results subject to third-party availability and song rights; do not fabricate URLs."})
@@ -926,6 +931,30 @@ def main(argv: list[str] | None = None) -> int:
     bases = args.api_base or ([x.strip() for x in os.environ.get("NETEASE_API_BASE_URL", "").split(",") if x.strip()] or None)
     if bases and not all(urlparse(b).scheme in ("https", "http") and urlparse(b).netloc for b in bases):
         raise MusicError("API 基址必须是完整的 http(s) URL")
+    if args.command == "serve":
+        from agent_api import create_server, run_server, write_connection
+        if args.idle_timeout < 0:
+            raise MusicError("空闲退出秒数不能小于 0")
+        connection_file = (args.connection_file or (args.state_dir / "agent-api" / "connection.json")).expanduser()
+        server = create_server(port=args.port, state_dir=args.state_dir, out_dir=DEFAULT_OUT,
+                               api_bases=bases, request_timeout=args.timeout)
+        try:
+            connection_file = write_connection(server, connection_file, idle_timeout=args.idle_timeout)
+            emit({"ok": True, "service": "netease-music-agent-api", "url": f"http://127.0.0.1:{server.server_port}",
+                  "connection_file": str(connection_file), "bind": "127.0.0.1", "idle_timeout_seconds": args.idle_timeout,
+                  "token_written_to_connection_file": True})
+            run_server(server, args.idle_timeout, connection_file=connection_file)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            server.server_close()
+            try:
+                current = json.loads(connection_file.read_text(encoding="utf-8"))
+                if current.get("token") == server.token:
+                    connection_file.unlink(missing_ok=True)
+            except (OSError, ValueError, TypeError):
+                pass
+        return 0
     api = MusicAPI(bases, timeout=args.timeout)
     if args.command == "doctor":
         checks = []

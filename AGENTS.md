@@ -10,3 +10,12 @@
 - 保留用户下载、歌单、加密账号与设置；发行 ZIP 和 Git 不得含真实用户资料。缓存可删，持久化资料不能当构建垃圾。
 - Electron 测试用 require('electron')，在风险初始化前设置错误退出处理。清理测试进程前核对 PID 与命令行；区分属性、前景像素与桌面合成验收。
 - 当前用户明确要求优先；发布需实际构建、测试和附件哈希核对，不能把已打包描述为已上传或已发布。
+
+## Agent 读取本项目包时
+
+- 项目是 Windows Electron 网易云播放器，主进程/页面保存在 `resources/app.asar`，随包后端在 `resources/backend/`。Agent 的歌曲下载命令单独运行，不需要操作播放器窗口。
+- 先阅读本文件；若根目录有 `README.md`，再用它了解完整目录、运行与构建说明。发行包即使没有 README，也可直接依据本文件和技能目录使用 Agent 能力。
+- 用户要找网易云歌曲、查歌单、下载歌曲或为视频找配乐时，继续读取 `skills/netease-music-downloader/SKILL.md` 并使用本包的 `agent.cmd`。不要假定 Codex 全局技能已安装。
+- 发行目录中的 `agent.cmd` 调用 `resources/backend/music_backend.exe`；默认歌曲写入同级 `下载/`，调用状态和可选的本机 API 连接文件写入 `缓存/agent/`。搜索不下载；批量下载必须有明确请求和确认。
+- 只有 Agent 确实需要 HTTP 工具时才启动 `agent.cmd serve --port 0`。服务仅监听 `127.0.0.1`，令牌保存在本地连接文件中，闲置五分钟退出。不得将端口转发到公网、回显或记录令牌，或把网易云 Cookie 写入聊天、连接文件和下载日志。
+- API 路由、请求字段和启动方式见 `skills/netease-music-downloader/references/API.md`。运行播放器与 Agent 后端相互独立；不要为了搜索或下载去控制 GUI。

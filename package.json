@@ -1,6 +1,6 @@
 {
   "name": "netease-music-desktop-electron",
-  "version": "3.0.6",
+  "version": "3.0.7",
   "private": true,
   "description": "青春沿岸の音乐播放器：INS 覆盖层、网易云与桌面歌词",
   "main": "main.js",
@@ -102,6 +102,13 @@
         "from": "backend/lyric-aligner",
         "to": "backend/lyric-aligner"
       }
+    ],
+    "extraFiles": [
+      { "from": "agent.cmd", "to": "agent.cmd" },
+      { "from": "AGENTS.md", "to": "AGENTS.md" },
+      { "from": "SKILL.md", "to": "SKILL.md" },
+      { "from": "README.md", "to": "README.md" },
+      { "from": "skills", "to": "skills" }
     ],
     "win": {
       "icon": "assets/app.ico",

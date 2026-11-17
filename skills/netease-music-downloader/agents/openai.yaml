@@ -1,0 +1,6 @@
+interface:
+  display_name: "网易云音乐搜索与下载"
+  short_description: "从播放器包内搜索网易云歌曲与歌单，并下载用户指定音频"
+  default_prompt: "使用 $netease-music-downloader 搜索网易云歌曲或歌单；只搜索时不要下载，多首候选先让我选择。"
+policy:
+  allow_implicit_invocation: true
