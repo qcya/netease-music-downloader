@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen, Notification, safeStorage, session, globalShortcut, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, Menu, net, Tray, screen, Notification, safeStorage, session, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const {createOnlineMedia}=require('./online_media');
 const {createMuoniumApiClient}=require('./muonium_api_client');
@@ -49,17 +49,21 @@ const {createTasteDiscoveryService}=require('./taste_discovery.js');
 const APPLICATION_ID = app.isPackaged ? 'top.qcya.netease.music.desktop' : 'top.qcya.netease.music.desktop.dev';
 const AUDIO_EXTS = new Set(['.mp3','.flac','.m4a','.ogg','.wav','.aac']);
 const BACKGROUND_EXTS=new Set(['.mp4','.webm','.png','.jpg','.jpeg','.webp']);
-let win, tray;
+let win, tray, stopRightShift;
 let exiting=false;
 let idleReleaseTimer=null;
-function updateIdlePower(){
+let lastOverlayState;
+function updateIdlePower(force=false){
   clearTimeout(idleReleaseTimer);idleReleaseTimer=null;
   if(exiting)return;
   const visible=topPanel.isVisible();
   if(win&&!win.isDestroyed()){
-    try{if(visible)createLogger(portableStorage.cache).info('player_bounds',JSON.stringify({version:require('./package.json').version,window:win.getBounds(),display:screen.getDisplayMatching(win.getBounds()).bounds}));}catch{}
-    win.webContents.setBackgroundThrottling?.(!(visible||previewPlaying));
-    win.webContents.send('overlay:visibility',{visible,playing:previewPlaying});
+    const key=Number(visible)*2+Number(previewPlaying);
+    if(force||lastOverlayState?.contents!==win.webContents||lastOverlayState.key!==key){
+      lastOverlayState={contents:win.webContents,key};
+      win.webContents.setBackgroundThrottling?.(!(visible||previewPlaying));
+      win.webContents.send('overlay:visibility',{visible,playing:previewPlaying});
+    }
   }
   if(visible||previewPlaying)return;
   idleReleaseTimer=setTimeout(()=>{
@@ -401,8 +405,11 @@ function writeConfig(value) {
   const parallelDownloads = [1,2,3,4,6].includes(value.parallelDownloads) ? value.parallelDownloads : 3;
   const result = {downloadDir:dir,favoritesDir,setupCompleted,disclaimerAcceptedVersion:Number(value.disclaimerAcceptedVersion)===1?1:0,desktopLyricsEnabled:typeof value.desktopLyricsEnabled==='boolean'?value.desktopLyricsEnabled:config().desktopLyricsEnabled,miniPlayerEnabled:config().miniPlayerEnabled,floatingLyricsPosition:config().floatingLyricsPosition,playerBackgroundPath:typeof value.playerBackgroundPath==='string'&&path.isAbsolute(value.playerBackgroundPath)&&BACKGROUND_EXTS.has(path.extname(value.playerBackgroundPath).toLowerCase())?value.playerBackgroundPath:'',quality,playerTheme:config().playerTheme,playbackQuality:normalizeQuality(value.playbackQuality||config().playbackQuality),apiBases:[...new Set(clean)],cacheLimitMB,parallelDownloads,floatingLyrics:normalizeLyrics({...value.floatingLyrics,mouseThrough:config().floatingLyrics.mouseThrough})};
   ensureData();
-  if(path.resolve(config().downloadDir)!==path.resolve(dir))libraryRoots.remember(config().downloadDir,dir);
-  writeJSONAtomic(configFile(),result);
+  const currentDir=config().downloadDir;
+  const changed=path.resolve(currentDir)!==path.resolve(dir);
+  if(changed)libraryRoots.remember(currentDir,dir);
+  const stored=readJSON(configFile(),{});
+  writeJSONAtomic(configFile(),{...stored,...result,downloadDirExplicit:changed||stored.downloadDirExplicit===true});
   downloadQueue.setLimit(parallelDownloads);
   floatingLyrics.applySettings(result.floatingLyrics);
   return result;
@@ -647,7 +654,7 @@ async function fetchLyrics(id, force=false) {
 const firstPositionPolicy=createFirstPositionPolicy({readState:()=>readJSON(path.join(app.getPath('userData'),'lyric-position-policy.json'),null),writeState:state=>writeJSONAtomic(path.join(app.getPath('userData'),'lyric-position-policy.json'),state),lock:()=>persistFloatingLyricsLock(true)});
 const floatingLyrics=createFloatingLyricsController({BrowserWindow,Menu,baseDir:__dirname,getMainWindow:()=>win,getSettings:()=>config().floatingLyrics,getSavedPosition:()=>config().floatingLyricsPosition,onBoundsChanged:persistFloatingLyricsPosition,onCloseRequest:()=>persistDesktopLyricsEnabled(false),onOpenSettings:()=>{topPanel.unfold();if(win&&!win.isDestroyed())win.webContents.send('lyrics:open-settings');},screen:require('electron').screen});
 const startupNotice=require('./startup_notice').createStartupNotice({BrowserWindow,screen,shell});
-const topPanel=createDesktopOverlay({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,ensureWindow:()=>createWindow(),getTheme:()=>config().playerTheme,getSaved:()=>readJSON(path.join(app.getPath('userData'),'overlay-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'overlay-layout.json'),prefs),onVisibility:visible=>{if(visible)startupNotice.close();updateIdlePower(visible);}});
+const topPanel=createDesktopOverlay({BrowserWindow,screen,baseDir:__dirname,getWindow:()=>win,ensureWindow:()=>createWindow(),getTheme:()=>config().playerTheme,getSaved:()=>readJSON(path.join(app.getPath('userData'),'overlay-layout.json'),{}),save:prefs=>writeJSONAtomic(path.join(app.getPath('userData'),'overlay-layout.json'),prefs),onVisibility:visible=>{if(visible)startupNotice.close();updateIdlePower();}});
 const fullscreenPlayer=require('./fullscreen_player').createFullscreenPlayer({BrowserWindow,screen,baseDir:__dirname,getMainWindow:()=>win,suspendPanel:()=>topPanel.suspend(),onHidden:()=>{if(!config().desktopLyricsEnabled)lyricAlignment.cancel();},restorePanel:()=>topPanel.unfold()});
 const recentDiscovery=require('./recent_discovery').createRecentDiscovery({getFile:()=>portableStorage.cacheFile('recent-discovery.json'),getBases:()=>config().apiBases,fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
 const popularPlaylists=require('./popular_playlists').createPopularPlaylists({fetchJSON:async(url,options)=>{const r=await net.fetch(url,options);if(!r.ok)throw Error('HTTP '+r.status);return r.json();}});
@@ -665,7 +672,7 @@ async function beginStream(id,options){
 
 function createWindow() {
   win = new BrowserWindow({
-    ...topPanel.bounds(),resizable:false,maximizable:false,minimizable:true,fullscreenable:false,alwaysOnTop:false,skipTaskbar:false,transparent:true,roundedCorners:false,hasShadow:false,thickFrame:false,
+    ...topPanel.bounds(),resizable:false,maximizable:false,minimizable:true,fullscreenable:false,alwaysOnTop:false,skipTaskbar:true,transparent:true,roundedCorners:false,hasShadow:false,thickFrame:false,
     title:'青春沿岸の音乐播放器',icon:appIcon(),backgroundColor:'#00000000',
     show: false, autoHideMenuBar: true, frame:false,
     webPreferences: {
@@ -682,12 +689,11 @@ function createWindow() {
   win.on?.('focus',()=>{floatingLyrics.setMainFocused(true);topPanel.syncStack();});
   win.on?.('blur',()=>floatingLyrics.setMainFocused(false));
   win.on?.('minimize',()=>topPanel.collapse());
-  win.on?.('restore',()=>{if(!fullscreenPlayer.isOpen())topPanel.unfold();});
   win.webContents.on('will-navigate', event=>event.preventDefault());
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   // ready-to-show can precede renderer event subscriptions. Publish the final
   // layout again once all scripts have installed their IPC listeners.
-  win.webContents.on('did-finish-load',()=>{topPanel.refresh();updateIdlePower();});
+  win.webContents.on('did-finish-load',()=>{topPanel.refresh();updateIdlePower(true);});
   wireMainWindow({
     window:win,app,showWindow:false,
     shouldHide:()=>!exiting,
@@ -732,10 +738,10 @@ function reportStartupFailure(stage,error){
 app.setAppUserModelId(APPLICATION_ID);
 const ownsInstance=app.requestSingleInstanceLock?.()!==false;
 if(!ownsInstance){
-  if(!process.argv.includes('--silent'))dialog.showErrorBox('本版本尚未启动','已有播放器实例在后台运行。本次启动没有替换它；请从后台托盘退出当前实例后，再启动此版本。');
   app.quit();
 }else{
-app.on('second-instance',(_event,argv)=>{if(!argv?.includes('--silent'))topPanel.unfold();});
+function showPlayer(){if(!fullscreenPlayer.show())topPanel.unfold();}
+app.on('second-instance',(_event,argv)=>{if(!argv?.includes('--silent'))showPlayer();});
 app.whenReady().then(() => {
   portableStorage.persistEncryptionKeys();
   if(nativeTheme)nativeTheme.themeSource='system';
@@ -764,13 +770,21 @@ app.whenReady().then(() => {
   }, 60*60*1000);
   maintenanceTimer.unref?.();
   if (protocol?.handle){protocol.handle('music-media',mediaResponse);protocol.handle('music-preview',proxyPreview);}
+  // The notification-area icon belongs to the app, independently of its windows.
+  if(!portableStorage.testMode){
+    tray=new Tray(appIcon());
+    tray.setToolTip('青春沿岸の音乐播放器 · 右 Shift 显示 / 隐藏');
+    tray.on('click',showPlayer);
+    tray.setContextMenu(Menu.buildFromTemplate([
+      {label:'打开播放器',click:showPlayer},
+      {label:'退出播放器',click:()=>app.quit()}
+    ]));
+  }
   // No renderer, backdrop, login request, or Java process during silent startup.
-  tray=new Tray(appIcon());tray.setToolTip('青春沿岸の音乐播放器 · INS 显示 / 隐藏');
-  const showMain=()=>topPanel.unfold();
-  tray.setContextMenu(Menu.buildFromTemplate([{label:'退出播放器',click:()=>app.quit()}]));
-
-  const shortcutReady=globalShortcut?.register('Insert',()=>{if(!fullscreenPlayer.toggle())topPanel.toggle();});
-  if(shortcutReady===false)tray.setToolTip('青春沿岸の音乐播放器 · INS 被占用，请先退出旧版或占用程序');
+  stopRightShift=require('./right_shift').startRightShift(
+    ()=>{if(!fullscreenPlayer.toggle())topPanel.toggle();},
+    message=>logger.warn('right_shift_unavailable',message)
+  );
   const startup=createStartupSettings({app});
   ipcMain.handle('startup:get',event=>{assertMainSender(event);return startup.get();});
   ipcMain.handle('startup:set',(event,enabled)=>{assertMainSender(event);return startup.set(enabled);});
@@ -819,7 +833,7 @@ app.whenReady().then(() => {
   ipcMain.handle('app:info',(_e)=>{assertMainSender(_e);return {version:require('./package.json').version,...readJSON(path.join(__dirname,'build-info.json'),{commit:'development'})}});
   ipcMain.handle('app:paths',event=>{assertMainSender(event);return {root:portableStorage.root,data:portableStorage.userData,cache:portableStorage.cache,playlists:portableStorage.playlists,downloads:config().downloadDir};});
   ipcMain.handle('account:status',async event=>{assertMainSender(event);const state=neteaseAccount.status();return state.state==='unverified'?neteaseAccount.refreshStatus():state});
-  ipcMain.handle('netease:request',async(event,operation,args)=>{assertMainSender(event);if(!neteaseService)throw Error('网易云运行环境缺失，请使用完整构建');return neteaseService.request(operation,args);});
+  ipcMain.handle('netease:request',async(event,operation,args)=>{assertMainSender(event);if(!neteaseService)throw Error('网易云运行环境缺失，请使用完整构建');try{return await neteaseService.request(operation,args);}catch(error){if(neteaseService.operations?.includes(operation))logger.warn('netease_request_failed',operation);throw error;}});
   ipcMain.handle('account:web-login',(event,mode)=>{assertMainSender(event);if(!['qq','phone'].includes(mode))throw Error('请选择登录方式');if(!officialLogin.isOpen()||officialLogin.mode?.()!==mode)neteaseAccount.cancel();return officialLogin.open(mode)});
   ipcMain.handle('account:begin',async event=>{assertMainSender(event);officialLogin.close();const result=await neteaseAccount.startQr();return {...result,expiresIn:Math.max(0,Math.ceil((result.expiresAt-Date.now())/1000))}});
   ipcMain.handle('account:poll',async event=>{assertMainSender(event);const result=await neteaseAccount.pollQr();return {...result,state:result.status==='logged-in'?'authenticated':result.status}});
@@ -837,9 +851,16 @@ app.whenReady().then(() => {
   ipcMain.handle('discovery:playlist',(_e,id)=>{assertMainSender(_e);return discovery.playlist(id)});
   ipcMain.handle('discovery:popular',(_e,options)=>{assertMainSender(_e);return popularPlaylists.get(options||{})});
   ipcMain.handle('discovery:popular-playlist',(_e,id,options)=>{assertMainSender(_e);return popularPlaylists.playlist(id,options||{})});
-  ipcMain.handle('system:choose-directory', async () => {
-    const r = await dialog.showOpenDialog(win, {properties:['openDirectory','createDirectory']});
-    return r.canceled ? null : r.filePaths[0];
+  ipcMain.handle('system:choose-directory', async event => {
+    assertMainSender(event);
+    const result=await dialog.showOpenDialog(win,{defaultPath:config().downloadDir,properties:['openDirectory','createDirectory']});
+    const dir=result.filePaths?.[0];
+    if(result.canceled||!dir)return null;
+    if(dir.length>1024||!path.isAbsolute(dir)||!(await fs.promises.stat(dir)).isDirectory())throw Error('请选择有效的音乐保存目录');
+    const current=config().downloadDir;
+    if(path.resolve(current)!==path.resolve(dir))libraryRoots.remember(current,dir);
+    writeJSONAtomic(configFile(),{...readJSON(configFile(),{}),downloadDir:dir,downloadDirExplicit:true});
+    return dir;
   });
   ipcMain.handle('playlists:list',()=>readPlaylists());
   ipcMain.handle('playlists:add',(_e,id,name)=>changeLocalPlaylist(id,name,true));
@@ -864,7 +885,8 @@ app.whenReady().then(() => {
   ipcMain.handle('playlists:categories-move',(_e,name,id)=>categoryStore.move(name,id));
   ipcMain.handle('playlists:organize',(_e,order,name,id)=>{assertMainSender(_e);return categoryStore.organize(order,name,id)});
 
-  ipcMain.handle('system:open-directory', async () => {
+  ipcMain.handle('system:open-directory', async event => {
+    assertMainSender(event);
     const dest = config().downloadDir;
     fs.mkdirSync(dest, {recursive:true});
     const result = await shell.openPath(dest);
@@ -1053,9 +1075,10 @@ app.whenReady().then(() => {
 }).catch(e=>reportStartupFailure('Electron 初始化失败',e));
 }
 app.on('before-quit',()=>{
+  tray?.destroy();tray=null;
   startupNotice.close();
   lyricAlignment.cancel();
-  clearTimeout(idleReleaseTimer);globalShortcut?.unregister('Insert');
+  clearTimeout(idleReleaseTimer);stopRightShift?.();
   exiting=true;
   try{fullscreenPlayer.close()}catch{}
   try{floatingLyrics.close()}catch{}

@@ -18,7 +18,7 @@
  const navIcon=path=>{const n=make('span','mu-nav-icon');n.setAttribute('aria-hidden','true');n.innerHTML='<svg viewBox="0 0 24 24">'+path+'</svg>';return n;};
  const fm=[...netNav.querySelectorAll('button')].find(n=>n.dataset.view==='fm');if(fm){fm.prepend(navIcon('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'));scroll.append(fm);}
  const downloads=make('button','mu-nav-playlist','已下载音乐');downloads.type='button';downloads.dataset.view='downloads';downloads.prepend(navIcon('<path d="M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4"/>'));downloads.onclick=()=>{void views.downloads();for(const button of scroll.querySelectorAll('button'))button.classList.toggle('active',button===downloads);};scroll.append(downloads);
- scroll.append(make('div','mu-nav-heading','我的网易云歌单'),$('mu-cloud-playlists'));netNav.remove();tabs.append(scroll);
+ scroll.append($('mu-cloud-heading'),$('mu-cloud-playlists'));netNav.remove();tabs.append(scroll);
  // Local playlist management remains in the downloaded music view.
  $('mu-nav-playlists').hidden=true;for(const key of ['local','recent','search']){const button=tabs.querySelector('[data-tab='+key+']');if(button)button.hidden=true;}
  const account=$('account-entry');tabs.append(account);

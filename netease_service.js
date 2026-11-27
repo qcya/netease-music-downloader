@@ -3,6 +3,11 @@
 const id=v=>{const x=String(v??'');if(!/^\d{1,20}$/.test(x))throw Error('请输入有效的网易云编号');return x;};
 const room=v=>{const s=String(v||'');if(!/^[A-Za-z0-9_-]{1,128}$/.test(s))throw Error('房间编号无效');return s;};
 const page=a=>({limit:Math.max(1,Math.min(100,Number(a.limit)||30)),offset:Math.max(0,Number(a.offset)||0)});
+function playlistName(value){
+ const name=typeof value==='string'?value.trim():'';
+ if(!name||name.length>80)throw Error('歌单名称须为 1 至 80 个字');
+ return name;
+}
 const ops={
  hot:()=>['/weapi/hotsearchlist/get',{}],
  search:a=>['/weapi/cloudsearch/pc',{s:String(a.keyword||'').slice(0,200),type:Number(a.type)||1,...page(a),total:true}],
@@ -25,6 +30,7 @@ const ops={
  like:a=>['/weapi/radio/like',{trackId:id(a.id),like:a.like!==false,alg:'itembased',time:25}],
  subscribe:a=>['/weapi/playlist/'+(a.subscribe===false?'unsubscribe':'subscribe'),{id:id(a.id)}],
  // Same authenticated WEAPI contract as the installed API's playlist_delete.
+ createPlaylist:a=>['/weapi/playlist/create',{name:playlistName(a.name),privacy:0,type:'NORMAL'}],
  deletePlaylist:a=>['/weapi/playlist/remove',{ids:'['+id(a.id)+']'}],
  playlistTracks:a=>['/weapi/playlist/manipulate/tracks',{op:a.remove?'del':'add',pid:id(a.id),trackIds:JSON.stringify((a.ids||[]).slice(0,100).map(id)),imme:true}],
  podcastCategories:()=>['/weapi/djradio/category/get',{}],
@@ -42,8 +48,8 @@ const ops={
  broadcastFavorites:()=>['/weapi/content/channel/collect/list',{contentType:'BROADCAST',limit:'99999',timeReverseOrder:true,startDate:'4762584922000'}],
  broadcastCollect:a=>['/weapi/content/interact/collect',{contentType:'BROADCAST',contentId:id(a.id),cancelCollect:a.collect===false}],
 };
-const auth=new Set(['dailyPlaylists','dailySongs','profile','userPlaylists','recent','cloud','fm','likes','like','subscribe','deletePlaylist','playlistTracks','subscribedPodcasts','podcastSubscribe','broadcastFavorites','broadcastCollect']);
-const writes=new Set(['like','subscribe','deletePlaylist','playlistTracks','podcastSubscribe','broadcastCollect']);
+const auth=new Set(['dailyPlaylists','dailySongs','profile','userPlaylists','recent','cloud','fm','likes','like','subscribe','createPlaylist','deletePlaylist','playlistTracks','subscribedPodcasts','podcastSubscribe','broadcastFavorites','broadcastCollect']);
+const writes=new Set(['like','subscribe','createPlaylist','deletePlaylist','playlistTracks','podcastSubscribe','broadcastCollect']);
 // Invoke the unmodified original CloudMusicApi methods whenever their public
 // signature covers the desktop operation. Search/detail batch pagination keeps
 // the original MuNeteaseApi transport so offset and ID lists remain explicit.
@@ -93,8 +99,13 @@ function createNeteaseService({client,accountRequest}){
   const [path,params]=ops[operation]?ops[operation](args):[null,{}];
   const binding=extra[operation]?extra[operation](args):typeof client.invoke==='function'&&original[operation]?original[operation](args):null;
   if(!path&&typeof client.invoke!=='function')throw Error('网易云原方法运行环境未就绪');
-  const result=auth.has(operation)?await accountRequest(path,params,binding):binding?await client.invoke(...binding):await client.call(path,params);
+  const authenticated=auth.has(operation)||operation==='playlist'&&args.authenticated===true;
+  const result=authenticated?await accountRequest(path,params,binding):binding?await client.invoke(...binding):await client.call(path,params);
   const body=operation==='profile'&&result.body?.data?result.body.data:result.body;if(!body||Number(body.code)!==200)throw Error([301,401,403].includes(Number(body?.code))?'请先在设置中登录网易云账号':String(body?.message||'网易云接口暂时未返回可用结果').slice(0,180));
+  if(operation==='createPlaylist'){
+   const playlistId=id(body.id??body.playlist?.id);
+   return {code:200,playlist:{id:playlistId,name:params.name,coverImgUrl:body.playlist?.coverImgUrl||''}};
+  }
   // Credentials never cross the renderer bridge.
   if(operation==='profile')return {code:200,profile:{userId:body.profile?.userId||body.account?.id,nickname:body.profile?.nickname||'',avatarUrl:body.profile?.avatarUrl||''}};
   return JSON.parse(JSON.stringify(body,(key,value)=>/cookie|token|password|secret|salt/i.test(key)?undefined:value));

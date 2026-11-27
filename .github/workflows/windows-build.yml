@@ -74,16 +74,17 @@ jobs:
             if (!$p.HasExited) { Stop-Process -Id $p.Id -Force }
             Copy-Item (Join-Path $testDir 'packaged-result.json') packaged-result.json -ErrorAction SilentlyContinue
           }
-          $archive = 'dist/青春沿岸の音乐播放器-3.0.6-win64.zip'
+          $playerVersion = node -p "require('./package.json').version"
+          $archive = "dist/青春沿岸の音乐播放器-${playerVersion}-win64.zip"
           $hash = (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           [IO.File]::WriteAllText("$archive.sha256", "$hash  $(Split-Path $archive -Leaf)" + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: Orbit-Windows-3.0.6
+          name: Orbit-Windows-x64
           path: |
-            dist/青春沿岸の音乐播放器-3.0.6-win64.zip
-            dist/青春沿岸の音乐播放器-3.0.6-win64.zip.sha256
+            dist/*-win64.zip
+            dist/*-win64.zip.sha256
             .validation/panel-result.json
             .validation/panel-*.png
             .validation/*.log

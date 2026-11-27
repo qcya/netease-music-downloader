@@ -64,6 +64,34 @@ test('logout leaves a private cloud playlist and ignores its late failed request
 test('a late initial signed-in status refreshes an already opened guest FM page',async()=>{
  let release;const ui=setup(op=>op==='userPlaylists'?{playlist:[]}:{data:[{id:8,name:'恢复账号FM'}]},()=>new Promise(r=>{release=r;}));ui.host.show=()=>{ui.sheet.hidden=false;};await ui.views.open('私人 FM');assert.match(ui.sheet.querySelector('.empty').textContent,/登录/);release({loggedIn:true,userId:'8'});await flush();assert.equal(ui.sheet.querySelector('.track-row').dataset.key,'online:8');assert.equal(ui.sheet.querySelector('.netease-loading'),null);
 });
+test('liked playlist uses authenticated account IDs even when anonymous playlist is empty',async()=>{
+ const liked={...list('10','7'),specialType:5};
+ const ui=setup((op,args)=>{
+  if(op==='userPlaylists')return {playlist:[liked]};
+  if(op==='likes')return {ids:['42']};
+  if(op==='songDetail'){assert.deepEqual([...args.ids],['42']);return {songs:[{id:42,name:'已收藏歌曲'}]};}
+  if(op==='playlist')return {playlist:{trackCount:0,tracks:[]}};
+  throw Error(op);
+ });
+ await flush();ui.change({loggedIn:true,userId:'7'});await flush();
+ const row=ui.cloud.querySelector('.mu-cloud-row');
+ assert.ok(row.querySelector('.mu-cloud-create'));
+ await row.children[0].click();
+ assert.equal(ui.sheet.querySelector('.track-row').dataset.key,'online:42');
+ assert.equal(ui.calls.filter(([op])=>op==='playlist').length,0);
+});
+test('the sidebar creates a cloud playlist and adds it to the account list',async()=>{
+ const ui=setup((op,args)=>{
+  if(op==='userPlaylists')return {playlist:[list('existing','7')]};
+  if(op==='likes')return {ids:[]};
+  if(op==='createPlaylist')return {playlist:{id:'100',name:args.name}};
+  throw Error(op);
+ });
+ ui.host.prompt=async()=> '夜间听歌';
+ await flush();ui.change({loggedIn:true,userId:'7'});await flush();
+ await ui.body.querySelector('.mu-cloud-create').click();
+ assert.deepEqual(ui.cloud.children.map(n=>n.title),['歌单existing','夜间听歌']);
+});
 test('home has only recommendations and an adjacent SVG refresh that requests fresh playlists',async()=>{
  let generation=0;const ui=setup(op=>op==='personalized'?{result:[]}:op==='popular'?{playlists:[list('fresh'+(++generation),'99')]}:{playlist:[]});await flush();await ui.views.home();assert.equal(ui.sheet.querySelector('.sheet-heading').children[0].textContent,'推荐歌单');assert.equal(ui.sheet.querySelector('.home-intro'),null);const refresh=ui.sheet.querySelector('.mu-home-refresh');assert.ok(refresh.innerHTML.includes('<svg'));assert.equal(refresh.textContent,'');assert.equal(ui.sheet.querySelector('.netease-card').children[1].textContent,'歌单fresh1');await refresh.click();assert.equal(ui.sheet.querySelector('.netease-card').children[1].textContent,'歌单fresh2');assert.equal(ui.calls.filter(([op])=>op==='popular').length,2);assert.equal(ui.calls.filter(([op])=>op==='personalized').length,2);
 });

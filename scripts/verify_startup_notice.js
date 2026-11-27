@@ -10,7 +10,7 @@ app.whenReady().then(async()=>{
  function HiddenWindow(options){window=new BrowserWindow({...options,x:-12000,y:-12000,alwaysOnTop:false,webPreferences:{...options.webPreferences,javascript:true,offscreen:true,backgroundThrottling:false}});window.showInactive=()=>shows++;return window;}
  const service=require('../startup_notice').createStartupNotice({BrowserWindow:HiddenWindow,screen,shell:{beep:()=>sounds++},baseDir:root});service.show();await new Promise(resolve=>window.webContents.once('did-finish-load',resolve));
  const deadline=Date.now()+5000;while(!shows&&Date.now()<deadline)await pause(20);assert.equal(shows,1);assert.equal(sounds,1);assert.equal(window.isVisible(),false);assert.equal(window.isFocused(),false);
- const text=await window.webContents.executeJavaScript('document.body.innerText');assert.match(text,/播放器已启动/);assert.match(text,/按 INS 键打开/);
+ const text=await window.webContents.executeJavaScript('document.body.innerText');assert.match(text,/播放器已启动/);assert.match(text,/轻按 右 Shift 打开/);
  await window.webContents.executeJavaScript("document.fonts.ready.then(()=>{document.querySelector('aside').style.animation='none';return true})");
  await pause(120);
  window.webContents.invalidate();await pause(120);

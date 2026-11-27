@@ -83,7 +83,7 @@ function bootstrapPortableStorage({app, devRoot = __dirname, env = process.env, 
     if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
     const result = {...value};
     const previousDefault = isLegacyDefault(value.downloadDir);
-    if (previousDefault) result.downloadDir = downloads;
+    if (previousDefault && value.downloadDirExplicit !== true) result.downloadDir = downloads;
     if (isLegacyFavoriteDefault(value.favoritesDir)) result.favoritesDir = path.join(result.downloadDir || downloads, '收藏');
     return result;
   }

@@ -35,11 +35,10 @@ function createDesktopOverlay({BrowserWindow,screen,getWindow,ensureWindow,getSa
   if(closed)return;ensureListeners();requested=true;
   if(!alive(getWindow())){ready=false;ensureWindow();return;}if(!ready)return;
   const w=getWindow();if(!opened){display=screen.getDisplayNearestPoint(screen.getCursorScreenPoint());rect=bounds();place(w);opened=true;}
-  if(w.isMinimized?.())w.restore();createGlass();publish();w.setAlwaysOnTop?.(false);w.show();material(true);w.focus();syncStack();onVisibility(true);
+  w.setSkipTaskbar?.(false);if(w.isMinimized?.())w.restore();createGlass();publish();w.setAlwaysOnTop?.(false);w.show();material(true);w.focus();syncStack();onVisibility(true);
  }
  function cancelGesture(){clearInterval(poll);poll=null;gesture=null;}
- function suspend(){requested=false;opened=false;cancelGesture();destroyGlass();const w=getWindow();if(alive(w))w.hide();material(false);onVisibility(false);publish();}
- function collapse(){requested=false;opened=false;cancelGesture();destroyGlass();const w=getWindow();if(alive(w)&&!w.isMinimized?.())w.minimize();material(false);onVisibility(false);publish();}
+ function suspend(){requested=false;opened=false;cancelGesture();destroyGlass();const w=getWindow();if(alive(w)){w.hide();w.setSkipTaskbar?.(true);}material(false);onVisibility(false);publish();}
  function init(){ready=true;if(requested)unfold();}
  function tick(){
   if(!gesture||!rect||!display)return;const cursor=screen.getCursorScreenPoint();if(cursor.x===gesture.last.x&&cursor.y===gesture.last.y)return;gesture.last=cursor;
@@ -55,7 +54,7 @@ function createDesktopOverlay({BrowserWindow,screen,getWindow,ensureWindow,getSa
   if(resized)publish();
  }
  function action(sender,message){const w=getWindow();if(!alive(w)||sender!==w.webContents||!message)return false;
-  if(message.type==='expand'){unfold();return true;}if(message.type==='collapse'){collapse();return true;}
+  if(message.type==='expand'){unfold();return true;}if(message.type==='collapse'){suspend();return true;}
   if(!opened||!rect)return false;
   if(message.type==='begin'&&['move','resize'].includes(message.kind)){cancelGesture();syncStack();const cursor=screen.getCursorScreenPoint(),start=!message.native&&Number.isFinite(message.x)&&Number.isFinite(message.y)?{x:message.x,y:message.y}:cursor;gesture={kind:message.kind,start,last:start,initial:{...rect}};tick();poll=setInterval(tick,8);poll.unref?.();return true;}
   if(message.type==='move'){tick();return true;}
@@ -67,6 +66,6 @@ function createDesktopOverlay({BrowserWindow,screen,getWindow,ensureWindow,getSa
  function refresh(){if(!opened)return;const w=getWindow();if(alive(w)){display=screen.getDisplayMatching(w.getBounds());rect=recover(rect,screen.getAllDisplays(),display.workArea);place(w);publish();}}
  function ensureListeners(){if(listening)return;listening=true;for(const event of ['display-added','display-removed','display-metrics-changed'])screen.on(event,refresh);}
  function setTheme(theme){if(!opened||!alive(glassHost))return;releaseBlur?.();releaseBlur=null;try{releaseBlur=attachBlur(glassHost,{theme});}catch(error){console.warn('Native neutral blur unavailable; retaining a clear window.');}}
- return {init,unfold,collapse,suspend,syncStack,setTheme,toggle(){if(opened||requested)collapse();else unfold();},action,bounds,refresh,owns:s=>alive(getWindow())&&getWindow().webContents===s,isVisible:()=>opened,close(){closed=true;suspend();if(listening)for(const event of ['display-added','display-removed','display-metrics-changed'])screen.removeListener?.(event,refresh);}};
+ return {init,unfold,suspend,collapse:suspend,syncStack,setTheme,toggle(){if(opened||requested)suspend();else unfold();},action,bounds,refresh,owns:s=>alive(getWindow())&&getWindow().webContents===s,isVisible:()=>opened,close(){closed=true;suspend();if(listening)for(const event of ['display-added','display-removed','display-metrics-changed'])screen.removeListener?.(event,refresh);}};
 }
 module.exports={createDesktopOverlay,fit,recover};

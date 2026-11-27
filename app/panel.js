@@ -384,6 +384,7 @@
  function showSheet(id){$('browser').hidden=true;for(const name of ['settings-view','tasks-view','lyrics-view','netease-view']){const sheet=$(name);if(sheet)sheet.hidden=name!==id;}}
  window.NeteaseDesktopHost={
   state:()=>player.state(),
+  prompt:promptDialog,
   hide:()=>bridge.panelAction({type:'collapse'}),
   downloadedTracks:async()=>{await refreshLocal();return files.map(localRow);},
   openDownloads:()=>bridge.openDirectory(),
@@ -478,7 +479,7 @@
  };
  $('settings-button').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.getSettings();$('download-dir').value=settings.downloadDir;$('parallel').value=settings.parallelDownloads;$('api-bases').value=settings.apiBases.join('\n');$('desktop-lyrics').checked=settings.desktopLyricsEnabled;setLyricLockDisplay(settings.floatingLyrics.mouseThrough);fillAppearance();showSheet('settings-view');void refreshAccount();});
  $('account-entry').onclick=()=>{$('settings-button').click();};
- $('settings-button').addEventListener('click',()=>{void safe(async()=>{const startup=await bridge.startupStatus();$('startup-toggle').checked=startup.enabled;$('startup-toggle').disabled=!startup.supported;$('startup-hint').textContent=startup.supported?'启用后开机静默运行；按 INS 呼出，空闲时低功耗待命。':'开发版请在打包后设置开机启动。';})();});
+ $('settings-button').addEventListener('click',()=>{void safe(async()=>{const startup=await bridge.startupStatus();$('startup-toggle').checked=startup.enabled;$('startup-toggle').disabled=!startup.supported;$('startup-hint').textContent=startup.supported?'启用后开机静默运行；轻按右 Shift 显示或隐藏，空闲时低功耗待命。':'开发版请在打包后设置开机启动。';})();});
  $('startup-toggle').onchange=safe(async()=>{const wanted=$('startup-toggle').checked;try{const result=await bridge.setStartup(wanted);$('startup-toggle').checked=result.enabled;}catch(e){$('startup-toggle').checked=!wanted;throw e;}});
  let accountRefresh=0;
  function displayAccount(result){
@@ -538,8 +539,8 @@
  accountDialog.addEventListener('close',()=>{if(!accountDialog.open)void accountLogin.cancel().catch(()=>{});});
  $('account-logout').onclick=safe(async()=>{$('account-logout').disabled=true;try{await bridge.accountLogout();invalidateSongAvailability();await refreshAccount();status('网易云账号已退出');}finally{$('account-logout').disabled=false;}});
  for(const b of document.querySelectorAll('.back-button'))b.onclick=hideSheets;
- $('choose-dir').onclick=safe(async()=>{const dir=await bridge.chooseDirectory();if(dir)$('download-dir').value=dir;});$('open-dir').onclick=safe(()=>bridge.openDirectory());
- $('save-settings').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.saveSettings({...settings,quality:$('download-quality').value,downloadDir:$('download-dir').value,apiBases:$('api-bases').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean),parallelDownloads:Number($('parallel').value),desktopLyricsEnabled:$('desktop-lyrics').checked,floatingLyrics:readAppearance()});
+ $('choose-dir').onclick=safe(async()=>{const dir=await bridge.chooseDirectory();if(dir){settings.downloadDir=dir;$('download-dir').value=dir;status('音乐保存目录已更新');}});$('open-dir').onclick=safe(()=>bridge.openDirectory());
+ $('save-settings').onclick=safe(async()=>{if(lyricLockWorker)await lyricLockWorker;settings=await bridge.saveSettings({...settings,quality:$('download-quality').value,apiBases:$('api-bases').value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean),parallelDownloads:Number($('parallel').value),desktopLyricsEnabled:$('desktop-lyrics').checked,floatingLyrics:readAppearance()});
   if(settings.desktopLyricsEnabled){await bridge.showFloatingLyrics();pushDesktopLyrics();}else await bridge.closeFloatingLyrics();updateLyricsButton();invalidateSongAvailability();status('设置已保存');});
 
  function fillAppearance(){

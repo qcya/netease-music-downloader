@@ -13,6 +13,7 @@ process.env.MUSIC_DOWNLOADER_TEST_USER_DATA=path.join(temp,'userData');
 const testPaths={};
 process.env.MUSIC_PYTHON_EXE = process.env.MUSIC_PYTHON_EXE || '/opt/pyvenv/bin/python';
 const handlers = new Map();
+let selectedDirectory;
 let mediaHandler = null;
 let previewHandler = null;
 class Window {
@@ -37,7 +38,7 @@ const electron = {
   },
   BrowserWindow:Window,
   ipcMain:{handle(k,cb){handlers.set(k,cb)},on(){}},
-  dialog:{showOpenDialog:async()=>({canceled:true,filePaths:[]})},
+  dialog:{showOpenDialog:async()=>selectedDirectory?{canceled:false,filePaths:[selectedDirectory]}:{canceled:true,filePaths:[]}},
   shell:{openPath:async()=>'',openExternal:async()=>true,trashItem:async file=>fs.rmSync(file)},
   protocol:{registerSchemesAsPrivileged(x){assert.equal(x[0].scheme,'music-media')},handle(scheme,cb){if(scheme==='music-media')mediaHandler=cb;else if(scheme==='music-preview')previewHandler=cb;}}
 };
@@ -67,6 +68,18 @@ function serverFixture() {
     function send(payload){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify(payload))}
   });
 }
+test('selecting a music directory persists it immediately and cancel keeps it', async t=>{
+ for(let i=0;i<40&&!handlers.has('system:choose-directory');i++)await new Promise(r=>setTimeout(r,15));
+ selectedDirectory=fs.mkdtempSync(path.join(temp,'chosen-'));
+ const choose=handlers.get('system:choose-directory');
+ const chosen=await choose();
+ assert.equal(chosen,selectedDirectory);
+ assert.equal(handlers.get('settings:get')().downloadDir,chosen);
+ assert.equal(JSON.parse(fs.readFileSync(path.join(temp,'userData','settings.json'))).downloadDir,chosen);
+ selectedDirectory=null;
+ assert.equal(await choose(),null);
+ assert.equal(handlers.get('settings:get')().downloadDir,chosen);
+});
 const server=serverFixture();
 test('Electron IPC ↔ Python real CLI: search, playlist, download, local files and icon', async t=>{
   await new Promise(r=>server.listen(0,'127.0.0.1',r));

@@ -36,7 +36,9 @@ echo [INFO] Bundling Python backend then building a Windows extract-and-run ZIP.
 call npm run build:win
 if errorlevel 1 goto :failed
 
-if not exist "dist\青春沿岸の音乐播放器-3.0.6-win64.zip" goto :missing_exe
+for /f "delims=" %%V in ('node -p "require('./package.json').version"') do set "PLAYER_VERSION=%%V"
+set "PLAYER_ARCHIVE=dist\青春沿岸の音乐播放器-%PLAYER_VERSION%-win64.zip"
+if not exist "%PLAYER_ARCHIVE%" goto :missing_exe
 
 echo [INFO] Extracting actual icon from the built EXE...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0验证EXE图标.ps1" -ExePath "%~dp0dist\win-unpacked\青春沿岸の音乐播放器.exe"
@@ -44,7 +46,7 @@ if errorlevel 1 goto :icon_error
 
 echo.
 echo [OK] Verified extract-and-run archive was created:
-echo %~dp0dist\青春沿岸の音乐播放器-3.0.6-win64.zip
+echo %~dp0%PLAYER_ARCHIVE%
 echo [INFO] Open dist\EXE实际图标.png to inspect the embedded icon.
 pause
 exit /b 0
@@ -68,7 +70,7 @@ exit /b 1
 
 :icon_error
 echo [ERROR] EXE was built but icon extraction could not be verified.
-echo Inspect dist\青春沿岸の音乐播放器-3.0.6-win64.zip manually.
+echo Inspect %PLAYER_ARCHIVE% manually.
 pause
 exit /b 1
 

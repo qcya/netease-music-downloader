@@ -16,5 +16,5 @@ test('floating lyrics remains draggable only when unlocked; lock is click-throug
  assert.match(js,/if\(!exists\(\)\|\|locked\)return false/);
  assert.match(renderer,/contextmenu/);assert.match(renderer,/dragBegin/);
  assert.doesNotMatch(js,/globalShortcut/,'lyric locking must remain independent of the overlay hotkey');
- assert.match(main,/globalShortcut\?\.register\('Insert'/);
+ assert.match(main,/require\('\.\/right_shift'\)\.startRightShift\(/);
 });

@@ -36,7 +36,8 @@ test('packaged runtime requires local embedded backend and has no system Python 
 });
 test('Windows standalone build and CI artifact path are version aligned',()=>{
  const p=JSON.parse(read('package.json'));const bat=read('构建Windows_EXE.bat');const workflow=read('.github/workflows/windows-build.yml');
- assert.match(p.version,/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);assert.ok(bat.includes(`青春沿岸の音乐播放器-${p.version}-win64.zip`));
- assert.ok(workflow.includes(`青春沿岸の音乐播放器-${p.version}-win64.zip`));
+ assert.match(p.version,/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);assert.ok(bat.includes('青春沿岸の音乐播放器-%PLAYER_VERSION%-win64.zip'));
+ assert.ok(workflow.includes('青春沿岸の音乐播放器-${playerVersion}-win64.zip'));
+ for(const task of [bat,workflow])assert.ok(task.includes("require('./package.json').version"));
  assert.ok(fs.existsSync(path.join(root,'scripts/build_backend.py')));
 });
